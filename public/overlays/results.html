@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marbles Stats - Race and Battle Royale results</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body data-overlay="results">
+  <!-- Edit this HTML to customize the design. {} values are filled by overlay.js. -->
+  <main id="overlay" hidden aria-live="polite">
+    <section class="card">
+      <header class="heading"><i class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V3m0 1c5-4 10 4 16 0v11c-6 4-11-4-16 0M4 9.5c5-4 10 4 16 0M9 3.5v11m6-10v11"/></svg></i><div><h1>{race} results</h1><p class="subtitle">{mapName}</p></div><span class="brand">{brand}</span></header>
+      <div class="results-viewport">
+        <table>
+          <thead><tr><th>#</th><th>Player</th><th data-show="isRace">Time</th><th data-show="br">Kills</th><th data-show="br">Damage</th><th>Points</th></tr></thead>
+          <tbody data-repeat="placements" data-key="playerKey">
+          <template>
+            <tr data-class="winner:winner dead:dead">
+              <td>
+                <i class="rank-icon" data-show="winner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10v5a5 5 0 0 1-10 0V3ZM7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4M12 13v5m-4 3h8m-7-3h6v3H9Z"/></svg></i>
+                <i class="rank-icon" data-show="dead"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21v-3H7v-4a8 8 0 1 1 10 0V3ZM12 18v3"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/></svg></i>
+                <span data-show="ordinary">{place}</span>
+              </td>
+              <td><span class="name" title="{name}">{name}</span></td>
+              <td data-show="isRace"><span data-number="time" data-decimals="3" data-suffix="s">{time}</span></td>
+              <td data-show="br"><span data-number="kills">{kills}</span></td>
+              <td data-show="br"><span data-number="damage">{damage}</span></td>
+              <td class="points"><span data-number="points">{points}</span></td>
+            </tr>
+          </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="overlay-config.js"></script>
+  <!-- Data loading and bindings only; this script does not generate the layout. -->
+  <script src="overlay.js"></script>
+</body>
+</html>

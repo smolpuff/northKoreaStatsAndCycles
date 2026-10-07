@@ -1,0 +1,75 @@
+# Dependencies, build output, and generated Tauri files
+node_modules/
+/dist/
+/src-tauri/target/
+/src-tauri/gen/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Local environment and credentials (sanitized examples may be committed)
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.aws/
+/secrets/
+/credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+/credentials.json
+/tokens.json
+/oauth-tokens.json
+
+# Runtime data belongs in app data, never in the source repository
+/data/
+/exports/
+/overlays/
+/config.json
+/history.json
+/race-state.json
+/race-cycles.json
+/template-defaults.json
+*.log
+*.tmp
+*.bak
+
+# Editor, OS, and tool caches
+/.idea/
+/.vs/
+/.vscode/
+/.codex/
+/.agents/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Local screenshots, inspection pages, and scratch files
+/screenshots/
+/public/*-review.html
+/*-temp.mjs
+/edrwsfaserfgaszexdcfrgv
+/styles.css
+
+# Local development notes; README and app help remain included
+/AGENTS.md
+/plan.md
+/marbles-stats-remaining-plan.md
+/MARBLES-STATS-UNIFIED-DESIGN-SYSTEM.md
+/MARBLES_STATS_UI_MIGRATION.md
+
+# Unused platforms: this is a Windows-only application
+/src-tauri/icons/android/
+/src-tauri/icons/ios/
+/src-tauri/icons/icon.icns
+
+# Keep package-lock.json, Cargo.lock, source, fixtures, Windows icons, and
+# public/overlays/ templates + empty data stubs: they are required app files.

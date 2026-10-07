@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marbles Stats overlay previews</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; font-family: "Segoe UI", sans-serif; color: #f5f5ff; background: #071324; }
+    h1 { margin: 0 0 8px; } p { color: #b8c4e8; }
+    button { color: #f5f5ff; background: #111c32; border: 1px solid #384575; border-radius: 5px; padding: 10px 16px; cursor: pointer; }
+    button.active { background: #ff0081; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 20px; margin-top: 24px; }
+    section { min-width: 0; }
+    h2 { margin: 0; font-size: 17px; }
+    iframe { width: 100%; height: 480px; border: 0; background: repeating-conic-gradient(#182238 0% 25%, #111a2b 0% 50%) 0 / 24px 24px; }
+    #results { height: 620px; }
+    @media (max-width: 650px) { body { padding: 12px; } .grid { grid-template-columns: 600px; } }
+  </style>
+</head>
+<body>
+  <h1>Overlay previews</h1>
+  <p>Sample data only. The checkerboard shows the transparent background. Your live overlay files are unchanged.</p>
+  <button id="race" class="active">Race</button> <button id="br">Battle Royale</button>
+  <div class="grid">
+    <section><h2>Results · results.html</h2><iframe id="results" src="results.html?preview=1" title="Results preview"></iframe></section>
+    <section><h2>Points · points.html</h2><iframe src="points.html?preview=1" title="Points preview"></iframe></section>
+    <section><h2>Podium · podium.html</h2><iframe src="podium.html?preview=1" title="Podium preview"></iframe></section>
+    <section><h2>World Record · world-record.html</h2><iframe src="world-record.html?preview=1" title="World record preview"></iframe></section>
+    <section><h2>Cycle completion · cycle-complete.html</h2><iframe src="cycle-complete.html?preview=1" title="Cycle completion preview"></iframe></section>
+  </div>
+  <script src="preview.js"></script>
+</body>
+</html>

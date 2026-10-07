@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My custom overlay</title>
+  <style>
+    body { margin: 0; background: transparent; font: 32px "Segoe UI", sans-serif; color: gold; }
+    [hidden] { display: none !important; }
+    #overlay { padding: 16px; }
+  </style>
+</head>
+<body data-overlay="custom">
+  <!-- Edit this markup. The app fills every {variable} inside #overlay. -->
+  <main id="overlay" hidden>
+    <h1>{race} winner: {firstplace}</h1>
+    <p>Earned <span data-number="firstplacepoints">{firstplacepoints}</span> points</p>
+    <p>Session points: {sessionPoints}</p>
+  </main>
+  <script src="overlay-config.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

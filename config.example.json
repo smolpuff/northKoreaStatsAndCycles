@@ -1,0 +1,21 @@
+{
+  "csv": {
+    "path": "%LOCALAPPDATA%\\MarblesOnStream\\Saved\\SaveGames\\LastSeasonRace.csv",
+    "gameType": "race",
+    "autoStartWatcher": false
+  },
+  "streamerBot": {
+    "host": "127.0.0.1",
+    "port": 7474,
+    "actions": {
+      "gameComplete": "Marbles - Game Complete",
+      "worldRecord": "Marbles - World Record",
+      "cycleComplete": "Marbles - Cycle Complete"
+    },
+    "events": {
+      "raceComplete": false,
+      "worldRecord": true,
+      "cycleComplete": false
+    }
+  }
+}

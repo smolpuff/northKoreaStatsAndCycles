@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Marbles Stats",
+  "version": "0.1.0",
+  "identifier": "com.marblesstats.app",
+  "build": {
+    "beforeDevCommand": "npm run frontend:dev",
+    "devUrl": "http://localhost:8080",
+    "beforeBuildCommand": "npm run frontend:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Marbles Stats",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 1120,
+        "minHeight": 560,
+        "backgroundColor": "#040812"
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": []
+  }
+}

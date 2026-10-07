@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marbles Stats - Cycle complete</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body data-overlay="cycle-complete">
+  <!-- Edit this HTML to customize the design. {} values are filled by overlay.js. -->
+  <main id="overlay" hidden aria-live="polite">
+    <section class="card celebration cycle-celebration">
+      <div class="party-lights" aria-hidden="true">
+        <div class="laser-bank laser-left"><i class="laser-beam" style="--beam:0"></i><i class="laser-beam" style="--beam:1"></i><i class="laser-beam" style="--beam:2"></i><i class="laser-beam" style="--beam:3"></i><i class="laser-beam" style="--beam:4"></i><i class="laser-beam" style="--beam:5"></i><i class="laser-beam" style="--beam:6"></i><i class="laser-beam" style="--beam:7"></i></div>
+        <div class="laser-bank laser-right"><i class="laser-beam" style="--beam:0"></i><i class="laser-beam" style="--beam:1"></i><i class="laser-beam" style="--beam:2"></i><i class="laser-beam" style="--beam:3"></i><i class="laser-beam" style="--beam:4"></i><i class="laser-beam" style="--beam:5"></i><i class="laser-beam" style="--beam:6"></i><i class="laser-beam" style="--beam:7"></i></div>
+        <i class="party-spotlight spotlight-one"></i><i class="party-spotlight spotlight-two"></i>
+        <i class="party-spotlight spotlight-three"></i><i class="party-spotlight spotlight-four"></i>
+        <div class="party-halo"></div>
+      </div>
+      <div class="confetti" data-confetti="300" aria-hidden="true">
+        <template><i class="confetti-piece"></i></template>
+      </div>
+      <div class="celebration-content">
+        <i class="celebration-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 9a8 8 0 0 0-14-3L3 9m0-5v5h5M4 15a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></svg></i>
+        <h1>Cycle Complete!</h1>
+        <div data-repeat="cycleCompletions" data-key="completionKey">
+          <template>
+            <div class="celebration-completion">
+              <p class="celebration-player">{playerName}</p>
+              <p class="celebration-cycle">Cycle #<span data-number="cycleNumber">{cycleNumber}</span></p>
+              <p class="celebration-points" data-show="hasRaceCount">Only took <span data-number="races">{races}</span> races for this cycle!</p>
+            </div>
+          </template>
+        </div>
+        <p class="celebration-track">{cycleSeasonName}</p>
+      </div>
+    </section>
+  </main>
+  <script src="overlay-config.js"></script>
+  <!-- Data loading and bindings only; this script does not generate the layout. -->
+  <script src="overlay.js"></script>
+</body>
+</html>

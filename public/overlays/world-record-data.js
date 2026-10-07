@@ -1,0 +1,1 @@
+window.MarblesOverlay.update({});
