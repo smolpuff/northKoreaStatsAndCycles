@@ -88,7 +88,7 @@ let logFilter = "all";
 let cycleSearch = "";
 let editingName = false;
 let exportIsRunning = false;
-let raceCycleSort: RaceCycleSort = { key: "racer", direction: "asc" };
+let raceCycleSort: RaceCycleSort = { key: "cycles", direction: "desc" };
 let resultsSort: ResultsSort = { key: "placement", direction: "asc" };
 
 function bindLogPage(): void {
@@ -117,7 +117,13 @@ function applyButtonFeedback(): void {
     button.style.maxWidth = `${feedback.width}px`;
     const error = document.querySelector<HTMLElement>(`[data-error-for="${key}"]`);
     if (error) error.textContent = feedback.error ?? "";
-    if (feedback.phase === "error") return;
+    if (feedback.phase === "error") {
+      if (button.hasAttribute("data-streamer-test")) {
+        button.classList.add("button-error");
+        button.innerHTML = `<span>Failed — retry</span>`;
+      }
+      return;
+    }
     button.disabled = true;
     button.classList.toggle("button-success", feedback.phase === "success");
     button.innerHTML = `${feedback.phase === "success" ? icons.check : icons.spinner}<span>${escapeHtml(feedback.label)}</span>`;

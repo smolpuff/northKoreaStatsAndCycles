@@ -195,7 +195,32 @@ pub struct RaceCyclePlayer {
     pub placement_counts: Vec<u64>,
     pub cycles: u64,
     #[serde(default)]
+    pub current_cycle_positions: Option<Vec<u8>>,
+    #[serde(default)]
     pub cycle_race_counts: Vec<Option<u64>>,
+}
+
+impl RaceCyclePlayer {
+    pub fn current_positions(&self) -> Vec<u8> {
+        self.current_cycle_positions.clone().unwrap_or_else(|| {
+            // Historical totals cannot reconstruct the order of placements in a new set.
+            if self.cycles > 0 { return Vec::new(); }
+            self.placement_counts.iter().take(10).enumerate()
+                .filter(|(_, count)| **count > 0)
+                .map(|(index, _)| (index + 1) as u8).collect()
+        })
+    }
+
+    pub fn cycle_progress(&self) -> usize {
+        self.current_positions().len()
+    }
+}
+
+pub fn compare_cycle_players(left: &RaceCyclePlayer, right: &RaceCyclePlayer) -> std::cmp::Ordering {
+    right.cycles.cmp(&left.cycles)
+        .then_with(|| right.cycle_progress().cmp(&left.cycle_progress()))
+        .then_with(|| left.player_name.to_lowercase().cmp(&right.player_name.to_lowercase()))
+        .then_with(|| left.player_key.cmp(&right.player_key))
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

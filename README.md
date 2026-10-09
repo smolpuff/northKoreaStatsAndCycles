@@ -107,6 +107,32 @@ npm test
 
 `npm test` runs the Rust tests. Focused frontend checks are also available in `tests/`, for example `node tests/confirm-dialog.mjs`.
 
+### Test a race and world record
+
+With RaceStats watching, run this from the repository in PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-WorldRecord.ps1
+```
+
+Each run writes five fake players, a new snapshot ID, and a matching custom-map WR. The winner earns 10 points and always matches `RecordHolderName` and `RecordTime`. The WR file arrives one second after the race files to exercise delayed detection. These matches count in stats and can trigger enabled overlays, Streamer.bot actions, and Twitch posts. The script backs up the original three files once in `MarblesStats-WR-Test-Backup` beside the CSVs; avoid running a real game while testing.
+
+Stop the watcher before restoring the original files:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-WorldRecord.ps1 -Restore
+```
+
+Optional parameters: `-Winner "YourName"`, `-Players 10`, `-RecordDelayMilliseconds 0`, or `-SaveDirectory "C:\path\to\test\folder"`. Restoring files does not remove test matches already counted in app stats.
+
+For a cycle completion, start RaceCycles and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Cycle.ps1
+```
+
+It writes 20 cycle-only snapshots in randomized placement order, waiting for the app to save each update before writing the next. The first twelve updates contain nine distinct positions and three repeats (including second place twice); update 13 supplies the missing position. The remaining seven updates collect seven distinct positions in a new set. From an empty set, this demonstrates completion on update 13 and progress restarting afterward. Use a fresh `-Player "NewTestPlayer"` name to observe that exact sequence without clearing existing stats; an existing player may already have progress. All players earn zero points. It confirms that a new cycle was saved before reporting success. If RaceCycles does not accept a snapshot within 15 seconds, it stops and reports the unprocessed placement. The WR file is untouched. Only the cycle completion overlay, hook, and enabled cycle chat message fire. Marked test snapshots do not update RaceStats totals or dashboard race results, or send race-result messages. Original race files are backed up; stop the watcher and run with `-Restore` to restore them. Optional `-Player "YourName"`, `-SaveDirectory`, `-TimeoutSeconds`, and `-IntervalMilliseconds` parameters are available; the interval is an optional extra pause after each accepted placement. `-StateFile` can select the app state JSON when testing an alternate installation. Test cycle progress already counted remains after restoring files.
+
 ### Project layout
 
 | Directory | Purpose |
@@ -116,11 +142,12 @@ npm test
 | `src-tauri/tests/fixtures/` | Parser fixtures |
 | `public/overlays/` | Bundled HTML templates, scripts, and styles |
 | `tests/` | Focused frontend and overlay checks |
+| `scripts/` | Manual CSV test helpers |
 
 Runtime stats and editable live overlays are stored in the writable application-data directory, outside the repository. Dependencies, builds, local credentials, and temporary files are excluded by `.gitignore`.
 
 ## Current limitations
 
-- Automatic world-record detection is not implemented for the current CSV formats. WR tests work; existing record-holder metadata alone does not trigger a new record.
+- WR detection requires changed `LastCustomRaceMapPlayed.csv` metadata matching the latest completed match's map and winner. It uses `RecordHolderName`, `RecordTime`, and `DateSet`; `StreamerRecordHolder` is ignored. Race times must match within 0.001 seconds, and CSV writes must be within two minutes. Blank rows, existing records on startup, and repeated records do not trigger alerts. Late WR writes do not recount the match.
 - Race and Battle Royale are supported; Tilt is not implemented.
 - Normal HTML overlay data follows the latest match. Separate retained last-Race and last-BR bindings are not available.

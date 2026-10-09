@@ -4,6 +4,22 @@ import { icons } from "./icons";
 import { overlaysPage } from "./overlay-view";
 import type { GameResult, Snapshot } from "./types";
 
+function cyclePositions(player: Snapshot["raceCycles"][number]): number[] {
+  return player.currentCyclePositions ?? (player.cycles > 0 ? [] : player.placementCounts
+    .slice(0, 10).flatMap((count, index) => count > 0 ? [index + 1] : []));
+}
+
+function cycleProgress(player: Snapshot["raceCycles"][number]): number {
+  return cyclePositions(player).length;
+}
+
+function compareCycleLeaders(a: Snapshot["raceCycles"][number], b: Snapshot["raceCycles"][number]): number {
+  const value = b.cycles - a.cycles || cycleProgress(b) - cycleProgress(a);
+  if (value) return value;
+  const left = a.playerName.toLowerCase(), right = b.playerName.toLowerCase();
+  return left < right ? -1 : left > right ? 1 : a.playerKey < b.playerKey ? -1 : a.playerKey > b.playerKey ? 1 : 0;
+}
+
 export interface RaceCycleSort {
   key: string;
   direction: "asc" | "desc";
@@ -827,6 +843,7 @@ function raceCyclesPage(
   editingName: boolean,
   busy: boolean,
 ): string {
+  const ranks = new Map([...state.raceCycles].sort(compareCycleLeaders).map((player, index) => [player.playerKey, index + 1]));
   const players = [...state.raceCycles].sort((left, right) => {
     let comparison: number;
     if (sort.key === "racer") {
@@ -842,6 +859,7 @@ function raceCyclesPage(
         (right.placementCounts[position] ?? 0);
     }
     if (comparison === 0) {
+      if (sort.key === "cycles") return compareCycleLeaders(left, right);
       comparison = left.playerName.localeCompare(right.playerName, undefined, {
         sensitivity: "base",
       });
@@ -861,14 +879,14 @@ function raceCyclesPage(
     .map(
       (player, index) => `
         <tr>
-          <td class="cycle-rank"><b class="place">${index + 1}</b></td>
+          <td class="cycle-rank"><b class="place">${ranks.get(player.playerKey)}</b></td>
           <td class="cycle-player">
             ${escapeHtml(player.playerName)}
           </td>
           <td class="cycle-total">${player.cycles}</td>
           ${Array.from({ length: 10 }, (_, index) => {
             const count = player.placementCounts[index] ?? 0;
-            return `<td class="cycle-count ${count > player.cycles ? "ready" : ""}">${count}</td>`;
+            return `<td class="cycle-count ${cyclePositions(player).includes(index + 1) ? "ready" : ""}">${count}</td>`;
           }).join("")}
         </tr>
       `,
@@ -881,7 +899,7 @@ function raceCyclesPage(
       <div class="race-heading">
         <i class="race-heading-icon">${icons.racecycles}</i>
         <div><h1>RaceCycles</h1>
-        <p>Extra finishes roll into later cycles.</p></div>
+        <p>Collect finishing positions 1–10, then start a new set.</p></div>
       </div>
     <div class="summary-row">
       ${stat("Tracked racers", players.length)}
@@ -950,14 +968,7 @@ function homePage(state: Snapshot, busy: boolean): string {
   const podium = [1, 2, 3].map((place) =>
     game?.results.find((result) => result.placement === place),
   );
-  const progress = (player: Snapshot["raceCycles"][number]) =>
-    player.placementCounts.filter((count) => count > player.cycles).length;
-  const leaders = [...state.raceCycles].sort(
-    (a, b) =>
-      b.cycles - a.cycles ||
-      progress(b) - progress(a) ||
-      a.playerName.localeCompare(b.playerName),
-  );
+  const leaders = [...state.raceCycles].sort(compareCycleLeaders);
   const topCycles = leaders.slice(0, 3);
   const summary = (label: string, value: number, icon: string) =>
     `<span><i class="home-stat-icon" aria-hidden="true">${icons[icon]}</i><span class="home-stat-copy"><small>${escapeHtml(label)}</small><b>${value}</b></span></span>`;
@@ -1019,14 +1030,8 @@ function homePage(state: Snapshot, busy: boolean): string {
         ${
           topCycles.length
             ? `<div class="table-frame home-table-frame"><div class="table-scroll"><table class="home-summary-table"><thead><tr><th>#</th><th>Player</th><th>Cycles</th><th>Next cycle</th></tr></thead><tbody>${topCycles
-                .map((player) => {
-                  const rank =
-                    leaders.findIndex(
-                      (other) =>
-                        other.cycles === player.cycles &&
-                        progress(other) === progress(player),
-                    ) + 1;
-                  return `<tr><td><b class="place">${rank}</b></td><td>${escapeHtml(player.playerName)}</td><td class="cycle-total">${player.cycles}</td><td>${progress(player)}/10</td></tr>`;
+                .map((player, index) => {
+                  return `<tr><td><b class="place">${index + 1}</b></td><td>${escapeHtml(player.playerName)}</td><td class="cycle-total">${player.cycles}</td><td>${cycleProgress(player)}/10</td></tr>`;
                 })
                 .join("")}</tbody></table></div></div>`
             : '<p class="home-empty">No cycle results yet.</p>'

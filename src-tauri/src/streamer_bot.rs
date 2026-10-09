@@ -1,10 +1,6 @@
 use crate::models::{AppSnapshot, GameResult, StreamerBotConfig};
 use serde_json::{json, Value};
-use std::{
-    io::{Read, Write},
-    net::{TcpStream, ToSocketAddrs},
-    time::Duration,
-};
+use std::time::Duration;
 
 const NETWORK_TIMEOUT: Duration = Duration::from_millis(1500);
 
@@ -23,86 +19,50 @@ fn endpoint(config: &StreamerBotConfig) -> Result<String, String> {
     Ok(format!("{host}:{}", config.port))
 }
 
-fn connect(config: &StreamerBotConfig) -> Result<TcpStream, String> {
-    let endpoint = endpoint(config)?;
-    let addresses = endpoint
-        .to_socket_addrs()
-        .map_err(|error| format!("Unable to resolve {endpoint}: {error}"))?;
-
-    let mut last_error = None;
-    for address in addresses {
-        match TcpStream::connect_timeout(&address, NETWORK_TIMEOUT) {
-            Ok(stream) => {
-                stream
-                    .set_read_timeout(Some(NETWORK_TIMEOUT))
-                    .map_err(|error| error.to_string())?;
-                stream
-                    .set_write_timeout(Some(NETWORK_TIMEOUT))
-                    .map_err(|error| error.to_string())?;
-                return Ok(stream);
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-
-    Err(format!(
-        "Unable to connect to Streamer.bot at {endpoint}: {}",
-        last_error
-            .map(|error| error.to_string())
-            .unwrap_or_else(|| "no address found".into())
-    ))
-}
-
 fn request(
     config: &StreamerBotConfig,
     method: &str,
     path: &str,
     body: Option<&[u8]>,
-) -> Result<u16, String> {
-    let mut stream = connect(config)?;
-    let endpoint = endpoint(config)?;
-    let body = body.unwrap_or_default();
-    let headers = format!(
-        "{method} {path} HTTP/1.1\r\nHost: {endpoint}\r\nAccept: application/json\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
+) -> Result<reqwest::blocking::Response, String> {
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .connect_timeout(NETWORK_TIMEOUT)
+        .timeout(NETWORK_TIMEOUT)
+        .build().map_err(|error| format!("Unable to create Streamer.bot client: {error}"))?;
+    let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|error| error.to_string())?;
+    let mut request = client.request(method, format!("http://{}{path}", endpoint(config)?))
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/json");
+    if let Some(body) = body { request = request.body(body.to_vec()); }
+    request.send().map_err(|error| format!("Unable to connect to Streamer.bot: {error}"))
+}
 
-    stream
-        .write_all(headers.as_bytes())
-        .and_then(|_| stream.write_all(body))
-        .map_err(|error| format!("Unable to send Streamer.bot request: {error}"))?;
+fn get_actions(config: &StreamerBotConfig) -> Result<Value, String> {
+    let response = request(config, "GET", "/GetActions", None)?;
+    let status = response.status().as_u16();
+    if status != 200 { return Err(http_error(config, status)); }
+    response.json().map_err(|error| format!("Invalid Streamer.bot action list: {error}"))
+}
 
-    let mut response = Vec::with_capacity(256);
-    let mut chunk = [0_u8; 256];
-    while !response.windows(2).any(|window| window == b"\r\n") {
-        let count = stream
-            .read(&mut chunk)
-            .map_err(|error| format!("No response from Streamer.bot: {error}"))?;
-        if count == 0 {
-            break;
-        }
-        response.extend_from_slice(&chunk[..count]);
+fn enabled_action_id(actions: &Value, action_name: &str) -> Result<String, String> {
+    let name = action_name.trim();
+    if name.is_empty() { return Err("Streamer.bot action name is empty".into()); }
+    let actions = actions["actions"].as_array()
+        .ok_or("Streamer.bot did not return an actions list")?;
+    let action = actions.iter().find(|action| action["name"].as_str() == Some(name))
+        .ok_or_else(|| format!("Streamer.bot action '{name}' does not exist"))?;
+    match action["enabled"].as_bool() {
+        Some(true) => {},
+        Some(false) => return Err(format!("Streamer.bot action '{name}' is disabled. Enable it in Streamer.bot.")),
+        None => return Err(format!("Streamer.bot did not report whether action '{name}' is enabled; its state cannot be verified.")),
     }
-
-    let status_line = String::from_utf8_lossy(&response)
-        .lines()
-        .next()
-        .unwrap_or_default()
-        .to_string();
-    status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| format!("Invalid response from Streamer.bot: {status_line}"))
+    action["id"].as_str().filter(|id| !id.is_empty()).map(str::to_owned)
+        .ok_or_else(|| format!("Streamer.bot action '{name}' has no ID"))
 }
 
 pub fn test_connection(config: &StreamerBotConfig) -> Result<(), String> {
-    let status = request(config, "GET", "/GetActions", None)?;
-    if status == 200 {
-        Ok(())
-    } else {
-        Err(http_error(config, status))
-    }
+    get_actions(config).map(|_| ())
 }
 
 pub fn trigger_action(
@@ -110,20 +70,13 @@ pub fn trigger_action(
     action_name: &str,
     args: Value,
 ) -> Result<(), String> {
-    if action_name.trim().is_empty() {
-        return Err("Streamer.bot action name is empty".into());
-    }
-    let body = serde_json::to_vec(&json!({
-        "action": { "name": action_name },
-        "args": args,
-    }))
-    .map_err(|error| error.to_string())?;
-    let status = request(config, "POST", "/DoAction", Some(&body))?;
-    if status == 204 || status == 200 {
-        Ok(())
-    } else {
-        Err(http_error(config, status))
-    }
+    if action_name.trim().is_empty() { return Err("Streamer.bot action name is empty".into()); }
+    // A successful HTTP response alone does not prove that a disabled action ran.
+    let id = enabled_action_id(&get_actions(config)?, action_name)?;
+    let body = serde_json::to_vec(&json!({ "action": { "id": id }, "args": args }))
+        .map_err(|error| error.to_string())?;
+    let status = request(config, "POST", "/DoAction", Some(&body))?.status().as_u16();
+    if status == 204 || status == 200 { Ok(()) } else { Err(http_error(config, status)) }
 }
 
 fn placements(game: &GameResult) -> Vec<Value> {
@@ -278,8 +231,7 @@ pub fn overlay_data(snapshot: &AppSnapshot, game: Option<&GameResult>, args: &Va
         }
     }
     let mut leaders = snapshot.race_cycles.clone();
-    let progress = |player: &crate::models::RaceCyclePlayer| player.placement_counts.iter().filter(|count| **count > player.cycles).count();
-    leaders.sort_by(|a, b| b.cycles.cmp(&a.cycles).then_with(|| progress(b).cmp(&progress(a))).then_with(|| a.player_name.cmp(&b.player_name)));
+    leaders.sort_by(crate::models::compare_cycle_players);
     leaders.truncate(3);
     data["eventId"] = args.get("eventId").cloned().unwrap_or_else(|| json!(format!("{}:{}", args["eventType"].as_str().unwrap_or("raceComplete"), game.map(|game| game.id.as_str()).unwrap_or("empty"))));
     data["seasonName"] = json!(snapshot.config.seasons.race_name);
@@ -292,7 +244,12 @@ pub fn overlay_data(snapshot: &AppSnapshot, game: Option<&GameResult>, args: &Va
     data["sessionPlayers"] = json!(identities.len());
     data["cyclePlayers"] = json!(snapshot.race_cycles.len());
     data["cycleRaces"] = json!(snapshot.total_cycle_race_count);
-    data["cycleLeaders"] = json!(leaders);
+    data["cycleLeaders"] = json!(leaders.iter().map(|player| {
+        let mut row = json!(player);
+        row["currentCyclePositions"] = json!(player.current_positions());
+        row["cycleProgress"] = json!(player.cycle_progress());
+        row
+    }).collect::<Vec<_>>());
     data["cycleCompletions"] = completions;
     data
 }
@@ -352,7 +309,7 @@ pub fn test_args(kind: &str) -> Value {
     data["cycleSeasonName"] = json!("Test season");
     data["cyclePlayers"] = json!(30);
     data["cycleRaces"] = json!(9);
-    data["cycleLeaders"] = json!([{"playerName":"Test Winner","cycles":1,"placementCounts":[2,2,1,1,2,1,1,1,1,2]}]);
+    data["cycleLeaders"] = json!([{"playerName":"Test Winner","cycles":1,"placementCounts":[2,2,1,1,2,1,1,1,1,2],"currentCyclePositions":[1,2,5,10],"cycleProgress":4}]);
     data["cycleCompletions"] = json!([{"playerName":"Test Winner","cycleNumber":1,"races":823}]);
     if let (Some(args), Some(data)) = (args.as_object_mut(), data.as_object()) {
         args.extend(data.clone());
@@ -364,6 +321,21 @@ pub fn test_args(kind: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn action_preflight_requires_existing_enabled_action() {
+        let actions = json!({"actions": [
+            {"id": "enabled-id", "name": "Enabled action", "enabled": true},
+            {"id": "disabled-id", "name": "Disabled action", "enabled": false},
+            {"id": "unknown-id", "name": "Unknown state"}
+        ]});
+        assert_eq!(enabled_action_id(&actions, "Enabled action").unwrap(), "enabled-id");
+        assert!(enabled_action_id(&actions, "Disabled action").unwrap_err().contains("is disabled"));
+        assert!(enabled_action_id(&actions, "Missing action").unwrap_err().contains("does not exist"));
+        assert!(enabled_action_id(&actions, "Unknown state").unwrap_err().contains("cannot be verified"));
+        assert!(enabled_action_id(&actions, "").is_err());
+        assert!(enabled_action_id(&json!({}), "Enabled action").is_err());
+    }
 
     #[test]
     fn overlay_test_packets_include_common_and_record_fields_without_recursion() {

@@ -43,7 +43,7 @@ for(const kind of ['gameComplete','worldRecord','cycleComplete']) {
   assert(dialog.innerHTML.includes('guide-art-variables'));
   assert.doesNotMatch(dialog.innerHTML, /%[A-Za-z][A-Za-z0-9_]*%|%\$1%/);
 }
-for(const path of ['src/views.ts','src/streamer-events.ts','src-tauri/src/twitch.rs','README.md','plan.md']) {
+for(const path of ['src/views.ts','src/streamer-events.ts','src-tauri/src/twitch.rs','README.md']) {
   const text=fs.readFileSync(path,'utf8').replace(/%LOCALAPPDATA%/g,'');
   assert.doesNotMatch(text, /%[A-Za-z][A-Za-z0-9_]*%|%\$1%/,path+' must display brace event placeholders');
 }

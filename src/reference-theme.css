@@ -2167,6 +2167,12 @@ form.integration-page-layout {
   opacity: 1;
 }
 
+.inline-action .compact-button.button-error {
+  color: #fff;
+  background: #b91c1c;
+  border-color: #f87171;
+}
+
 .integration-save {
   display: flex;
   justify-content: flex-end;
@@ -3006,6 +3012,9 @@ form.integration-page-layout {
 }
 
 .streamer-action-controls .inline-action .compact-button {
+  width: 128px;
+  min-width: 128px;
+  flex-shrink: 0;
   height: 32px;
   min-height: 32px;
   box-sizing: border-box;
@@ -3154,6 +3163,9 @@ form.integration-page-layout {
 }
 
 .streamer-connection-fields .inline-action .compact-button {
+  width: 144px;
+  min-width: 144px;
+  flex-shrink: 0;
   height: 32px;
   min-height: 32px;
   box-sizing: border-box;
@@ -4694,7 +4706,7 @@ form.integration-page-layout {
 
 .integration-page-layout .streamer-connection-fields {
   width: min(100%, 472px);
-  grid-template-columns: minmax(0, 200px) minmax(0, 110px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 100px) auto;
 }
 
 .results-actions>.icon-input {

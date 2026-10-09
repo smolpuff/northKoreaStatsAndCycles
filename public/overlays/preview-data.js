@@ -20,9 +20,9 @@
       sessionRaces: 7, sessionBRs: 2, sessionPlayers: 30,
       cyclePlayers: 30, cycleRaces: 9,
       cycleLeaders: [
-        {playerName: "MarbleChampion", cycles: 3, placementCounts: [4,4,4,3,4,3,4,3,4,3]},
-        {playerName: "SecondPlayer", cycles: 2, placementCounts: [2,3,3,3,2,2,2,2,3,2]},
-        {playerName: "VeryLongPlayerNameThatWillTruncateNeatly", cycles: 1, placementCounts: [1,2,1,1,2,1,1,1,2,1]},
+        {playerName: "MarbleChampion", cycles: 3, placementCounts: [4,4,4,3,4,3,4,3,4,3], currentCyclePositions:[1,2,3,5,7,9], cycleProgress:6},
+        {playerName: "SecondPlayer", cycles: 2, placementCounts: [2,3,3,3,2,2,2,2,3,2], currentCyclePositions:[2,3,4,9], cycleProgress:4},
+        {playerName: "VeryLongPlayerNameThatWillTruncateNeatly", cycles: 1, placementCounts: [1,2,1,1,2,1,1,1,2,1], currentCyclePositions:[2,5,9], cycleProgress:3},
       ],
       cycleCompletions: [{playerName: "MarbleChampion", cycleNumber: 3, races: 823}],
       placements: Array.from({length: 30}, (_, index) => ({
@@ -42,6 +42,8 @@
       data.cycleCompletions = [{playerName:"SecondPlayer",cycleNumber:4,races:672}];
       data.cycleLeaders[0].cycles = 4;
       data.cycleLeaders[0].placementCounts = [5,5,5,4,5,4,5,4,5,4];
+      data.cycleLeaders[0].currentCyclePositions = [1];
+      data.cycleLeaders[0].cycleProgress = 1;
       data.cycleLeaders.reverse();
       if (kind === "podium") {
         data.placements[0].name = "SecondPlayer";

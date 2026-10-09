@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 const source = fs.readFileSync('src/views.ts','utf8');
 const exports = {};
-vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:()=>({icons:{}})});
+vm.runInNewContext(ts.transpileModule(source.replaceAll('import.meta.url', '"file:///app/src/views.ts"'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:()=>({icons:{}}),URL});
 assert.equal(exports.worldRecordMessagePreview('{wrplayer}: +{wrplayerpoints} points on {mapName} in {wrrecordtime}s'), 'Test Winner: +10 points on Test Map in 42.123s');
 assert.equal(exports.worldRecordMessagePreview(''), 'World Record! Test Winner earned +10 points on Test Map in 42.123s!');
 assert.equal(exports.worldRecordMessagePreview('x'.repeat(600)).length, 500);

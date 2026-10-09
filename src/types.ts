@@ -34,6 +34,7 @@ export interface RaceCyclePlayer {
   playerName: string;
   placementCounts: number[];
   cycles: number;
+  currentCyclePositions?: number[] | null;
   cycleRaceCounts?: (number | null)[];
 }
 

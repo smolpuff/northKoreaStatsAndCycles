@@ -23,6 +23,7 @@ pub struct MapMetadata {
     pub map_name: String,
     pub record_time: Option<f64>,
     pub record_holder_name: Option<String>,
+    pub date_set: Option<String>,
 }
 
 pub fn parse_file(path: &Path) -> Result<GameResult, String> {
@@ -94,6 +95,7 @@ pub fn parse_map_metadata(path: &Path) -> Result<MapMetadata, String> {
         map_name,
         record_time,
         record_holder_name,
+        date_set: (!get("DateSet").is_empty()).then(|| get("DateSet").to_owned()),
     })
 }
 
@@ -383,6 +385,7 @@ mod tests {
         assert_eq!(parsed.map_name, "the straight line");
         assert_eq!(parsed.record_time, Some(129.964996));
         assert_eq!(parsed.record_holder_name.as_deref(), Some("PixiePlayz3"));
+        assert_eq!(parsed.date_set.as_deref(), Some("2026.09.27-02.38.35"));
         fs::remove_file(file).ok();
     }
 

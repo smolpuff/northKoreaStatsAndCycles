@@ -67,7 +67,33 @@
     check(record.root.hidden,"Expired alerts are not replayed");
     record.update({...packet,eventType:"worldRecord",eventId:"newwr",receivedAt:new Date().toISOString(),wrplayer:"Winner",wrrecordtime:42.1,wrplayerpoints:0});
     check(!record.root.hidden && record.root.querySelector(".celebration-player").textContent === "Winner" && !record.root.querySelector(".celebration-points").hidden,"WR template binds player/time/zero points");
-    record.root.hidden=true; record.update({...packet,eventType:"worldRecord",eventId:"newwr",wrplayer:"Changed"});
+    function checkEntrance(overlay, label) {
+      const card = overlay.root.firstElementChild;
+      const entry = card.getAnimations().find(animation => !("animationName" in animation));
+      check(entry.effect.getKeyframes()[0].opacity === "0" && entry.effect.getTiming().fill === "both", label + " starts transparent without a visible first-frame flash");
+      check(entry.effect.getKeyframes().every(frame => !frame.transform), label + " keeps the background and confetti at full size");
+      const text = card.querySelector(".celebration-content").getAnimations()[0];
+      check(text.effect.getKeyframes()[0].transform === "scale(0.35)", label + " zooms only the celebration text");
+      const lights = card.querySelector(".party-lights").getAnimations()[0];
+      check(lights.effect.getKeyframes()[0].transform === "translateY(100%)", label + " brings lights upward from below");
+      check([...card.querySelectorAll(".confetti-piece")].every(piece => parseFloat(piece.style.getPropertyValue("--delay")) >= 0), label + " starts confetti above the frame");
+      return entry;
+    }
+    const oldEntry = checkEntrance(record, "WR");
+    record.update({...packet,eventType:"worldRecord",eventId:"replacementwr",receivedAt:new Date().toISOString(),wrplayer:"New winner",wrrecordtime:41,wrplayerpoints:12});
+    check(oldEntry.playState === "idle", "A replacement alert cancels the old entrance animation");
+    checkEntrance(record, "Replacement WR");
+    const liveCycle = await load("cycle-complete", false);
+    let finishCycle;
+    liveCycle.window.setTimeout = callback => { finishCycle = callback; return 1; };
+    liveCycle.update({...packet,eventId:"livecycle",eventType:"cycleComplete",receivedAt:new Date().toISOString()});
+    checkEntrance(liveCycle, "Cycle");
+    finishCycle();
+    const fade = liveCycle.root.firstElementChild.getAnimations().find(animation => animation.effect.getTiming().duration === 280);
+    check(fade.effect.getKeyframes().every(frame => !frame.transform), "Celebration exits fade without shrinking the effects");
+    liveCycle.update({...packet,eventId:"replacementcycle",eventType:"cycleComplete",receivedAt:new Date().toISOString()});
+    check(fade.playState === "idle" && fade.onfinish === null && !liveCycle.root.hidden, "A new cycle cancels the previous fade and its hide callback");
+    record.root.hidden=true; record.update({...packet,eventType:"worldRecord",eventId:"replacementwr",wrplayer:"Changed"});
     check(record.root.hidden,"Duplicate WR identity cannot replay an alert");
     const celebration = await load("world-record");
     celebration.window.MarblesOverlayOptions = { "world-record": {width:1920,height:1080,opacity:80,background:"#071324",text:"#f5f5ff",secondary:"#b8c4e8",accent:"#ff0081",gold:"#ffe024",teal:"#00efaa",headerVisible:true,headerText:"",durationSeconds:10,visibleRows:6,scrollPixelsPerSecond:20} };

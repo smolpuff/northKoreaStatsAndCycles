@@ -187,7 +187,7 @@
     const colors = ["#ffe024", "#ffb937", "#fff2a3", "#ff0081", "#00efaa"];
     for (let index = 0; index < amount; index++) {
       const piece = template.content.firstElementChild.cloneNode(true);
-      for (const [key, val] of Object.entries({x:Math.random()*100+"%", drift:Math.random()*360-180+"px", delay:Math.random()*-12+"s", duration:3+Math.random()*4+"s", spin:Math.random()*1440-720+"deg", "confetti-color":colors[index%colors.length]})) piece.style.setProperty("--"+key, val);
+      for (const [key, val] of Object.entries({x:Math.random()*100+"%", drift:Math.random()*360-180+"px", delay:Math.random()*2+"s", duration:3+Math.random()*4+"s", spin:Math.random()*1440-720+"deg", "confetti-color":colors[index%colors.length]})) piece.style.setProperty("--"+key, val);
       container.appendChild(piece);
     }
   });
@@ -217,12 +217,17 @@
     }
     scrollFrame = window.requestAnimationFrame(step);
   }
+  let entranceAnimations = [];
+  function cancelEntrance() {
+    entranceAnimations.forEach(animation => animation.cancel());
+    entranceAnimations = [];
+  }
   function hide() {
     const card = root.firstElementChild;
     if (animate() && card?.animate) {
       exitAnimation?.cancel();
-      exitAnimation = card.animate([{opacity:1, transform:"scale(1)"}, {opacity:0, transform:"scale(1.08)"}], {duration:280, easing:"ease-in", fill:"forwards"});
-      exitAnimation.onfinish = () => { root.hidden = true; stopScroll(); };
+      exitAnimation = card.animate([{opacity:1}, {opacity:0}], {duration:280, easing:"ease-in", fill:"both"});
+      exitAnimation.onfinish = () => { root.hidden = true; cancelEntrance(); stopScroll(); };
     } else { root.hidden = true; stopScroll(); }
   }
   function remaining(data, seconds) {
@@ -262,6 +267,7 @@
       if (numberFrame != null) window.cancelAnimationFrame?.(numberFrame);
       numberFrame = undefined; numbers = new WeakMap(); lastPacket = "";
       exitAnimation?.cancel(); stopScroll();
+      cancelEntrance();
       // Preserve CSS effects: cancelling their animations permanently removes confetti on hover.
       root.getAnimations?.({subtree:true}).forEach(animation => { if (!("animationName" in animation)) animation.cancel(); });
     },
@@ -280,7 +286,9 @@
         seconds = remaining(data, preview ? 0 : (window.MarblesOverlayOptions?.[kind]?.durationSeconds ?? window.MarblesOverlayDurations?.[kind === "world-record" ? "worldRecordSeconds" : "cycleSeconds"] ?? (kind === "world-record" ? config.worldRecordSeconds : config.cycleSeconds)));
         if (seconds < 0) return;
       }
-      clearTimeout(hideTimer); exitAnimation?.cancel();
+      clearTimeout(hideTimer);
+      if (exitAnimation) { exitAnimation.onfinish = null; exitAnimation.cancel(); exitAnimation = undefined; }
+      cancelEntrance();
       const dataScope = scope(data);
       bindNode(root, dataScope);
       if ((kind === "results" || kind === "podium") && !dataScope.placements.length) { hide(); return; }
@@ -288,7 +296,22 @@
       const card = root.firstElementChild;
       if (animate() && card?.animate) {
         const celebration = card.classList.contains("celebration");
-        card.animate(celebration ? [{opacity:0, transform:"scale(.35)"}, {opacity:1, transform:"scale(1.04)", offset:.8}, {opacity:1, transform:"scale(1)"}] : [{opacity:.5, transform:"translateY(6px)"}, {opacity:1, transform:"translateY(0)"}], {duration:celebration ? 950 : 280, easing:"cubic-bezier(.2,.7,.3,1)"});
+        if (celebration) {
+          entranceAnimations.push(card.animate([{opacity:0}, {opacity:1}], {duration:300, fill:"both"}));
+          const content = card.querySelector(".celebration-content");
+          if (content) entranceAnimations.push(content.animate(
+            [{opacity:0, transform:"scale(.35)"}, {opacity:1, transform:"scale(1.04)", offset:.8}, {opacity:1, transform:"scale(1)"}],
+            {duration:950, easing:"cubic-bezier(.2,.7,.3,1)", fill:"both"}));
+          const lights = card.querySelector(".party-lights");
+          if (lights) entranceAnimations.push(lights.animate(
+            [{transform:"translateY(100%)"}, {transform:"translateY(0)"}],
+            {duration:850, easing:"cubic-bezier(.2,.7,.3,1)", fill:"both"}));
+          card.querySelectorAll(".confetti-piece").forEach(piece => {
+            piece.getAnimations().forEach(animation => { animation.currentTime = 0; });
+          });
+        } else {
+          entranceAnimations.push(card.animate([{opacity:.5, transform:"translateY(6px)"}, {opacity:1, transform:"translateY(0)"}], {duration:280, easing:"cubic-bezier(.2,.7,.3,1)", fill:"both"}));
+        }
       }
       scrollResults();
       if (seconds > 0) hideTimer = setTimeout(hide, seconds*1000);
