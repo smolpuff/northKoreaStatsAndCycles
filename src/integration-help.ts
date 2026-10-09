@@ -9,7 +9,7 @@ const illustratedGuide = (name: string) => {
   const step = renderGuideStep;
   const content = name === "overlay-setup" ? [
     step(1, "Copy the overlay path", "On the Overlays page, choose a template and click Copy path.", "overlay-path"),
-    step(2, "Add a Browser Source", "In OBS, Sources + > Browser. Enable Local file and select that HTML page. Results: 600 &times; 900; small cards: 600 &times; 500; celebrations: full canvas.", "browser-source"),
+    step(2, "Add a Browser Source", "In OBS, Sources + > Browser. Enable Local file and select that HTML page. Use the OBS source size on that overlay's card. Default Results: 400 &times; 413; Podium: 400 &times; 300; Points: 400 &times; 260; celebrations: full canvas.", "browser-source"),
     step(3, "Test and position", "Keep Results, Podium and Points visible and position their live data. Use Test on World record or Cycle completed to position those celebrations without counting a match.", "obs-results"),
     step(4, "Let the data update", "Leave the app running. Browser pages check for new match data every 3 seconds.", "live-data")
   ] : name === "overlay-template" ? [
@@ -36,7 +36,7 @@ const overlayGuide = `
 <p>Use a <b>Browser Source</b> for an HTML overlay. The app supplies data; the page fills its braces. Streamer.bot is not required.</p>
 ${illustratedGuide("overlay-setup")}
 
-<p>Results, Podium and Points remain visible. WR and Cycle Complete show only for their events and hide after 12 seconds by default. Put celebrations above your other OBS sources. <b>Automatic World Record detection is not currently available from the parsed CSV.</b> The World record Test button works; names/times in metadata alone do not confirm a new record.</p>
+<p>Click Customize at the right of an overlay card's buttons to change its background opacity, colors, header and OBS width/height. The thumbnail previews edits; Save applies them to the live source on its next data check. After resizing, enter the size shown on the card in OBS Browser Source properties. Celebration duration is in the same section. Restore defaults resets these controls, preserving edited HTML/CSS files. Custom HTML pages keep their own styles.</p><p>Results, Podium and Points remain visible. WR and Cycle Complete show only for their events and hide after 10 seconds by default. Put celebrations above your other OBS sources. <b>Automatic World Record detection is not currently available from the parsed CSV.</b> The World record Test button works; names/times in metadata alone do not confirm a new record.</p>
 `;
 const customGuide = `<h2>Custom HTML overlays</h2>
 <p>Build one Browser Source with several values. Follow the illustrated steps to create your HTML file and connect it to the live data.</p>

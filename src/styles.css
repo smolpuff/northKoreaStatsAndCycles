@@ -704,7 +704,7 @@ form {
   border-color: #a970ff;
   background: #9146ff;
   color: #fff;
-  font-weight: 800;
+  font-weight: normal;
 }
 
 .test-actions .twitch-connect-button:hover {

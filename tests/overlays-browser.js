@@ -25,12 +25,29 @@
     check(results.root.firstElementChild === card && results.root.querySelector("tbody tr") === firstRow, "Updates preserve the card and existing row DOM nodes");
     check(results.root.querySelector("h1").textContent === "Battle Royale results", "Original brace templates remain bound on later updates");
     check(firstRow.querySelector('[data-number="points"]').textContent === "20", "Reused row values update");
-    check(results.root.querySelector('[data-show="isRace"]').hidden && !results.root.querySelector('[data-show="br"]').hidden, "BR hides race columns and shows kills/damage");
+    check(!results.root.querySelector('[data-number="time"]') && !results.root.querySelector('[data-show="br"]').hidden, "Results omit time and show BR kills/damage");
     check(results.root.querySelector("tbody tr.dead") != null, "BR non-winners get the dead styling");
     results.update({...packet,eventId:"match-3",placements:Array.from({length:200},(_,i)=>({place:i+1,name:"Racer"+(i+1),username:"player"+i,points:1,time:1}))});
     check(results.root.querySelectorAll("tbody tr").length === 200 && results.root.textContent.includes("Racer200"), "HTML row template includes all 200 players");
     results.update({...packet,eventId:"match-4",placements:[]});
     check(results.root.hidden && !results.root.querySelector("tbody tr"), "Reset data removes rows and hides empty results");
+    const styling = await load("results");
+    styling.update(packet);
+    let updates = 0;
+    styling.root.addEventListener("marbles:update", () => updates++);
+    styling.window.MarblesOverlayOptions = { results: {width:520,height:360,opacity:65,background:"#123456",text:"#ffffff",secondary:"#aabbcc",accent:"#ff0081",gold:"#ffe024",teal:"#00efaa",headerVisible:true,headerText:"<b>My results</b>",durationSeconds:0,visibleRows:4,scrollPixelsPerSecond:30} };
+    styling.update(packet);
+    check(styling.root.style.width === "484px" && styling.root.style.height === "293px", "Saved source size reserves browser padding and resizes the actual overlay");
+    check(styling.root.querySelector(".custom-overlay-heading").textContent === "<b>My results</b>" && !styling.root.querySelector(".custom-overlay-heading b"), "Custom heading stays safe plain text");
+    check(styling.window.getComputedStyle(styling.document.body).getPropertyValue("--ink").trim() === "#ffffff", "Per-overlay colors reach the real template");
+    check(styling.window.getComputedStyle(styling.root.firstElementChild).backgroundColor.includes("0.65"), "Background opacity is applied without fading the text");
+    check(updates === 0, "Styling changes do not replay a match update");
+    styling.window.MarblesOverlayOptions.results.headerVisible = false;
+    styling.update(packet);
+    check(styling.root.querySelector(".heading").style.display === "none", "Header visibility hides the whole card heading");
+    styling.window.MarblesOverlayOptions = {};
+    styling.update(packet);
+    check(!styling.root.querySelector(".custom-overlay-heading") && styling.root.querySelector(".heading").style.display === "" && styling.root.style.width === "", "Restoring defaults removes custom sizing and restores the original heading");
     const podium = await load("podium"); podium.update({...packet, placements:Array.from({length:10},(_,i)=>({place:i+1,name:"Player"+i,points:i}))});
     check(podium.root.querySelectorAll("tbody tr").length === 3, "Podium limit is defined in its HTML");
     const custom = await load("custom"); custom.update(packet);
@@ -52,6 +69,11 @@
     check(!record.root.hidden && record.root.querySelector(".celebration-player").textContent === "Winner" && !record.root.querySelector(".celebration-points").hidden,"WR template binds player/time/zero points");
     record.root.hidden=true; record.update({...packet,eventType:"worldRecord",eventId:"newwr",wrplayer:"Changed"});
     check(record.root.hidden,"Duplicate WR identity cannot replay an alert");
+    const celebration = await load("world-record");
+    celebration.window.MarblesOverlayOptions = { "world-record": {width:1920,height:1080,opacity:80,background:"#071324",text:"#f5f5ff",secondary:"#b8c4e8",accent:"#ff0081",gold:"#ffe024",teal:"#00efaa",headerVisible:true,headerText:"",durationSeconds:10,visibleRows:6,scrollPixelsPerSecond:20} };
+    celebration.update({...packet,eventId:"large-celebration",eventType:"worldRecord",hasWorldRecord:true,wrplayer:"Winner",wrrecordtime:42,wrplayerpoints:112});
+    check(parseFloat(celebration.window.getComputedStyle(celebration.root.querySelector("h1")).fontSize) >= 153, "Celebration heading keeps its large canvas size before preview scaling");
+    check(parseFloat(celebration.window.getComputedStyle(celebration.root.querySelector(".celebration-time")).fontSize) === 172, "WR gold point count retains its large celebration size");
     const points = await load("points",false);
     let clock=0, nextId=0; const pending=new Map();
     Object.defineProperty(points.window.performance,"now",{value:()=>clock});
@@ -71,7 +93,7 @@
     scrolling.window.requestAnimationFrame=fn=>{pending.set(++nextId,fn);return nextId};scrolling.window.cancelAnimationFrame=id=>pending.delete(id);Object.defineProperty(scrolling.window.performance,"now",{value:()=>clock});
     scrolling.update({...packet,eventId:"scroll",placements:Array.from({length:200},(_,i)=>({place:i+1,name:"Racer"+i,points:1,time:1}))});
     const viewport=scrolling.root.querySelector(".results-viewport"), distance=viewport.scrollHeight-viewport.clientHeight;let furthest=0;const start=clock;
-    for(let elapsed=100;elapsed<=distance/24*1000+5000;elapsed+=100){advance(start+elapsed);furthest=Math.max(furthest,viewport.scrollTop)}
+    for(let elapsed=100;elapsed<=distance/scrolling.window.MarblesOverlayConfig.scrollPixelsPerSecond*1000+5000;elapsed+=100){advance(start+elapsed);furthest=Math.max(furthest,viewport.scrollTop)}
     check(furthest>=distance-1&&viewport.scrollTop<furthest,"All-player results scroll to the bottom and back up");
     check(results.document.querySelectorAll('[data-confetti]').length===0&&cycle.root.querySelectorAll('.confetti-piece').length===300,"Confetti comes from the celebration HTML template");
     status.textContent += "\n\nALL OVERLAY BINDING CHECKS PASSED";

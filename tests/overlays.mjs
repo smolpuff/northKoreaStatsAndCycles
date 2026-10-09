@@ -12,7 +12,7 @@ for(const name of ['results','podium','points','world-record','cycle-complete','
 }
 for(const name of ['results','podium']) {
   assert.match(read(name+'.html'), /<tbody data-repeat="placements"[^>]*>\s*<template>\s*<tr/);
-  assert.match(read(name+'.html'), /data-show="isRace"/);
+  assert.doesNotMatch(read(name+'.html'), /data-number="time"|<th[^>]*>Time<\/th>/);
   assert.match(read(name+'.html'), /data-show="br"/);
 }
 for (const name of ['world-record','cycle-complete']) {

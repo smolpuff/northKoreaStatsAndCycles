@@ -154,15 +154,21 @@ export const defaultWorldRecordMessage =
 
 const twitchMessageDefaults: Record<string, string> = {
   "twitch-message-prefix": "🏁 Race results:",
-  "twitch-cycle-message": "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
+  "twitch-cycle-message":
+    "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
   "twitch-world-record-message": defaultWorldRecordMessage,
 };
 
-export function twitchMessageIsCustomized(field: string, message: string): boolean {
+export function twitchMessageIsCustomized(
+  field: string,
+  message: string,
+): boolean {
   const fallback = twitchMessageDefaults[field];
   if (fallback === undefined) return false;
   const text = message.trim();
-  return (text || (field === "twitch-message-prefix" ? "" : fallback)) !== fallback;
+  return (
+    (text || (field === "twitch-message-prefix" ? "" : fallback)) !== fallback
+  );
 }
 
 function twitchCustomizationSummary(field: string, message: string): string {
@@ -246,6 +252,7 @@ function stat(label: string, value: unknown): string {
   const icon = (
     {
       "Session races": "file",
+      "Session BRs": "battleRoyale",
       "Last update": "clock",
       "Last updated": "clock",
       "Tracked racers": "racers",
@@ -354,7 +361,7 @@ function resultsTable(
 
   return `
     <div class="race-context">
-      <span class="track-item"><i>${icons.raceFlag}</i><span><small>Game Type</small><b>${formatLabel(game.gameType)}</b></span></span>
+      <span class="track-item"><i>${battleRoyale ? icons.battleRoyale : icons.raceFlag}</i><span><small>Game Type</small><b>${formatLabel(game.gameType)}</b></span></span>
       <span class="track-item"><i>${icons.track}</i><span><small>Track</small><b>${escapeHtml(game.mapName ?? "Unknown track")}</b></span></span>
       <span class="track-item"><i>${icons.stopwatch}</i><span><small>${game.gameType === "battleRoyale" ? "Survival time" : "Winning time"}</small><b class="mono">${formatRaceTime(winner?.finishTime)}</b></span></span>
     </div>
@@ -600,8 +607,8 @@ function settingsPage(
   `;
 
   const setupGuide = `<ol class="guide-steps">
-    ${renderGuideStep(1, "Enable HTTP Server", "In Streamer.bot, open Servers/Clients and start HTTP Server. Match the host and port above. Enable Auto Start.", "server")}
-    ${renderGuideStep(2, "Create your actions", "Create enabled actions for the events you use. Enter each exact action name on its event card.", "actions")}
+    ${renderGuideStep(1, "Enable HTTP Server", "In Streamer.bot, open Servers/Clients and start HTTP Server. Use the host and post from your Streamer.Bot config. Enable Auto Start.", "server")}
+    ${renderGuideStep(2, "Create your actions", "Create Streamer.bot actions for the events you want to use. Enter the exact action name on its event card.", "actions")}
     ${renderGuideStep(3, "Update your existing sources", "No trigger is needed. Add your OBS sub-actions to the action. Variables lets you copy a text template for Set GDI Text.", "variables")}
     ${renderGuideStep(4, "Test and verify", "Enable the event, save, then Test. Check Action History in Streamer.bot to confirm the action ran.", "test")}
   </ol>`;
@@ -628,9 +635,7 @@ function settingsPage(
   </div>
   <div class="test-actions integration-connection-controls">
     ${twitchConnected ? '<button id="twitch-disconnect" class="twitch-disconnect-button" type="button">Disconnect Twitch</button>' : '<button id="twitch-connect" class="twitch-connect-button" type="button">Connect Twitch</button>'}
-  </div>
-
-  `;
+  </div>  `;
 
   const twitchMessages = `
   <div class="twitch-layout-heading twitch-message-heading"><i>${icons.twitch}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>
@@ -741,9 +746,9 @@ function settingsPage(
 
   const twitchGuide = `<ol class="guide-steps">
     ${renderGuideStep(1, "Click Connect Twitch", "Press Connect Twitch to open Twitch's authorization page in your normal Windows browser.", "twitch-connect")}
-    ${renderGuideStep(2, "Approve Twitch access", "Sign in and approve user:write:chat. No Client ID, code or token to enter. Tokens are stored in Windows Credential Manager.", "twitch-access")}
-    ${renderGuideStep(3, "Choose what to post", "Enable Race Results, World Records and Cycle Completions independently. Customize each message using its listed variables.", "twitch-posts")}
-    ${renderGuideStep(4, "Test and go live", "Use the relevant Test button above. The connected account posts the sample message into its own Twitch channel.", "twitch-test")}
+    ${renderGuideStep(2, "Approve Twitch access", "Sign in and approve the Twitch authorization to post as you or your bot account.", "twitch-access")}
+    ${renderGuideStep(3, "Choose what to post", "Enable only what you want. Customize each message to make it yours.", "twitch-posts")}
+    ${renderGuideStep(4, "Test and go live", "Test your messages (or don't). The connected account posts the a message into your Twitch chat.", "twitch-test")}
   </ol>`;
 
   const page = {
@@ -974,10 +979,18 @@ function homePage(state: Snapshot, busy: boolean): string {
     </section>`;
   };
   return `<div class="home-page">
-    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${icons.home}</i><div><h1>Home</h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
+    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${icons.home}</i><div><h1 class="home-pew-heading">North Korea Stats PEW PEW PEW <span class="home-missiles" aria-hidden="true"><svg class="home-missile-show" viewBox="0 0 76 58" fill="none">
+      <defs>
+      <clipPath id="home-launcher-exit" clipPathUnits="userSpaceOnUse"><rect x="-100000" y="-100000" width="200000" height="100000"/></clipPath>
+      <g id="home-ballistic-missile"><path d="M6 0C3 4 2 6 2 9h8c0-3-1-5-4-9Z" fill="#ff657f"/><path d="M2 9h8v16H2Z" fill="#dbe3f4"/><path d="m2 20-3 7h3m8-7 3 7h-3" fill="#8997b2"/><circle cx="6" cy="17" r="4" fill="#ffda19"/><text x="6" y="20" text-anchor="middle" font-size="8" fill="#15203a">&#9762;</text><path d="m3 26 3 9 3-9" fill="#ffb347"/><path d="m4 26 2 6 2-6" fill="#fff2a3"/></g></defs>
+      <g class="home-launcher">
+        <g transform="translate(49 11) rotate(56)"><g clip-path="url(#home-launcher-exit)"><g class="home-fired-missile"><use href="#home-ballistic-missile" transform="translate(-6 1)"/></g></g></g>
+        <image href="${new URL("./assets/assets/truck-header@2x.png", import.meta.url).href}" x="4" y="6" width="72" height="48" preserveAspectRatio="xMidYMid meet"/>
+      </g>
+    </svg></span></h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
     <div class="home-watchers">${watcherCard("stats", "RaceStats", "raceFlag", state.config.seasons.raceName)}${watcherCard("cycles", "RaceCycles", "racecycles", state.config.seasons.cycleName)}</div>
     <div class="home-results">
-      <section class="panel"><header><div class="home-card-heading"><i>${icons.podium}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">
+      <section class="panel"><header><div class="home-card-heading"><i>${battleRoyale ? icons.battleRoyale : icons.podium}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">
         ${lastUpdated(game ? (state.lastUpdate ?? game.timestamp) : null)}
         ${
           game
@@ -999,7 +1012,7 @@ function homePage(state: Snapshot, busy: boolean): string {
               }</tbody></table></div></div>`
             : '<p class="home-empty">No results scanned yet.</p>'
         }
-        <div class="home-card-summary">${summary("Total races", totalRaces, "statRaceFlag")}${summary("Total BRs", totalBRs, "skull")}${summary("Players", game?.playerCount ?? 0, "racers")}${summary("Session races", state.sessionResults.filter((game) => game.gameType === "race").length, "clock")}${summary("Session BRs", state.sessionResults.filter((game) => game.gameType === "battleRoyale").length, "skull")}</div>
+        <div class="home-card-summary">${summary("Total races", totalRaces, "statRaceFlag")}${summary("Total BRs", totalBRs, "battleRoyale")}${summary("Players", game?.playerCount ?? 0, "racers")}${summary("Session races", state.sessionResults.filter((game) => game.gameType === "race").length, "clock")}${summary("Session BRs", state.sessionResults.filter((game) => game.gameType === "battleRoyale").length, "battleRoyale")}</div>
       </div></section>
       <section class="panel"><header><div class="home-card-heading"><i>${icons.cycles}</i><h2>Cycle leaders</h2></div><button class="action home-view-button" data-page="racecycles">View cycles</button></header><div class="panel-body">
         ${lastUpdated(state.cycleLastUpdate)}
@@ -1028,6 +1041,7 @@ function homePage(state: Snapshot, busy: boolean): string {
         <div class="home-card-summary home-points-summary">${summary("Session points", sessionPoints, "points")}${summary("Season points", seasonPoints, "points")}</div>
       </div></section>
     </div>
+    <div class="home-koreajongil" aria-hidden="true"><div class="home-koreajongil-crop"><img src="${new URL("./assets/assets/koreajongil.png", import.meta.url).href}" alt="" draggable="false" /></div></div>
   </div>`;
 }
 
@@ -1104,10 +1118,12 @@ export function renderApplication(
             : currentPage === "logs"
               ? logsPage(state, selectedLogFilter)
               : currentPage === "overlays"
-                ? overlaysPage(
-                    overlayDirectory,
-                    (file, kind) => feedbackButton(
-                      `test-overlay-${file}`, "Test", `data-test-overlay="${kind}"`, "play",
+                ? overlaysPage(overlayDirectory, (file, kind) =>
+                    feedbackButton(
+                      `test-overlay-${file}`,
+                      "Test",
+                      `data-test-overlay="${kind}"`,
+                      "play",
                     ),
                   )
                 : currentPage === "streamer" || currentPage === "twitch"

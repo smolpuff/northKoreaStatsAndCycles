@@ -1252,6 +1252,39 @@ fn get_overlay_directory(runtime: State<'_, SharedRuntime>) -> Result<String, St
 }
 
 #[tauri::command]
+fn get_overlay_durations(runtime: State<'_, SharedRuntime>) -> Result<overlays::Durations, String> {
+    let rt = runtime.lock().map_err(|error| error.to_string())?;
+    overlays::durations(&rt.overlay_writer.directory)
+}
+
+#[tauri::command]
+fn save_overlay_duration(runtime: State<'_, SharedRuntime>, kind: String, seconds: u32) -> Result<overlays::Durations, String> {
+    let rt = runtime.lock().map_err(|error| error.to_string())?;
+    overlays::ensure(&rt.overlay_writer.directory)?;
+    overlays::save_duration(&rt.overlay_writer.directory, &kind, seconds)
+}
+
+#[tauri::command]
+fn get_overlay_options(runtime: State<'_, SharedRuntime>) -> Result<overlays::Customizations, String> {
+    let rt = runtime.lock().map_err(|error| error.to_string())?;
+    overlays::customizations(&rt.overlay_writer.directory)
+}
+
+#[tauri::command]
+fn save_overlay_options(runtime: State<'_, SharedRuntime>, kind: String, options: overlays::OverlayOptions) -> Result<overlays::OverlayOptions, String> {
+    let rt = runtime.lock().map_err(|error| error.to_string())?;
+    overlays::ensure(&rt.overlay_writer.directory)?;
+    overlays::save_options(&rt.overlay_writer.directory, &kind, options)
+}
+
+#[tauri::command]
+fn reset_overlay_options(runtime: State<'_, SharedRuntime>, kind: String) -> Result<(), String> {
+    let rt = runtime.lock().map_err(|error| error.to_string())?;
+    overlays::ensure(&rt.overlay_writer.directory)?;
+    overlays::reset_options(&rt.overlay_writer.directory, &kind)
+}
+
+#[tauri::command]
 fn test_overlay(runtime: State<'_, SharedRuntime>, kind: String) -> Result<(), String> {
     if !matches!(kind.as_str(), "gameComplete" | "worldRecord" | "cycleComplete" | "results" | "podium" | "points") { return Err("Unknown overlay test".into()); }
     let mut rt = runtime.lock().map_err(|error| error.to_string())?;
@@ -1631,6 +1664,11 @@ pub fn run() {
             test_twitch_message,
             test_streamer_bot_connection,
             get_overlay_directory,
+            get_overlay_options,
+            save_overlay_options,
+            reset_overlay_options,
+            get_overlay_durations,
+            save_overlay_duration,
             test_overlay,
             test_streamer_bot_action,
             set_tracking_enabled,

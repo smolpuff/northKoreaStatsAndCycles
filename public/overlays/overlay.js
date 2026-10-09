@@ -1,16 +1,67 @@
 ﻿(function () {
   "use strict";
-  const config = Object.assign({title:"Marbles Stats", scale:1, worldRecordSeconds:12, cycleSeconds:12}, window.MarblesOverlayConfig);
+  const config = Object.assign({title:"Marbles Stats", scale:1, worldRecordSeconds:10, cycleSeconds:10}, window.MarblesOverlayConfig);
   const root = document.getElementById("overlay");
   if (!root) return;
   const kind = document.body.dataset.overlay || "custom";
   const preview = new URLSearchParams(window.location.search).get("preview") === "1";
   document.body.dataset.preview = String(preview);
-  if (preview) { config.worldRecordSeconds = 0; config.cycleSeconds = 0; config.scrollPixelsPerSecond = 150; config.scrollPauseSeconds = .8; }
+  if (preview) { config.worldRecordSeconds = 0; config.cycleSeconds = 0; }
   for (const key of ["accent", "teal", "gold", "scale"]) {
     if (config[key] != null) document.documentElement.style.setProperty("--" + key, config[key]);
   }
-  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, Number(config.visibleRows ?? config.maxResults) || 10)));
+  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, Number(config.visibleRows ?? config.maxResults) || 6)));
+  let previewOptions;
+  let previousOptions = "";
+  let customHeading;
+  function applyOptions() {
+    let options = previewOptions || window.MarblesOverlayOptions?.[kind];
+    if (options && kind === "results") options = { ...options, height: options.visibleRows * 42 + (options.headerVisible ? 161 : 106) };
+    const signature = JSON.stringify(options || null) + ":" + innerWidth + ":" + innerHeight;
+    if (signature === previousOptions) return;
+    previousOptions = signature;
+    const page = document.documentElement;
+    for (const key of ["background", "opacity", "ink", "muted", "accent", "gold", "teal"]) page.style.removeProperty("--overlay-" + key);
+    root.style.removeProperty("width"); root.style.removeProperty("height"); root.style.removeProperty("min-height"); root.style.removeProperty("transform");
+    document.body.classList.toggle("overlay-customized", !!options);
+    const heading = root.querySelector(".heading") || root.querySelector(".celebration-content > h1:not(.custom-overlay-heading)");
+    const title = root.querySelector(".heading h1") || heading;
+    const headingIcon = root.querySelector(".celebration-content > .celebration-icon");
+    if (headingIcon) headingIcon.style.display = options?.headerVisible === false ? "none" : "";
+    if (heading) heading.style.display = options?.headerVisible === false ? "none" : "";
+    if (title && title !== heading) title.style.display = "";
+    customHeading?.remove(); customHeading = null;
+    root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, Number(config.visibleRows ?? config.maxResults) || 6)));
+    if (!options) { if (!root.hidden) scrollResults(); return; }
+    page.style.setProperty("--overlay-background", options.background);
+    page.style.setProperty("--overlay-opacity", options.opacity / 100);
+    for (const [key, variable] of [["text","ink"],["secondary","muted"],["accent","accent"],["gold","gold"],["teal","teal"]]) {
+      page.style.setProperty("--overlay-" + variable, options[key]);
+    }
+    const celebration = kind === "world-record" || kind === "cycle-complete";
+    root.style.setProperty("--overlay-width", `${options.width}px`);
+    root.style.setProperty("--overlay-height", `${options.height}px`);
+    root.style.width = `${celebration ? options.width : options.width - 36}px`;
+    root.style.height = `${celebration ? options.height : options.height - 36}px`;
+    root.style.minHeight = "0";
+    if (preview) root.style.transform = `scale(${Math.min(1, innerWidth / options.width, innerHeight / options.height)})`;
+    root.style.setProperty("--visible-rows", options.visibleRows);
+    if (options.headerVisible && options.headerText && title) {
+      title.style.display = "none";
+      customHeading = document.createElement("h1");
+      customHeading.className = "custom-overlay-heading";
+      customHeading.textContent = options.headerText;
+      title.after(customHeading);
+    }
+    if (!root.hidden) scrollResults();
+  }
+  window.addEventListener("resize", applyOptions);
+  if (preview) window.addEventListener("message", event => {
+    if (event.source !== window.parent || event.origin !== window.location.origin || event.data?.type !== "marbles-overlay-options") return;
+    previewOptions = event.data.options;
+    applyOptions();
+    scrollResults();
+  });
   const motion = config.animate !== false && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   let previewPlaying = false;
   const animate = () => motion && (!preview || previewPlaying);
@@ -152,7 +203,7 @@
     if (!animate() || !window.requestAnimationFrame) return;
     const distance = viewport.scrollHeight - viewport.clientHeight;
     if (distance <= 0) return;
-    const speed = Math.max(5, Math.min(150, Number(config.scrollPixelsPerSecond) || 24));
+    const speed = Math.max(5, Math.min(150, Number((previewOptions || window.MarblesOverlayOptions?.[kind])?.scrollPixelsPerSecond ?? config.scrollPixelsPerSecond) || 20));
     const pause = Math.max(0, Number(config.scrollPauseSeconds ?? 2))*1000;
     let previous = performance.now(), pausedUntil = previous + pause, direction = 1, position = 0;
     function step(now) {
@@ -215,6 +266,7 @@
       root.getAnimations?.({subtree:true}).forEach(animation => { if (!("animationName" in animation)) animation.cancel(); });
     },
     update(data) {
+      applyOptions();
       if (!data || typeof data !== "object" || !data.eventType) return;
       const packet = JSON.stringify(data);
       if (packet === lastPacket) return;
@@ -225,7 +277,7 @@
         const id = String(data.eventId || data.gameId || data.timestamp || "");
         if (id && id === lastAlert) return;
         lastAlert = id;
-        seconds = remaining(data, kind === "world-record" ? config.worldRecordSeconds : config.cycleSeconds);
+        seconds = remaining(data, preview ? 0 : (window.MarblesOverlayOptions?.[kind]?.durationSeconds ?? window.MarblesOverlayDurations?.[kind === "world-record" ? "worldRecordSeconds" : "cycleSeconds"] ?? (kind === "world-record" ? config.worldRecordSeconds : config.cycleSeconds)));
         if (seconds < 0) return;
       }
       clearTimeout(hideTimer); exitAnimation?.cancel();

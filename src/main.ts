@@ -22,6 +22,8 @@ import { openOverlayVariables } from "./overlay-help";
 import { openEventVariables } from "./streamer-events";
 import { openOverlayPreview, installOverlayPreviewSizing } from "./overlay-view";
 
+import { overlayOptions, optionsFor, updateOverlayPreview, installOverlayCustomization, type OverlayName, type OverlayOptions } from "./overlay-options";
+
 installOverlayPreviewSizing();
 installIntegrationHelp();
 
@@ -230,6 +232,7 @@ function renderMainWindow(): void {
     button.addEventListener("click", () => toggleWatcher(button.dataset.trackingToggle as "stats" | "cycles"));
   });
 
+  installOverlayCustomization(runButtonAction);
   document.querySelectorAll<HTMLButtonElement>("[data-test-overlay]").forEach(button => button.addEventListener("click", () => {
     void runButtonAction(button.dataset.feedbackKey!, () => invoke("test_overlay", {kind: button.dataset.testOverlay}), "Sending...", "Sent");
   }));
@@ -248,6 +251,8 @@ function renderMainWindow(): void {
       button.setAttribute("aria-pressed", String((button.dataset.overlayPreviewType === "br") === overlayPreviewBR));
     });
     document.querySelectorAll<HTMLIFrameElement>(".overlay-mini-preview iframe").forEach(frame => {
+      const name = new URL(frame.src).pathname.split("/").pop()!.replace(".html", "") as OverlayName;
+      updateOverlayPreview(frame, name);
       frame.contentWindow?.postMessage({ type: "marbles-overlay-preview", br: overlayPreviewBR }, window.location.origin);
     });
   };
@@ -691,6 +696,19 @@ async function initialize(): Promise<void> {
   // hold the dashboard hostage during application launch.
   render();
   document.title = "Marbles Stats — Ready";
+  void invoke<Partial<Record<OverlayName, OverlayOptions>>>("get_overlay_options").then(settings => {
+    Object.assign(overlayOptions, settings);
+    return invoke<{worldRecordSeconds: number; cycleSeconds: number}>("get_overlay_durations");
+  }).then(durations => {
+    // Preserve durations saved before the per-overlay styling controls were added.
+    for (const [name, seconds] of [["world-record", durations.worldRecordSeconds], ["cycle-complete", durations.cycleSeconds]] as const) {
+      if (!overlayOptions[name] && seconds !== 10) overlayOptions[name] = { ...optionsFor(name), durationSeconds: seconds };
+    }
+    render();
+  }).catch(error => {
+    overlaySetupError = `Unable to load overlay customization: ${String(error)}`;
+    render();
+  });
   void invoke<string>("get_overlay_directory").then(directory => {
     overlayDirectory = directory;
     render();

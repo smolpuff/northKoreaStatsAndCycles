@@ -11,10 +11,16 @@ The variable reference marks which fields are available in normal HTML state, WR
 ## Add to OBS
 
 1. Click **Copy path** on an overlay card.
-2. In OBS choose **Sources + > Browser > Local file** and paste the HTML path. Use **600 x 900** for Results, **600 x 500** for Podium/Points, or your canvas size (usually **1920 x 1080**) for celebrations.
+2. In OBS choose **Sources + > Browser > Local file** and paste the HTML path. Use the size shown on the card: defaults are **400 x 413** for Results, **400 x 300** for Podium, **400 x 260** for Points, or your canvas size (usually **1920 x 1080**) for celebrations.
 3. Position Results, Podium and Points using their live match data. Click **Test** on World record or Cycle completed to position those celebrations.
 
-Leave the source enabled. Results/podium/points stay visible; WR/cycle celebrations show on their events and hide after 12 seconds. Place celebration sources above the rest. WR requires a confirmed record; automatic WR detection from the current CSV is not available yet, but the test works.
+Leave the source enabled. Results/podium/points stay visible; WR/cycle celebrations show on their events and hide after 10 seconds by default. Open **Customize** and set **Duration (seconds)** on each celebration card in the app and click **Save** (1–300 seconds). Saved durations persist and override the corresponding overlay-config.js duration; future events use them automatically. Place celebration sources above the rest. WR requires a confirmed record; automatic WR detection from the current CSV is not available yet, but the test works.
+
+## Basic styling in the app
+
+Click **Customize** at the right of each card's buttons. Change width/height, background opacity and color, text/secondary/accent/gold/green colors, and header visibility or text. Results also supports visible player count and scrolling speed; its height is automatic from that count and header visibility. Background opacity uses a slider for every overlay. The thumbnail previews unsaved edits. **Save** applies that overlay's settings to the live source within its next 3-second data check. These settings persist separately for each overlay.
+
+After resizing, set your OBS Browser Source's width and height to the updated size on the card; the app does not change OBS properties. Very small dimensions can cut off content. **Restore defaults** resets the app controls without replacing your HTML/CSS edits. An empty header uses the original heading. A custom heading is plain text, not a variable template. Generic custom.html pages retain their own styles; these controls apply to the five premade overlays.
 
 ## Customize the HTML
 

@@ -77,7 +77,7 @@ export function renderGuideIllustration(
       art = `<div class="guide-overlay-path"><div class="guide-overlay-file">${icon("file")}<div><b>Results</b><code>&#8230;/overlays/results.html</code></div></div><span class="guide-mini-input">Live overlay file path</span><div>${miniButton("Copy path", "file")}${cursor}</div></div>`;
       break;
     case "browser-source":
-      art = `<div class="guide-mini-panel guide-browser-source"><div class="guide-mini-bar">OBS &middot; Browser Source</div><span class="guide-checkbox">${icons.check}<span>Local file</span></span><span class="guide-mini-input">&#8230;/overlays/results.html</span><div class="guide-browser-dimensions">${field("Width", "600")}${field("Height", "900")}</div></div>`;
+      art = `<div class="guide-mini-panel guide-browser-source"><div class="guide-mini-bar">OBS &middot; Browser Source</div><span class="guide-checkbox">${icons.check}<span>Local file</span></span><span class="guide-mini-input">&#8230;/overlays/results.html</span><div class="guide-browser-dimensions">${field("Width", "400")}${field("Height", "413")}</div></div>`;
       break;
     case "obs-results":
       art = `<div class="guide-obs-art"><div class="guide-obs-canvas"><div class="guide-results-frame"><b>Race results</b>${previewRow(1, "Test Winner", "+10")}${previewRow(2, "Test Second", "+8")}${previewRow(3, "Test Third", "+6")}<span class="guide-source-handle"></span></div></div><div class="guide-obs-source">${icon("overview")}<span>Results browser source</span>${icon("check")}</div></div>`;

@@ -151,13 +151,13 @@ export const legacyHelpFields: HelpFieldGroup = {
 export const overlayConfigHelpFields: HelpFieldGroup = {
   title: "overlay-config.js settings",
   availability: "Configuration properties, not brace variables. Save the file and refresh the OBS Browser Source after changing settings.",
-  fields: [["title", "Brand label (default Marbles Stats)."], ["visibleRows", "Visible results window, clamped to 1–25 (default 10); does not limit supplied players."],
+  fields: [["title", "Brand label (default Marbles Stats)."], ["visibleRows", "Visible results window, clamped to 1–25 (default 6); does not limit supplied players."],
     ["maxResults", "Legacy fallback for visibleRows; does not limit supplied players."],
-    ["scrollPixelsPerSecond", "Results scroll speed, clamped to 5–150 (default 24)."], ["scrollPauseSeconds", "Pause at each end of scrolling (default 2)."],
+    ["scrollPixelsPerSecond", "Results scroll speed, clamped to 5–150 (default 20)."], ["scrollPauseSeconds", "Pause at each end of scrolling (default 2)."],
     ["scale", "CSS overlay scale (default 1)."], ["animate", "False disables binder motion; system reduced-motion preference also disables it."],
     ["countMilliseconds", "Number animation duration, clamped to 0–5000 (default 750)."],
-    ["worldRecordSeconds", "WR alert lifetime measured from receivedAt (default 12); 0 keeps it visible."],
-    ["cycleSeconds", "Cycle alert lifetime measured from receivedAt (default 12); 0 keeps it visible."],
+    ["worldRecordSeconds", "WR alert lifetime measured from receivedAt (default 10); 0 keeps it visible. Saved duration in the overlay card overrides this setting."],
+    ["cycleSeconds", "Cycle alert lifetime measured from receivedAt (default 10); 0 keeps it visible. Saved duration in the overlay card overrides this setting."],
     ["accent", "Accent CSS colour."], ["teal", "Teal CSS colour."], ["gold", "Gold CSS colour."]],
 };
 
