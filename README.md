@@ -26,19 +26,6 @@ Content and control icons use native Phosphor Regular SVGs, bundled locally with
 2. Start **RaceStats**, **RaceCycles**, or both from the app.
 3. Complete a Race or Battle Royale. The app processes supported CSV changes automatically.
 
-The default source folder is resolved for the current Windows user:
-
-```text
-%LOCALAPPDATA%\MarblesOnStream\Saved\SaveGames
-```
-
-| Match type | Results | Track/map metadata |
-| --- | --- | --- |
-| Race | `LastSeasonRace.csv` | `LastSeasonRaceSummary.csv` |
-| Battle Royale | `LastSeasonRoyale.csv` | `LastSeasonRoyaleSummary.csv` |
-
-`LastCustomRaceMapPlayed.csv` also supplies optional race map/record metadata and a track-name fallback. Unrelated CSV files are ignored.
-
 Starting the app or a watcher does not process existing files. **Reprocess latest file** reads the most recently modified supported results file manually. Duplicate snapshots do not count twice; manual reprocessing can refresh results and correct points.
 
 Session stats reset when the app opens. Season totals and cycle progress persist until their **Clear Results** action is confirmed. Clearing history is a separate action. The dashboard restores the latest saved result on restart without recounting it.
