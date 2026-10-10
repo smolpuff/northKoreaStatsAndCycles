@@ -12,13 +12,15 @@ A lightweight Windows desktop app for tracking Marbles on Stream races and Battl
 
 Stats are stored locally in JSON. Twitch and Streamer.bot are optional.
 
-Settings includes the app version, automatic update checks and a manual **Check for updates** button. Updates verify the download before replacing the executable and restarting.
+Settings shows the installed version, update status and last check time beside **Check for updates**. Automatic checks are enabled by default and run when the app opens, then daily while it stays open. Manual checks work with automatic checks disabled. Choose **Download and install** to download, verify, replace the executable and restart; your stats and settings stay in place.
 
 Download `marbles-stats.exe` from the latest GitHub release and run it. This is the single application download; no installer is needed. Update checks read the repository's `version.json`; verified download metadata lives in `updates/v<version>.json` in the repository, rather than in release downloads.
 
-Develop and commit the complete project on `dev`. Run `npm run build:local` for a local Windows executable; it does not change versions or publish anything. Run `npm run release` to increment the patch version, promote dev to `main`, synchronize all version files, commit/tag/push both branches and let GitHub build and publish. Release notes come from your local Unreleased changelog or explicit `--notes` / `--notes-file` arguments; a fresh clone needs explicit notes because working documentation is kept out of Git. The checkout stays on dev. Preview with `npm.cmd --% run release -- --dry-run`; choose a specific release with `npm.cmd --% run release -- --version 0.2.0`. The release command never builds or launches locally.
+If you are using 0.2.0 or earlier, download the new EXE once and replace your old copy while the app is closed. Those older builds use the former release-attachment metadata. New builds use the repo metadata for subsequent in-app updates.
 
 Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
+
+The window opens at 1000 × 760 and cannot be narrower than 1000 pixels. The sidebar expands and collapses with animation; collapsed navigation and status icons have hover tooltips. Settings toggles save immediately; **Save settings** remains available for other changes.
 
 Content and control icons use native Phosphor Regular SVGs, bundled locally without an icon runtime dependency. Their MIT license is included in `src/assets/Phosphor-LICENSE.txt`. Colored navigation artwork retains its existing design.
 
@@ -38,6 +40,8 @@ Open **Overlays** in the app, copy an overlay's path, and add it as an OBS **Bro
 
 Results, Podium, and Points remain visible. World record and Cycle completed are temporary celebrations with their own Test buttons. You can edit the live HTML/CSS or copy `custom.html` to create your own overlay.
 
+Hover over an overlay thumbnail to play its sample animation. **Open preview** plays an animated sample without requiring a real match or sending chat messages.
+
 The app's **Help & variables** guide includes illustrated setup steps, custom HTML examples, and the full variable reference. See [overlay documentation](public/overlays/README.md) for additional details.
 
 ## Streamer.bot
@@ -54,7 +58,7 @@ Open **Variables** on an event card for its fields and examples. **Copy for Stre
 
 ## Twitch
 
-Connect your account from the **Twitch** page, enable the messages you want, and save. Race results, cycle completions, and world records have separate templates and test controls. Messages are sent to the connected account's own channel.
+Connect your account from the **Twitch** page and enable the messages you want. Toggles save immediately; save template edits with **Save settings**. Race results, cycle completions, and world records have separate templates and test controls. Messages are sent to the connected account's own channel.
 
 Race results let you customize the overall message, each placement, the separator, and individual 1st/2nd/3rd wording. Use `{placements}` in the overall message and `{player}`, `{placement}`, `{place}`, `{points}`, or `{time}` in entries. Blank templates keep the defaults. The preview and Test button use these settings; long lists split into messages of up to 500 characters with the overall wording repeated.
 
@@ -64,7 +68,7 @@ Settings also has an optional **Promote Korea's mission App in chat** toggle, in
 
 **Desktop sign-in:** Marbles Stats and Cycles has its own Twitch Public application ID. Connect Twitch opens Twitch's device approval page in your browser; approve there and return to the app. Sign-in requests only `user:write:chat`, validates the resulting account with Twitch, and saves access and rotating refresh tokens in Windows Credential Manager. Tokens refresh without a client secret; revoked or expired authorization requires connecting again.
 
-No `.env.local`, hosted auth server, callback listener or client secret is required in development or in the packaged app. The registration retains a localhost redirect URL, but device authorization does not use it. Restart the development app after these backend changes before testing sign-in.
+No `.env.local`, hosted auth server, callback listener or client secret is required in development or in the packaged app. The sign-in instructions explain the app-provided code; approve the request on Twitch's page. The registration retains a localhost redirect URL, but device authorization does not use it.
 
 ## Development
 
@@ -104,6 +108,24 @@ npm test
 
 `npm test` runs the Rust tests.
 
+### Release
+
+Develop and commit on `dev`. `npm run build:local` creates a local EXE without changing versions or publishing. `npm run release` increments the patch version, promotes the complete committed project to `main`, synchronizes all six version files, commits release notes, and atomically pushes both branches and a new tag. The checkout stays on `dev`; the command never builds or launches locally.
+
+```powershell
+npm run release:check
+npm.cmd --% run release -- --dry-run
+npm run release
+```
+
+For a minor release use `npm.cmd --% run release -- --bump minor`; for an exact version use `npm.cmd --% run release -- --version <new-version>`. PowerShell requires `npm.cmd --%` for argument forwarding. Other shells can use `npm run release -- ...`.
+
+Notes come from the local Unreleased changelog or repeated `--notes` / `--notes-file` arguments. A fresh clone needs explicit notes because working documentation stays out of Git. The script requires clean committed source, consistent versions and preservation of remote `dev`/`main` commits; it refuses existing tags and never force-pushes main.
+
+GitHub builds Windows x64 and runs Twitch tests before publishing `marbles-stats.exe`. After the EXE is public, it commits the version-specific URL, byte size and SHA-256 to `updates/` on `main` and merges that metadata into `dev`. Checks wait for that metadata before offering an update. GitHub's automatic source archives are separate from the application download.
+
+If pushing fails, retry the exact command printed by the release script instead of bumping again. If the GitHub build fails, fix it and rerun the failed job. Prefer a new version to replacing published binaries so installed apps can detect the update.
+
 ### Project layout
 
 | Directory | Purpose |
@@ -113,6 +135,7 @@ npm test
 | `src-tauri/tests/fixtures/` | Parser fixtures |
 | `public/overlays/` | Bundled HTML templates, scripts, and styles |
 | `scripts/` | Version release and updater-manifest scripts |
+| `updates/` | Verified download metadata for published versions |
 
 Runtime stats and editable live overlays are stored in the writable application-data directory, outside the repository. Dependencies, builds, local credentials, and temporary files are excluded by `.gitignore`.
 
