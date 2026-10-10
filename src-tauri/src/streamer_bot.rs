@@ -65,6 +65,16 @@ pub fn test_connection(config: &StreamerBotConfig) -> Result<(), String> {
     get_actions(config).map(|_| ())
 }
 
+pub fn promotion_args(interval_minutes: u64, is_test: bool) -> Value {
+    json!({
+        "eventType": "missionPromotion",
+        "promotionMessage": crate::models::default_promotion_message(),
+        "downloadUrl": "https://www.missions.lol",
+        "intervalMinutes": interval_minutes.clamp(1, 1440),
+        "isTest": is_test,
+    })
+}
+
 pub fn trigger_action(
     config: &StreamerBotConfig,
     action_name: &str,
@@ -210,7 +220,7 @@ pub fn event_actions(config: &StreamerBotConfig, game: &GameResult, season_name:
 }
 
 pub fn cycle_complete_args(game: &GameResult, player: &str, cycle: u64, races: Option<u64>) -> Value {
-    let result = game.results.iter().find(|result| result.player_name.eq_ignore_ascii_case(player) || result.username.eq_ignore_ascii_case(player));
+    let result = game.results.iter().find(|result| result.player_name.eq_ignore_ascii_case(player) || result.username.eq_ignore_ascii_case(player) || result.display_name.eq_ignore_ascii_case(player));
     let mut args = json!({"eventType":"cycleComplete", "eventId":format!("cycle:{}:{}:{}", game.id, player, cycle), "gameId":game.id, "cycleplayer":player,
         "cyclenumber":cycle, "cycleraces":races, "cycleplayerpoints":result.map(|p| p.season_points_earned)});
     add_player_args(&mut args, "cycleplayer", result);
@@ -232,7 +242,6 @@ pub fn overlay_data(snapshot: &AppSnapshot, game: Option<&GameResult>, args: &Va
     }
     let mut leaders = snapshot.race_cycles.clone();
     leaders.sort_by(crate::models::compare_cycle_players);
-    leaders.truncate(3);
     data["eventId"] = args.get("eventId").cloned().unwrap_or_else(|| json!(format!("{}:{}", args["eventType"].as_str().unwrap_or("raceComplete"), game.map(|game| game.id.as_str()).unwrap_or("empty"))));
     data["seasonName"] = json!(snapshot.config.seasons.race_name);
     data["cycleSeasonName"] = json!(snapshot.config.seasons.cycle_name);
@@ -244,12 +253,13 @@ pub fn overlay_data(snapshot: &AppSnapshot, game: Option<&GameResult>, args: &Va
     data["sessionPlayers"] = json!(identities.len());
     data["cyclePlayers"] = json!(snapshot.race_cycles.len());
     data["cycleRaces"] = json!(snapshot.total_cycle_race_count);
-    data["cycleLeaders"] = json!(leaders.iter().map(|player| {
+    data["cycleStandings"] = json!(leaders.iter().map(|player| {
         let mut row = json!(player);
         row["currentCyclePositions"] = json!(player.current_positions());
         row["cycleProgress"] = json!(player.cycle_progress());
         row
     }).collect::<Vec<_>>());
+    data["cycleLeaders"] = json!(data["cycleStandings"].as_array().map(|rows| rows.iter().take(3).cloned().collect::<Vec<_>>()).unwrap_or_default());
     data["cycleCompletions"] = completions;
     data
 }
@@ -378,6 +388,10 @@ mod tests {
         let cycle = cycle_complete_args(&game, "test_player_1", 2, Some(823));
         assert_eq!(cycle["cycleplayerpoints"], 10);
         assert_eq!(cycle["cycleplayerusername"], "test_player_1");
+        game.results[0].display_name = "Pretty Player".into();
+        let displayed_cycle = cycle_complete_args(&game, "Pretty Player", 3, Some(13));
+        assert_eq!(displayed_cycle["cycleplayerpoints"], 10);
+        assert_eq!(displayed_cycle["cycleplayerusername"], "test_player_1");
     }
 
     #[test]

@@ -1,0 +1,111 @@
+name: Build Desktop Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build or retry (v0.1.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: Build and publish Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Validate tag and all version files
+        run: node scripts/release.mjs --check --tag "$env:RELEASE_TAG"
+
+      - name: Refuse changes to an already published release
+        shell: pwsh
+        run: |
+          $existing = gh release view $env:RELEASE_TAG --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not ($existing | ConvertFrom-Json).isDraft) {
+            throw "This version is already published. Create a new version instead of replacing its binaries."
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check release tooling
+        run: node tests/release.mjs
+
+      - name: Build Windows application and installer
+        run: npm run build -- --ci --target x86_64-pc-windows-msvc
+
+      - name: Prepare release files and verified updater manifest
+        shell: pwsh
+        run: |
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $binary = "src-tauri/target/x86_64-pc-windows-msvc/release/marbles-stats.exe"
+          $installers = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter *.exe)
+          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS installer" }
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          Copy-Item -LiteralPath $binary -Destination release-assets/marbles-stats.exe
+          Copy-Item -LiteralPath $installers[0].FullName -Destination "release-assets/Marbles-Stats-$version-x64-setup.exe"
+          node scripts/create-update-manifest.mjs release-assets/marbles-stats.exe release-assets/desktop-update.json
+          if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed" }
+          $metadata = Get-Content version.json -Raw | ConvertFrom-Json
+          $notes = @($metadata.notes) | Where-Object { $_ -and $_.Trim() } | ForEach-Object { "- $_" }
+          $body = "## Marbles Stats $env:RELEASE_TAG`n`n" + ($notes -join "`n") + "`n`nWindows x64. Use the setup EXE for installation, or marbles-stats.exe for a portable copy. Existing installs use desktop-update.json for automatic updates.`n"
+          Set-Content release-assets/release-notes.md -Value $body -Encoding utf8
+
+      - name: Keep build artifacts for recovery
+        uses: actions/upload-artifact@v7
+        with:
+          name: marbles-stats-${{ env.RELEASE_TAG }}-windows-x64
+          path: release-assets/*
+          if-no-files-found: error
+
+      - name: Upload all files to a draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Marbles Stats ${{ env.RELEASE_TAG }}
+          draft: true
+          body_path: release-assets/release-notes.md
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*.exe
+            release-assets/desktop-update.json
+
+      - name: Publish only after all downloads are uploaded
+        run: gh release edit "$env:RELEASE_TAG" --draft=false --latest

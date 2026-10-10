@@ -52,4 +52,14 @@ for (let cycle = 0; cycle < 3; cycle++) {
   }
 }
 progress(Array(10).fill(0), 0, 0, []); // Clear/reset removes the occupied positions.
+const makePlayer = (name, cycles, positions) => ({playerKey: name.toLowerCase(), playerName: name, cycles, currentCyclePositions: positions, placementCounts:Array(10).fill(100)});
+state.raceCycles = [makePlayer("Zulu", 2, [1,2]), makePlayer("Alpha", 2, [1,2]), makePlayer("Beta", 3, [1]), makePlayer("Gamma", 2, [1,2,3])];
+const rows = () => [...renderApplication(state, "home", false, "all", {key:"cycles",direction:"desc"}).matchAll(/<tr><td><b class="place">(\d+)<\/b><\/td><td>([^<]+)<\/td><td class="cycle-total">/g)].map(match=>[Number(match[1]),match[2]]);
+assert.deepEqual(rows(), [[1,"Beta"],[2,"Gamma"],[3,"Alpha"]]);
+state.raceCycles[0].cycles = 4;
+assert.deepEqual(rows(), [[1,"Zulu"],[2,"Beta"],[3,"Gamma"]]);
+state.raceCycles = [makePlayer("Only", 5, [1,3,5,6])];
+const cyclePage = renderApplication(state,"racecycles",false,"all",{key:"cycles",direction:"desc"});
+assert.equal((cyclePage.match(/class="cycle-count ready"/g)||[]).length,4);
+assert(!cyclePage.includes("Extra finishes roll"));
 console.log("Dashboard checks passed: three repeated 1/10–10/10 sets, restart at 1, place 11 at 0, unique slots and reset.");

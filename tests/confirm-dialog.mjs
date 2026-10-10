@@ -31,7 +31,7 @@ const exports = {};
 const source = fs.readFileSync('src/confirm-dialog.ts', 'utf8');
 vm.runInNewContext(ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText, { exports, document });
+}).outputText, { exports, document, require: () => ({ icons: { close: '<svg aria-hidden="true"></svg>' }, showAnimatedDialog: dialog => dialog.showModal() }) });
 
 for (const dismissal of ['[data-cancel]', '[data-close]', 'escape', '[data-confirm]']) {
   const result = exports.confirmClear('Clear results?', 'What is removed.', 'Clear results');

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 const read = name => fs.readFileSync(new URL('../public/overlays/'+name, import.meta.url),'utf8');
 const runtime = read('overlay.js');
 assert.doesNotMatch(runtime, /innerHTML|outerHTML|insertAdjacentHTML/, 'Runtime cannot replace the template layout with generated HTML');
-for(const name of ['results','podium','points','world-record','cycle-complete','custom']) {
+for(const name of ['results','cycle-status','podium','points','world-record','cycle-complete','custom']) {
   const html = read(name+'.html');
   assert.match(html, /<main id="overlay"[^>]*>\s*(?:<!--[\s\S]*?-->\s*)?<\w/, name+' has actual editable markup');
   assert.match(html, /\{[A-Za-z][\w.]*\}/, name+' has real brace bindings');
@@ -29,3 +29,7 @@ assert.match(guide, /They do not work in OBS/);
 assert.match(guide, /Edit HTML & variables/);
 assert.match(guide, /Streamer.bot custom-event hooks are a separate integration/);
 console.log('Template contracts passed: editable HTML, repeat templates, working binding entry points, separate setup instructions.');
+
+assert.match(read('cycle-status.html'), /data-repeat="cycleStandings" data-key="playerKey"/);
+assert.equal((read('cycle-status.html').match(/data-class="ready:position/g) || []).length, 10);
+assert.match(read('cycle-status.html'), /\{left\}/);

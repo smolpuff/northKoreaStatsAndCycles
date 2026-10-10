@@ -52,6 +52,12 @@
         data.placements[1].points = 120;
       }
     }
+    data.cycleStandings = Array.from({length:30}, (_, index) => {
+      const leader = data.cycleLeaders[index];
+      if (leader) return {...leader, playerKey:"preview:" + leader.playerName};
+      const positions = Array.from({length:Math.max(0, 7 - Math.floor(index / 4))}, (_, i) => (i + index) % 10 + 1);
+      return {playerKey:"preview:" + index, playerName:"Player" + (index + 1), cycles:0, currentCyclePositions:positions, placementCounts:Array.from({length:10}, (_, i) => positions.includes(i + 1) ? 1 : 0)};
+    });
     window.MarblesOverlay.update(data);
     reportSize();
   }
@@ -62,7 +68,7 @@
     tick = 0;
     window.MarblesOverlay.setPreviewActive(active);
     render();
-    if (active && document.body.dataset.overlay !== "results") {
+    if (active && ! ["results", "cycle-status"].includes(document.body.dataset.overlay)) {
       loop = setInterval(() => { tick++; render(); }, document.body.dataset.overlay === "world-record" || document.body.dataset.overlay === "cycle-complete" ? 4500 : 3000);
     }
   }

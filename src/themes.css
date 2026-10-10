@@ -1,0 +1,190 @@
+/* Default retains the existing gradients and icon palette. */
+:root { color-scheme: dark; --dropdown-background: #10172d; }
+
+select option,
+select optgroup {
+  background-color: var(--dropdown-background);
+  color: var(--reference-ink);
+}
+
+.theme-select {
+  min-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid var(--reference-control-border);
+  border-radius: var(--reference-radius-control);
+  background: var(--dropdown-background);
+  color: var(--reference-ink);
+  font: inherit;
+}
+
+/* Windows-style charcoal surfaces, shared by the two simpler themes. */
+:root.theme-plain {
+  --dropdown-background: #303030;
+  --reference-page: #181818;
+  --reference-ink: #f1f1f1;
+  --reference-secondary: #bcbcbc;
+  --reference-border: #3b3b3b;
+  --reference-purple-border: #3b3b3b;
+  --reference-control-border: #4b4b4b;
+  --reference-control: #303030;
+  --theme-surface: #232323;
+  --theme-raised: #2b2b2b;
+  --theme-hover: #373737;
+  --theme-selected: #383838;
+  --theme-alternate: #ffffff04;
+  --theme-scrollbar: #707070;
+  --bg: var(--reference-page);
+  --panel: var(--theme-surface);
+}
+
+:root[data-theme="minimal"] {
+  --dropdown-background: #fafafa;
+  color-scheme: light;
+  --reference-page: #f0f0f0;
+  --reference-ink: #252525;
+  --reference-secondary: #626262;
+  --reference-border: #d3d3d3;
+  --reference-purple-border: #d3d3d3;
+  --reference-control-border: #bcbcbc;
+  --reference-control: #fafafa;
+  --reference-teal: #087d5b;
+  --theme-surface: #fff;
+  --theme-raised: #f5f5f5;
+  --theme-hover: #e5e5e5;
+  --theme-selected: #dadada;
+  --theme-alternate: #00000003;
+  --theme-scrollbar: #aaa;
+  --good: #087d5b;
+  --warn: #966500;
+  --bad: #c32048;
+}
+
+:root.theme-plain :is(body, .app-shell) {
+  background: var(--reference-page);
+  color: var(--reference-ink);
+}
+
+:root.theme-plain :is(.panel, .home-page .panel, .stat, .race-context,
+  .twitch-settings-section, .connection-card, .log-list,
+  .overlay-template, .twitch-message-preview, .locked-file) {
+  background: color-mix(in srgb, var(--theme-surface) 60%, transparent);
+  border-color: var(--reference-border);
+  box-shadow: none;
+}
+
+:root.theme-plain .home-page .panel { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+:root.theme-plain .overlay-template {
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--theme-surface) 67%, transparent),
+    color-mix(in srgb, var(--theme-surface) 73%, transparent));
+}
+:root.theme-plain .overlay-preview-dialog {
+  background: var(--theme-surface);
+  color: var(--reference-ink);
+  border-color: var(--reference-border);
+  box-shadow: none;
+}
+:root.theme-plain dialog::backdrop { background: #000000c9; }
+:root[data-theme="minimal"] dialog::backdrop { background: #14141480; }
+:root.theme-plain .overlay-mini-preview {
+  background-color: #181818;
+  background-image: repeating-conic-gradient(#242424 0% 25%, #181818 0% 50%);
+  background-size: 12px 12px;
+  background-position: 0 0;
+}
+:root.theme-plain .overlay-large-preview {
+  background: repeating-conic-gradient(#242424 0% 25%, #181818 0% 50%) 0 / 24px 24px;
+}
+:root.theme-plain :is(.help-scroll details, .guide-step) {
+  background: color-mix(in srgb, var(--theme-surface) 60%, transparent);
+  border-color: var(--reference-border);
+}
+:root[data-theme="minimal"] dialog :is(a, .overlay-inline-link) { color: #09658e; }
+:root[data-theme="minimal"] .help-scroll code { color: #623b8f; }
+
+:root.theme-plain :is(.panel, .log-window):hover { filter: none; }
+
+:root.theme-plain :is(.panel, .table-frame, .results-panel, .cycles-panel)::before {
+  background: var(--reference-border);
+}
+
+:root.theme-plain .table-frame { background: color-mix(in srgb, var(--theme-surface) 20%, transparent); }
+:root.theme-plain .home-page .table-frame { background: color-mix(in srgb, var(--theme-surface) 16%, transparent); }
+:root.theme-plain :is(thead, .table-frame thead th, .home-page .table-frame thead th,
+  .log-row:nth-child(even)) {
+  background: color-mix(in srgb, var(--theme-raised) 55%, transparent);
+}
+:root.theme-plain :is(.overlay-preview-dialog > header, .icon-input > i) {
+  background: var(--theme-raised);
+}
+
+:root.theme-plain :is(th, td, .log-row) { border-color: var(--reference-border); }
+:root.theme-plain th { color: var(--reference-secondary); }
+:root.theme-plain :is(td, .player b, .mono, .empty-state b, .connection-card b) { color: var(--reference-ink); }
+:root.theme-plain :is(.player small, .empty-state, .field > span) { color: var(--reference-secondary); }
+:root.theme-plain tbody tr { background: transparent; }
+:root.theme-plain tbody tr:nth-child(even) { background: var(--theme-alternate); }
+:root.theme-plain tbody tr:hover { background: color-mix(in srgb, var(--theme-hover) 20%, transparent); }
+
+:root.theme-plain :is(.compact-button, .test-actions button, .log-actions button,
+  .field input, .field select, .field textarea, .log-actions select, .icon-input,
+  .cycle-search, .help-scroll pre, .event-variables-dialog pre, .overlay-source-path input,
+  .overlay-folder input, .overlay-match-selector, .streamer-template-input) {
+  background: var(--reference-control);
+  color: var(--reference-ink);
+  border-color: var(--reference-control-border);
+}
+
+:root.theme-plain :is(.compact-button, .test-actions button, .log-actions button):hover {
+  background: var(--theme-hover);
+  border-color: var(--reference-control-border);
+}
+
+:root.theme-plain .icon-input > :is(input, select) { background: transparent; color: var(--reference-ink); }
+:root.theme-plain .toggle-row input[type="checkbox"]:not(:checked) { background: var(--reference-control); }
+:root.theme-plain .toggle-row input[type="checkbox"]::before { background: #fff; }
+:root.theme-plain .overlay-match-selector button[aria-pressed="true"] { background: var(--theme-selected); color: var(--reference-ink); }
+:root.theme-plain .sidebar .nav-item.active {
+  background: var(--theme-selected);
+  color: var(--reference-ink);
+  filter: none;
+  backdrop-filter: none;
+}
+:root.theme-plain .sidebar .nav-item:hover:not(.active) { background: var(--theme-hover); }
+:root.theme-plain .sidebar .nav-item.active svg { color: var(--reference-ink); }
+
+/* Keep semantic controls and all SVG icon colors. */
+:root.theme-plain :is(.compact-button.btn-error, #clear-history, .app-update-primary,
+  .test-actions .twitch-connect-button, .twitch-message-actions button[data-twitch-save]:not(.button-success)) {
+  background: #ec006b;
+  border-color: #ff2e8b;
+  color: #fff;
+}
+:root.theme-plain :is(.compact-button.btn-error, #clear-history, .app-update-primary,
+  .test-actions .twitch-connect-button, .twitch-message-actions button[data-twitch-save]:not(.button-success)):hover {
+  background: #ff1482;
+}
+:root.theme-plain :is(.button-success, .button-success:disabled) { background: var(--good); color: #fff; }
+:root[data-theme="minimal"] .points { color: var(--good); }
+:root[data-theme="minimal"] .sidebar .nav-item.active { filter: none; }
+/* OBS overlays retain their own colors; dark preview canvases keep translucent text readable. */
+:root[data-theme="minimal"] .overlays-page :is(.overlay-inline-link, a) { color: #09658e; }
+:root.theme-plain .overlay-customize-control .customize-button {
+  background: var(--reference-control);
+  color: var(--reference-ink);
+  border-color: var(--reference-control-border);
+}
+:root.theme-plain .overlay-customize-control .customize-button:hover {
+  background: var(--theme-hover);
+  color: var(--reference-ink);
+  border-color: var(--reference-control-border);
+}
+:root[data-theme="minimal"] :is(.results-panel, .home-page) .battle-royale-results .royale-dead :is(td, .player b) { color: var(--bad); }
+:root[data-theme="minimal"] .results-panel tbody tr.p2 { background: #e7eaf0; --podium-border: #b8c1ce; }
+:root[data-theme="minimal"] :is(.royale-dead td, .royale-dead .player b, .dead-placement) { color: var(--bad); }
+
+:root.theme-plain :is(.content, .table-scroll, .cycle-table-wrap, .help-scroll, .log-list, dialog) {
+  scrollbar-color: var(--theme-scrollbar) var(--theme-raised);
+}
+:root.theme-plain ::-webkit-scrollbar-track { background: var(--theme-raised); }
+:root.theme-plain ::-webkit-scrollbar-thumb { background: var(--theme-scrollbar); }

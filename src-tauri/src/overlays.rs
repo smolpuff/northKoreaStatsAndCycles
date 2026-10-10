@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 // Embedded defaults live in writable app data; custom HTML/CSS/config edits are preserved.
 const FILES: &[(&str, &str)] = &[
     ("custom.html", include_str!("../../public/overlays/custom.html")),
+    ("cycle-status.html", include_str!("../../public/overlays/cycle-status.html")),
     ("results.html", include_str!("../../public/overlays/results.html")),
     ("podium.html", include_str!("../../public/overlays/podium.html")),
     ("world-record.html", include_str!("../../public/overlays/world-record.html")),
@@ -116,15 +117,21 @@ pub struct OverlayOptions {
     pub accent: String,
     pub gold: String,
     pub teal: String,
+    #[serde(default = "default_border_start")]
+    pub border_start: String,
+    #[serde(default = "default_border_end")]
+    pub border_end: String,
     pub header_visible: bool,
     pub header_text: String,
     pub duration_seconds: u32,
     pub visible_rows: u32,
     pub scroll_pixels_per_second: u32,
 }
+fn default_border_start() -> String { "#493064".into() }
+fn default_border_end() -> String { "#28395d".into() }
 pub type Customizations = std::collections::BTreeMap<String, OverlayOptions>;
 fn known_overlay(kind: &str) -> bool {
-    matches!(kind, "results" | "podium" | "points" | "world-record" | "cycle-complete")
+    matches!(kind, "results" | "cycle-status" | "podium" | "points" | "world-record" | "cycle-complete")
 }
 pub fn customizations(directory: &Path) -> Result<Customizations, String> {
     match fs::read(directory.join("overlay-customizations.json")) {
@@ -152,7 +159,7 @@ fn refresh_customizations(directory: &Path) -> Result<(), String> {
 }
 pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -> Result<OverlayOptions, String> {
     if !known_overlay(kind) { return Err("Unknown overlay".into()); }
-    if !(280..=3840).contains(&options.width) || (kind != "results" && !(180..=2160).contains(&options.height)) || options.opacity > 100 {
+    if !(280..=3840).contains(&options.width) || (!matches!(kind, "results" | "cycle-status") && !(180..=2160).contains(&options.height)) || options.opacity > 100 {
         return Err("Check the width, height and opacity limits".into());
     }
     if options.header_text.chars().count() > 100 || !(1..=25).contains(&options.visible_rows) || !(5..=100).contains(&options.scroll_pixels_per_second) {
@@ -161,12 +168,17 @@ pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -
     if matches!(kind, "world-record" | "cycle-complete") && !(1..=300).contains(&options.duration_seconds) {
         return Err("Choose a duration from 1 to 300 seconds".into());
     }
-    for color in [&options.background, &options.text, &options.secondary, &options.accent, &options.gold, &options.teal] {
+    for color in [&options.background, &options.text, &options.secondary, &options.accent, &options.gold, &options.teal, &options.border_start, &options.border_end] {
         if color.len() != 7 || !color.starts_with('#') || !color.as_bytes()[1..].iter().all(|byte| byte.is_ascii_hexdigit()) {
             return Err("Colors must use #RRGGBB".into());
         }
     }
-    if kind == "results" { options.height = options.visible_rows * 42 + if options.header_visible { 161 } else { 106 }; }
+    if matches!(kind, "results" | "cycle-status") {
+        let header_height = if kind == "cycle-status" {
+            if options.header_visible { 192 } else { 114 }
+        } else if options.header_visible { 161 } else { 106 };
+        options.height = options.visible_rows * (if kind == "cycle-status" { 60 } else { 42 }) + header_height;
+    }
     let mut settings = customizations(directory)?;
     settings.insert(kind.to_string(), options.clone());
     storage::Storage::new(directory.to_path_buf())?.write("overlay-customizations.json", &settings)?;

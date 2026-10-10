@@ -1,23 +1,42 @@
 import { iconInput } from "./input-field";
 import { renderGuideHeader, renderGuideStep } from "./guide-illustrations";
 import { icons } from "./icons";
+import { sidebarArtwork } from "./sidebar-icons";
 import { overlaysPage } from "./overlay-view";
-import type { GameResult, Snapshot } from "./types";
+import type { Config, GameResult, Snapshot } from "./types";
 
 function cyclePositions(player: Snapshot["raceCycles"][number]): number[] {
-  return player.currentCyclePositions ?? (player.cycles > 0 ? [] : player.placementCounts
-    .slice(0, 10).flatMap((count, index) => count > 0 ? [index + 1] : []));
+  return (
+    player.currentCyclePositions ??
+    (player.cycles > 0
+      ? []
+      : player.placementCounts
+          .slice(0, 10)
+          .flatMap((count, index) => (count > 0 ? [index + 1] : [])))
+  );
 }
 
 function cycleProgress(player: Snapshot["raceCycles"][number]): number {
   return cyclePositions(player).length;
 }
 
-function compareCycleLeaders(a: Snapshot["raceCycles"][number], b: Snapshot["raceCycles"][number]): number {
+function compareCycleLeaders(
+  a: Snapshot["raceCycles"][number],
+  b: Snapshot["raceCycles"][number],
+): number {
   const value = b.cycles - a.cycles || cycleProgress(b) - cycleProgress(a);
   if (value) return value;
-  const left = a.playerName.toLowerCase(), right = b.playerName.toLowerCase();
-  return left < right ? -1 : left > right ? 1 : a.playerKey < b.playerKey ? -1 : a.playerKey > b.playerKey ? 1 : 0;
+  const left = a.playerName.toLowerCase(),
+    right = b.playerName.toLowerCase();
+  return left < right
+    ? -1
+    : left > right
+      ? 1
+      : a.playerKey < b.playerKey
+        ? -1
+        : a.playerKey > b.playerKey
+          ? 1
+          : 0;
 }
 
 export interface RaceCycleSort {
@@ -124,45 +143,123 @@ function formatLabel(value?: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
+export const defaultRaceMessage = "{intro} {placements}";
+export const defaultRaceEntry = "{place} {player} +{points}pts";
+export const defaultPromotionMessage = "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol";
+
 export function twitchPreviewMessages(
   messagePrefix: string,
   game?: GameResult,
+  options: Partial<Config["twitch"]> = {},
 ): string[] {
-  const sampleResults = [
-    { placement: 1, playerName: "rmrfkorea", seasonPointsEarned: 123 },
-    { placement: 2, playerName: "PlayerTwo", seasonPointsEarned: 90 },
-    { placement: 3, playerName: "PlayerThree", seasonPointsEarned: 70 },
-    { placement: 4, playerName: "PlayerFour", seasonPointsEarned: 45 },
+  const sample = [
+    {
+      placement: 1,
+      playerName: "rmrfkorea",
+      seasonPointsEarned: 123,
+      finishTime: 42.123,
+    },
+    {
+      placement: 2,
+      playerName: "PlayerTwo",
+      seasonPointsEarned: 90,
+      finishTime: 43.456,
+    },
+    {
+      placement: 3,
+      playerName: "PlayerThree",
+      seasonPointsEarned: 70,
+      finishTime: 44.789,
+    },
+    {
+      placement: 4,
+      playerName: "PlayerFour",
+      seasonPointsEarned: 45,
+      finishTime: 45.123,
+    },
+    {
+      placement: 5,
+      playerName: "PlayerFive",
+      seasonPointsEarned: 30,
+      finishTime: 46.234,
+    },
   ];
-  const results = (game?.results ?? sampleResults).filter(
-    (result) => result.seasonPointsEarned > 0,
+  const all = game?.results ?? sample;
+  const scoring = all.some((result) => result.seasonPointsEarned > 0);
+  const results = all.filter((result) =>
+    scoring
+      ? result.seasonPointsEarned > 0
+      : result.placement > 0 &&
+        result.placement <= (game?.gameType === "battleRoyale" ? 1 : 3) &&
+        !("eliminated" in result && result.eliminated),
   );
-  const prefix = messagePrefix
-    .trim()
-    .replaceAll("{race}", formatLabel(game?.gameType ?? "race"))
-    .slice(0, 120);
-  const start = prefix ? `${prefix} ` : "";
+  const resolve = (template: string, fields: Record<string, string>) =>
+    template.replace(
+      /\{([^{}]+)\}/g,
+      (token, name: string) => fields[name] ?? token,
+    );
+  const chars = (text: string) => Array.from(text);
+  const common = {
+    race: formatLabel(game?.gameType ?? "race"),
+    mapName: game?.mapName ?? (game ? "Unknown track" : "Test Map"),
+    playerCount: String(game?.playerCount ?? all.length),
+  };
+  const intro = chars(resolve(messagePrefix.trim(), common))
+    .slice(0, 120)
+    .join("");
+  const outer = options.raceMessageTemplate?.trim() || defaultRaceMessage;
+  const message = (placements: string) =>
+    resolve(outer, { ...common, intro, placements })
+      .replace(/[\r\n]/g, " ")
+      .trim();
+  if (!results.length) return [];
+  if (!outer.includes("{placements}"))
+    return [chars(message("")).slice(0, 500).join("")];
+  const separator = options.raceEntrySeparator ?? " | ";
   const messages: string[] = [];
-  let current = start;
-  let count = 0;
-
+  let current = "";
   for (const result of results) {
     const place =
-      ({ 1: "🥇", 2: "🥈", 3: "🥉" } as Record<number, string>)[
-        result.placement
-      ] ?? `#${result.placement}`;
-    const entry = `${place} ${result.playerName} +${result.seasonPointsEarned}pts`;
-    const separator = count ? " | " : "";
-    if (count && (current + separator + entry).length > 500) {
-      messages.push(current);
-      current = start;
-      count = 0;
+      (
+        { 1: "\u{1f947}", 2: "\u{1f948}", 3: "\u{1f949}" } as Record<
+          number,
+          string
+        >
+      )[result.placement] ?? "#" + result.placement;
+    const template =
+      options.racePodiumTemplates?.[result.placement - 1]?.trim() ||
+      options.raceEntryTemplate?.trim() ||
+      (scoring ? defaultRaceEntry : "{place} {player}");
+    const entry = resolve(template, {
+      ...common,
+      place,
+      placement: String(result.placement),
+      player: result.playerName,
+      points: String(result.seasonPointsEarned),
+      time:
+        result.finishTime == null ? "unknown" : result.finishTime.toFixed(3),
+    });
+    const candidate = current ? current + separator + entry : entry;
+    if (current && chars(message(candidate)).length > 500) {
+      messages.push(message(current));
+      current = "";
     }
-    current += `${count ? " | " : ""}${entry}`;
-    count += 1;
+    const remaining = current ? current + separator + entry : entry;
+    if (chars(message(remaining)).length > 500) {
+      // Preserve the message wrapper while fitting an unusually long single entry.
+      let fitted = chars(entry);
+      while (fitted.length && chars(message(fitted.join(""))).length > 500)
+        fitted.pop();
+      messages.push(
+        chars(message(fitted.join("")))
+          .slice(0, 500)
+          .join(""),
+      );
+      current = "";
+    } else current = remaining;
   }
-  if (count) messages.push(current);
-  return messages.length ? messages : [`${start}No point-scoring racers`];
+  if (current) messages.push(message(current));
+  return messages;
 }
 
 export const defaultWorldRecordMessage =
@@ -187,8 +284,22 @@ export function twitchMessageIsCustomized(
   );
 }
 
-function twitchCustomizationSummary(field: string, message: string): string {
-  return `<summary><span class="twitch-customized-state" data-customized-for="${field}" ${twitchMessageIsCustomized(field, message) ? "" : "hidden"}>&#10003; Customized</span><span class="customize-button">Customize<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg></span></summary>`;
+export function raceMessageIsCustomized(config: Config["twitch"]): boolean {
+  return (
+    twitchMessageIsCustomized("twitch-message-prefix", config.messagePrefix) ||
+    (!!config.raceMessageTemplate?.trim() && config.raceMessageTemplate.trim() !== defaultRaceMessage) ||
+    (!!config.raceEntryTemplate?.trim() && config.raceEntryTemplate.trim() !== defaultRaceEntry) ||
+    (config.racePodiumTemplates ?? []).some((text) => !!text.trim() && text.trim() !== (config.raceEntryTemplate?.trim() || defaultRaceEntry)) ||
+    (config.raceEntrySeparator ?? " | ") !== " | "
+  );
+}
+
+function twitchCustomizationSummary(
+  field: string,
+  message: string,
+  customized = twitchMessageIsCustomized(field, message),
+): string {
+  return `<summary><span class="twitch-customized-state" data-customized-for="${field}" ${customized ? "" : "hidden"}>${icons.check} Customized</span><span class="customize-button">Customize${icons.caretDown}</span></summary>`;
 }
 
 export function worldRecordMessagePreview(template: string): string {
@@ -227,7 +338,11 @@ export function watcherIsActive(state: Snapshot): boolean {
 
 function streamerBotTone(state: Snapshot): string {
   if (state.streamerBotStatus === "Connected") return "good";
-  if (state.streamerBotStatus === "Unavailable") return "bad";
+  if (
+    state.streamerBotStatus === "Unavailable" ||
+    state.streamerBotStatus === "Error"
+  )
+    return "bad";
   return "warn";
 }
 
@@ -426,7 +541,7 @@ function overviewPage(
       <div class="page-head tracking-page-head">
         <div>
           <div class="race-heading">
-            <i class="race-heading-icon">${icons.raceFlag}</i>
+            <i class="race-heading-icon">${sidebarArtwork("overview", "header-overview")}</i>
             <div><h1>RaceStats</h1><p>${escapeHtml(fileName)} · Race + Battle Royale</p></div>
           </div>
         </div>
@@ -526,7 +641,7 @@ function historyPage(state: Snapshot): string {
   return `
     <div class="history-view">
     <div class="page-head">
-      <div class="race-heading"><i class="race-heading-icon">${icons.history}</i><div><h1>History</h1><p>Saved races processed by Stats and Cycles.</p></div></div>
+      <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("history", "header-history")}</i><div><h1>History</h1><p>Saved races processed by Stats and Cycles.</p></div></div>
     </div>
 
     <div class="history-panels">
@@ -554,11 +669,43 @@ function settingsPage(
       <input id="${id}" type="checkbox" role="switch" ${checked ? "checked" : ""} />
     </label>`;
   const watcherSettings = `
-   
-
+      <label class="toggle-row settings-option">
+        <i aria-hidden="true">${icons.palette}</i>
+        <span><b>Theme</b><small id="theme-save-status" role="status">Changes save automatically.</small></span>
+        <select id="appearance-theme" class="theme-select">
+          <option value="default" ${(state.config.theme ?? "default") === "default" ? "selected" : ""}>Default</option>
+          <option value="dark" ${state.config.theme === "dark" ? "selected" : ""}>Dark</option>
+          <option value="minimal" ${state.config.theme === "minimal" ? "selected" : ""}>I hate my retinas mode</option>
+        </select>
+      </label>
       ${startupToggle("auto-start", "watcherStart", "Start RaceStats automatically", "Count races and Battle Royales when the app opens.", state.config.csv.autoStartWatcher)}
       ${startupToggle("auto-start-cycles", "cycles", "Start RaceCycles automatically", "Count cycle placements when the app opens.", state.config.csv.autoStartCycles)}
       ${startupToggle("start-minimized", "monitor", "Start minimized", "Start the application minimized to the Windows taskbar.", state.config.startMinimized)}
+  `;
+
+  const promotionSettings = `
+      <div class="mission-promotion-settings">
+        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's mission App in chat", "Give chat a nudge toward Korea's free Mission Manager.", state.config.twitch.promoteMissionApp ?? true)}
+        <details class="promotion-options twitch-message-customization">
+          <summary><span class="customize-button">${icons.caretDown} Options</span></summary>
+        <div class="mission-promotion-controls">
+          <div class="twitch-message-preview promotion-preview"><span>Preview</span><p>${escapeHtml(defaultPromotionMessage)}</p></div>
+          <label class="field promotion-interval"><span>Post every (minutes)</span><input id="promotion-interval" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionIntervalMinutes ?? 60}" /></label>
+          <small>Posts while this app is open and Twitch is connected. The optional Mission app promotion hook on the Streamer.bot page uses this interval independently. The first post waits one full interval. Save to apply.</small>
+          <div class="promotion-actions">${feedbackButton("twitch-promotion", "Test promotion", `data-twitch-test="promotion" ${state.twitchStatus === "Connected" ? "" : "disabled"}`, "test")}${feedbackButton("save-promotion", "Save", "data-twitch-save", "file")}</div>
+        </div>
+        </details>
+      </div>
+  `;
+  const updateSettings = `
+      <div class="app-update-settings">
+        ${startupToggle("auto-update-check", "download", "Check for app updates automatically", "Check after 24 hours open, then daily. You choose when to download and restart.", state.config.autoUpdateCheckEnabled ?? true)}
+        <div class="app-update-controls">
+          <button type="button" class="compact-button" data-check-updates>Check for updates</button>
+          <p><span data-app-version></span> <span data-update-last-checked>Last checked: Never</span></p>
+          <p data-update-message role="status" aria-live="polite"></p>
+        </div>
+      </div>
   `;
 
   const streamerBot = state.config.streamerBot;
@@ -575,7 +722,7 @@ function settingsPage(
   `;
 
   const streamerBotEvents = `
-    <div class="twitch-layout-heading streamer-event-heading"><i>${icons.chain}</i><h2>Custom event hooks</h2><p>Optional: run your own Streamer.bot action when an event happens. Add sub-actions for chat, OBS text, sounds, or your entire stream flow. The app calls the action by name and supplies its data; no trigger is needed. Standalone HTML overlays are independent of these hooks.</p></div>
+    <div class="twitch-layout-heading streamer-event-heading"><i>${icons.webhook}</i><h2>Custom event hooks</h2><p>Optional: run your own Streamer.bot action when an event happens. Add sub-actions for chat, OBS text, sounds, or your entire stream flow. The app calls the action by name and supplies its data; no trigger is needed. Standalone HTML overlays are independent of these hooks.</p></div>
     <div class="streamer-events">${[
       {
         key: "race",
@@ -610,13 +757,23 @@ function settingsPage(
         action: streamerBot.actions.cycleComplete || "Marbles - Cycle Complete",
         input: "streamer-cycle-action",
       },
+      {
+        key: "promotion",
+        kind: "missionPromotion",
+        title: "Mission app promotion",
+        description: "Runs on the promotion interval in Settings, even without Twitch. Sends promotionMessage, downloadUrl, and intervalMinutes arguments.",
+        icon: icons.webhook,
+        enabled: streamerBot.events?.missionPromotion ?? false,
+        action: streamerBot.actions.missionPromotion || "Marbles - Mission Promotion",
+        input: "streamer-promotion-action",
+      },
     ]
       .map(
         (
           event,
         ) => `<section class="twitch-settings-section streamer-event-card" data-feature-section="streamer-${event.key}-enabled">
       <label class="toggle-row twitch-feature-heading"><i>${event.icon}</i><span><b>${event.title}</b><small>${event.description}</small></span><input id="streamer-${event.key}-enabled" type="checkbox" role="switch" ${event.enabled ? "checked" : ""} /></label>
-      <div class="streamer-action-controls"><div class="feature-content"><label class="field"><span>Action name:</span>${iconInput(icons.streamer, `<input id="${event.input}" value="${escapeHtml(event.action)}" />`)}</label>${feedbackButton(`streamer-${event.key}`, "Test", `data-streamer-test="${event.kind}"`, "test")}</div><button type="button" class="overlay-inline-link event-variables-link" data-event-variables="${event.kind}">Variables</button></div>
+      <div class="streamer-action-controls"><div class="feature-content"><label class="field"><span>Action name:</span>${iconInput(icons.streamer, `<input id="${event.input}" value="${escapeHtml(event.action)}" />`)}</label>${feedbackButton(`streamer-${event.key}`, "Test", `data-streamer-test="${event.kind}"`, "test")}</div>${event.kind === "missionPromotion" ? "" : `<button type="button" class="overlay-inline-link event-variables-link" data-event-variables="${event.kind}">Variables</button>`}</div>
     </section>`,
       )
       .join("")}</div>
@@ -633,7 +790,8 @@ function settingsPage(
   const twitchConnected = state.twitchStatus === "Connected";
   const twitchPreview = twitchPreviewMessages(
     twitch.messagePrefix,
-    state.latestResult,
+    undefined,
+    twitch,
   );
   const cyclePreview = cycleMessagePreview(twitch.cycleMessageTemplate);
   const twitchConnection = `
@@ -654,7 +812,7 @@ function settingsPage(
   </div>  `;
 
   const twitchMessages = `
-  <div class="twitch-layout-heading twitch-message-heading"><i>${icons.twitch}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>
+  <div class="twitch-layout-heading twitch-message-heading"><i>${icons.webhook}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>
   <div class="twitch-settings-grid">
     <section class="twitch-settings-section" data-feature-section="twitch-post-results">
       <div class="toggle-row twitch-feature-heading">
@@ -667,8 +825,8 @@ function settingsPage(
         />
 
       </div>
-      <details class="twitch-message-customization" name="twitch-post-customization" open>
-        ${twitchCustomizationSummary("twitch-message-prefix", twitch.messagePrefix)}
+          <details class="twitch-message-customization" name="twitch-post-customization">
+        ${twitchCustomizationSummary("twitch-message-prefix", twitch.messagePrefix, raceMessageIsCustomized(twitch))}
         <div class="feature-content">
 
       <label class="field">
@@ -684,7 +842,14 @@ function settingsPage(
         <small>Use <code>{race}</code> for the match type: <b>Race</b> or <b>Battle Royale</b>.</small>
       </label>
 
-      <div class="twitch-message-preview">
+      <div class="race-message-templates">
+        <label class="field"><span>Overall message</span><textarea id="twitch-race-message" rows="1" maxlength="500" placeholder="{intro} {placements}">${escapeHtml(twitch.raceMessageTemplate?.trim() || defaultRaceMessage)}</textarea><small>Use <code>{intro}</code>, <code>{placements}</code>, <code>{race}</code>, <code>{mapName}</code>, <code>{playerCount}</code>. Long lists split into multiple messages.</small></label>
+        <label class="field"><span>Each placement</span><textarea id="twitch-race-entry" rows="1" maxlength="500" placeholder="{place} {player} +{points}pts">${escapeHtml(twitch.raceEntryTemplate?.trim() || defaultRaceEntry)}</textarea><small>Use <code>{place}</code>, <code>{placement}</code> (number), <code>{player}</code>, <code>{points}</code>, <code>{time}</code>, and the match fields above. Change pts to points, or leave points out entirely.</small></label>
+        <label class="field"><span>Between placements</span><input id="twitch-race-separator" maxlength="40" value="${escapeHtml(twitch.raceEntrySeparator ?? " | ")}" /></label>
+        <details class="race-podium-templates"><summary>Custom wording for 1st, 2nd, and 3rd</summary><p>Leave an override blank to use Each placement.</p>${["1st", "2nd", "3rd"].map((label, index) => `<label class="field"><span>${label} place</span><textarea id="twitch-race-place-${index + 1}" rows="1" maxlength="500">${escapeHtml(twitch.racePodiumTemplates?.[index]?.trim() || twitch.raceEntryTemplate?.trim() || defaultRaceEntry)}</textarea></label>`).join("")}</details>
+      </div>
+
+            <div class="twitch-message-preview">
         <span>Preview</span>
 
         <p id="twitch-message-preview">${twitchPreview.map(escapeHtml).join("<br><br>")}</p>
@@ -772,7 +937,7 @@ function settingsPage(
       eyebrow: "Integrations",
       title: "Settings",
       description: "smol korea is the best!",
-      content: `<section class="panel settings-panel"><div class="panel-body">${watcherSettings}</div></section>`,
+      content: `<section class="panel settings-panel"><div class="panel-body">${watcherSettings}${updateSettings}</div></section><section class="panel settings-panel mission-promotion-panel" aria-label="Mission app promotion"><div class="panel-body">${promotionSettings}</div></section>`,
     },
     streamer: {
       eyebrow: "Automation",
@@ -801,7 +966,7 @@ function settingsPage(
   return `
     <div class="page-head simple">
       <div class="race-heading">
-        <i class="race-heading-icon ${section === "twitch" ? "twitch-heading-icon" : ""}">${icons[section === "twitch" ? "twitch" : section === "settings" ? "settings" : "chain"]}</i><div>
+        <i class="race-heading-icon ${section === "twitch" ? "twitch-heading-icon" : ""}">${sidebarArtwork(section, `header-${section}`)}</i><div>
         <h1>${page.title}</h1>
         <p>${page.description}</p>
         </div>
@@ -811,25 +976,31 @@ function settingsPage(
     
     <form id="settings-form" class="integration-page-layout ${section}-page-layout">
       ${page.content}
-      ${section !== "settings" ? "" : feedbackButton("save-settings", "Save settings", "", "file", "submit")}
+      ${section !== "settings" ? "" : `<div class="integration-save">${feedbackButton("save-settings", "Save settings", "", "file", "submit")}</div>`}
     </form>
   `;
 }
 
+function sidebarIcon(id: string): string {
+  const name = id.replace(/^status-/, "");
+  return sidebarArtwork(name === "cycles" ? "racecycles" : name, id);
+}
 function navItem(page: string, currentPage: string, title: string): string {
+  const gradientIcon = sidebarIcon(page);
   return `
     <button
       data-page="${page}"
+      title="${title}" aria-label="${title}"
       class="nav-item ${currentPage === page ? "active" : ""}"
     >
-      ${icons[page]}
+      ${gradientIcon}
       <span>${title}</span>
     </button>
   `;
 }
 
 function resultsName(name: string, editing: boolean): string {
-  const pencil = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m13.8 2.2 4 4-10.6 10.6-5.3 1.3 1.3-5.3L13.8 2.2Zm-9 11.3-.6 2.3 2.3-.6 8.8-8.8-1.7-1.7-8.8 8.8Z" fill="currentColor" /></svg>`;
+  const pencil = icons.pencil;
   return `<form id="season-form" class="results-name">
     ${editing ? `${iconInput(icons.file, `<input id="season-name" maxlength="120" value="${escapeHtml(name)}" aria-label="Results name" />`)}` : `<h2>${escapeHtml(name)}</h2>`}
     <button id="edit-season-name" type="button" class="compact-button edit-name" aria-label="Edit name" title="Edit name">${pencil}</button>
@@ -843,7 +1014,11 @@ function raceCyclesPage(
   editingName: boolean,
   busy: boolean,
 ): string {
-  const ranks = new Map([...state.raceCycles].sort(compareCycleLeaders).map((player, index) => [player.playerKey, index + 1]));
+  const ranks = new Map(
+    [...state.raceCycles]
+      .sort(compareCycleLeaders)
+      .map((player, index) => [player.playerKey, index + 1]),
+  );
   const players = [...state.raceCycles].sort((left, right) => {
     let comparison: number;
     if (sort.key === "racer") {
@@ -897,7 +1072,7 @@ function raceCyclesPage(
     <div class="cycles-view">
     <div class="page-head tracking-page-head">
       <div class="race-heading">
-        <i class="race-heading-icon">${icons.racecycles}</i>
+        <i class="race-heading-icon">${sidebarArtwork("racecycles", "header-racecycles")}</i>
         <div><h1>RaceCycles</h1>
         <p>Collect finishing positions 1–10, then start a new set.</p></div>
       </div>
@@ -990,7 +1165,7 @@ function homePage(state: Snapshot, busy: boolean): string {
     </section>`;
   };
   return `<div class="home-page">
-    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${icons.home}</i><div><h1 class="home-pew-heading">North Korea Stats PEW PEW PEW <span class="home-missiles" aria-hidden="true"><svg class="home-missile-show" viewBox="0 0 76 58" fill="none">
+    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("home", "header-home")}</i><div><h1 class="home-pew-heading">North Korea Stats <span class="home-missiles" aria-hidden="true"><svg class="home-missile-show" viewBox="0 0 76 58" fill="none">
       <defs>
       <clipPath id="home-launcher-exit" clipPathUnits="userSpaceOnUse"><rect x="-100000" y="-100000" width="200000" height="100000"/></clipPath>
       <g id="home-ballistic-missile"><path d="M6 0C3 4 2 6 2 9h8c0-3-1-5-4-9Z" fill="#ff657f"/><path d="M2 9h8v16H2Z" fill="#dbe3f4"/><path d="m2 20-3 7h3m8-7 3 7h-3" fill="#8997b2"/><circle cx="6" cy="17" r="4" fill="#ffda19"/><text x="6" y="20" text-anchor="middle" font-size="8" fill="#15203a">&#9762;</text><path d="m3 26 3 9 3-9" fill="#ffb347"/><path d="m4 26 2 6 2-6" fill="#fff2a3"/></g></defs>
@@ -999,9 +1174,9 @@ function homePage(state: Snapshot, busy: boolean): string {
         <image href="${new URL("./assets/assets/truck-header@2x.png", import.meta.url).href}" x="4" y="6" width="72" height="48" preserveAspectRatio="xMidYMid meet"/>
       </g>
     </svg></span></h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
-    <div class="home-watchers">${watcherCard("stats", "RaceStats", "raceFlag", state.config.seasons.raceName)}${watcherCard("cycles", "RaceCycles", "racecycles", state.config.seasons.cycleName)}</div>
+    <div class="home-watchers">${watcherCard("stats", "RaceStats", "raceFlag", state.config.seasons.raceName)}${watcherCard("cycles", "RaceCycles", "repeatOnce", state.config.seasons.cycleName)}</div>
     <div class="home-results">
-      <section class="panel"><header><div class="home-card-heading"><i>${battleRoyale ? icons.battleRoyale : icons.podium}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">
+      <section class="panel"><header><div class="home-card-heading"><i>${icons.crown}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">
         ${lastUpdated(game ? (state.lastUpdate ?? game.timestamp) : null)}
         ${
           game
@@ -1025,7 +1200,7 @@ function homePage(state: Snapshot, busy: boolean): string {
         }
         <div class="home-card-summary">${summary("Total races", totalRaces, "statRaceFlag")}${summary("Total BRs", totalBRs, "battleRoyale")}${summary("Players", game?.playerCount ?? 0, "racers")}${summary("Session races", state.sessionResults.filter((game) => game.gameType === "race").length, "clock")}${summary("Session BRs", state.sessionResults.filter((game) => game.gameType === "battleRoyale").length, "battleRoyale")}</div>
       </div></section>
-      <section class="panel"><header><div class="home-card-heading"><i>${icons.cycles}</i><h2>Cycle leaders</h2></div><button class="action home-view-button" data-page="racecycles">View cycles</button></header><div class="panel-body">
+      <section class="panel"><header><div class="home-card-heading"><i>${icons.crown}</i><h2>Cycle leaders</h2></div><button class="action home-view-button" data-page="racecycles">View cycles</button></header><div class="panel-body">
         ${lastUpdated(state.cycleLastUpdate)}
         ${
           topCycles.length
@@ -1055,7 +1230,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
     <aside class="sidebar">
 
       <nav>
-        <span>Merbz</span>
+        <div class="sidebar-heading"><span>Merbz</span><button type="button" class="sidebar-collapse-button" data-collapse-sidebar aria-label="Collapse sidebar" title="Collapse sidebar" aria-expanded="true">${icons.sidebar}</button></div>
         ${navItem("home", currentPage, "Home")}
         ${navItem("overview", currentPage, "RaceStats")}
         ${navItem("racecycles", currentPage, "RaceCycles")}
@@ -1073,6 +1248,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
       <div class="sidebar-foot">
         <div class="watcher-statuses connection-statuses">
         <div class="sidebar-watcher" title="Twitch: ${escapeHtml(state.twitchUsername ?? state.twitchStatus)} — ${escapeHtml(state.twitchStatus)}">
+          <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-twitch")}</i>
           <small>Twitch</small>
           <div class="watch-state ${twitchTone(state)}"><i></i><span>${escapeHtml(
             state.twitchUsername && state.twitchStatus === "Connected"
@@ -1082,6 +1258,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
         </div>
        
         <div class="sidebar-watcher" title="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
+          <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-streamer")}</i>
           <small>Streamer.bot</small>
           <div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div>
         </div>
@@ -1092,7 +1269,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
               const running =
                 trackingIsActive(state, kind) && watcherIsActive(state);
               const label = kind === "stats" ? "Stats" : "Cycles";
-              return `<div class="sidebar-watcher" title="${label}: ${running ? "Watching" : "Stopped"}"><small>${label}</small><div class="watch-state ${running ? "good" : "bad"}"><i></i><span>${running ? "Watching" : "Stopped"}</span></div></div>`;
+              return `<div class="sidebar-watcher" title="${label}: ${running ? "Watching" : "Stopped"}"><i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon(`status-${kind}`)}</i><small>${label}</small><div class="watch-state ${running ? "good" : "bad"}"><i></i><span>${running ? "Watching" : "Stopped"}</span></div></div>`;
             })
             .join("")}
         </div>
@@ -1153,7 +1330,7 @@ function logsPage(state: Snapshot, selectedFilter: string): string {
   return `
     <section class="log-window">
       <header class="page-head">
-        <div class="race-heading"><i class="race-heading-icon">${icons.logs}</i><div><h1>Live log</h1><p>Watcher and parser activity updates here as it happens.</p></div></div>
+        <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("logs", "header-logs")}</i><div><h1>Live log</h1><p>Watcher and parser activity updates here as it happens.</p></div></div>
 
         <div class="log-actions">
           <select id="log-filter">

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "release": "node scripts/release.mjs",
+    "release:check": "node scripts/release.mjs --check",
     "frontend:dev": "vite",
     "frontend:build": "tsc && vite build",
     "format": "prettier --write src/**/*.{ts,css} index.html",

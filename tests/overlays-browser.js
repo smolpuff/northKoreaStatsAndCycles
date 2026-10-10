@@ -14,6 +14,19 @@
     matchPoints:18,sessionPoints:100,seasonPoints:1000,
     cycleCompletions:[{playerName:"Winner",cycleNumber:1,races:823}]};
   try {
+    const standings = await load("cycle-status");
+    const cyclePlayers = Array.from({length:30}, (_, i) => ({playerKey:"p"+i, playerName:i === 0 ? "<b>Player</b>" : "Player"+i, cycles:2, placementCounts:[3,4,2,2,2,2,2,2,2,2], currentCyclePositions:[1,4]}));
+    standings.update({...packet, cycleStandings:cyclePlayers, placements:[]});
+    const standingsRow = standings.root.querySelector("tbody tr");
+    check(!standings.root.hidden && standings.root.querySelectorAll("tbody tr").length === 30, "Cycle standings include every player even without a latest match");
+    check(standingsRow.querySelector(".name").textContent === "<b>Player</b>" && !standingsRow.querySelector("b"), "Cycle player names bind as safe text");
+    check(standingsRow.querySelectorAll("td.ready").length === 2 && standingsRow.querySelector(".cycle-left").textContent === "8", "Cycle highlights and positions left use current progress, not historical counts");
+    check(standingsRow.getBoundingClientRect().height === 60, "Cycle rows have breathing room and fit the configured twenty-row viewport without clipping");
+    check(standings.root.style.getPropertyValue("--visible-rows") === "20", "Cycle standings default to twenty visible rows");
+    standings.update({...packet, eventId:"cycle-update", cycleStandings:[{...cyclePlayers[0],currentCyclePositions:[2]}]});
+    check(standings.root.querySelector("tbody tr") === standingsRow && standingsRow.querySelectorAll("td.ready").length === 1 && standingsRow.querySelector(".cycle-left").textContent === "9", "Cycle updates reuse rows and remove stale progress highlights");
+    standings.update({...packet, eventId:"cycle-empty", cycleStandings:[]});
+    check(standings.root.hidden, "Empty cycle standings hide after a reset");
     const results = await load("results"); results.update(packet);
     const card = results.root.firstElementChild, firstRow = results.root.querySelector("tbody tr");
     check(!results.root.hidden && firstRow.querySelector(".name").textContent === "<script>bad</script>", "Bindings insert player names as safe text");
@@ -41,6 +54,12 @@
     check(styling.root.querySelector(".custom-overlay-heading").textContent === "<b>My results</b>" && !styling.root.querySelector(".custom-overlay-heading b"), "Custom heading stays safe plain text");
     check(styling.window.getComputedStyle(styling.document.body).getPropertyValue("--ink").trim() === "#ffffff", "Per-overlay colors reach the real template");
     check(styling.window.getComputedStyle(styling.root.firstElementChild).backgroundColor.includes("0.65"), "Background opacity is applied without fading the text");
+    styling.window.MarblesOverlayOptions.results.borderStart = "#ff1122";
+    styling.window.MarblesOverlayOptions.results.borderEnd = "#3344ff";
+    styling.update(packet);
+    const border = styling.window.getComputedStyle(styling.root.firstElementChild, "::before");
+    check(border.backgroundImage.includes("255, 17, 34") && border.backgroundImage.includes("51, 68, 255"), "Both saved colors reach the actual gradient border");
+    check(/exclude|xor/.test(border.maskComposite || border.webkitMaskComposite), "Gradient is masked to the outline rather than filling the card");
     check(updates === 0, "Styling changes do not replay a match update");
     styling.window.MarblesOverlayOptions.results.headerVisible = false;
     styling.update(packet);
@@ -93,6 +112,30 @@
     check(fade.effect.getKeyframes().every(frame => !frame.transform), "Celebration exits fade without shrinking the effects");
     liveCycle.update({...packet,eventId:"replacementcycle",eventType:"cycleComplete",receivedAt:new Date().toISOString()});
     check(fade.playState === "idle" && fade.onfinish === null && !liveCycle.root.hidden, "A new cycle cancels the previous fade and its hide callback");
+    let carouselTick, carouselDelay;
+    liveCycle.window.setInterval = (callback, delay) => { carouselTick = callback; carouselDelay = delay; return 123; };
+    liveCycle.window.setTimeout = (callback, delay) => { if (delay <= 3000) {carouselTick = callback; carouselDelay = delay;} return 124; };
+    const carouselNow = Date.now(); liveCycle.window.Date.now = () => carouselNow;
+    liveCycle.update({...packet,eventId:"multi-cycle",eventType:"cycleComplete",receivedAt:new Date(carouselNow).toISOString(),cycleCompletions:[
+      {playerName:"User A",cycleNumber:2,races:13},{playerName:"User B",cycleNumber:4,races:15},{playerName:"User C",cycleNumber:1,races:20}]});
+    const visibleCompletion = () => [...liveCycle.root.querySelectorAll(".celebration-completion")].filter(item=>!item.hidden);
+    check(carouselDelay === 3000 && visibleCompletion().length === 1 && visibleCompletion()[0].textContent.includes("User A"), "Multiple cycle winners start with one player and a three-second interval");
+    carouselTick();
+    const userAFade = visibleCompletion()[0].getAnimations().find(animation=>animation.effect.getTiming().duration===300);
+    check(userAFade.effect.getKeyframes().at(-1).opacity === "0", "Cycle player details fade out before switching");
+    userAFade.finish();
+    await new Promise(resolve => requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    check(visibleCompletion().length===1 && visibleCompletion()[0].textContent.includes("User B"), "The next player's name, cycle and race count replace the previous player together");
+    const refreshedCycle = await load("cycle-complete", false);
+    let remainingMilliseconds, firstSwitchMilliseconds;
+    refreshedCycle.window.setTimeout = (_,delay) => { remainingMilliseconds=delay; if(delay<=3000) firstSwitchMilliseconds=delay; return 1; };
+    refreshedCycle.window.Date.now = () => carouselNow;
+    refreshedCycle.window.MarblesOverlayOptions = {"cycle-complete":{durationSeconds:1}};
+    refreshedCycle.update({...packet,eventId:"refreshed-multi",eventType:"cycleComplete",receivedAt:new Date(carouselNow-4000).toISOString(),cycleCompletions:[
+      {playerName:"User A",cycleNumber:2,races:13},{playerName:"User B",cycleNumber:4,races:15},{playerName:"User C",cycleNumber:1,races:20}]});
+    check(!refreshedCycle.root.hidden && remainingMilliseconds>4500 && remainingMilliseconds<=5000, "Refreshed multi-player alerts use the extended duration minus elapsed time");
+    check([...refreshedCycle.root.querySelectorAll(".celebration-completion")].find(item=>!item.hidden).textContent.includes("User B"), "Refreshing resumes the current player's three-second turn");
+    check(firstSwitchMilliseconds>1800 && firstSwitchMilliseconds<=2000, "A refreshed carousel switches at the original three-second boundary");
     record.root.hidden=true; record.update({...packet,eventType:"worldRecord",eventId:"replacementwr",wrplayer:"Changed"});
     check(record.root.hidden,"Duplicate WR identity cannot replay an alert");
     const celebration = await load("world-record");

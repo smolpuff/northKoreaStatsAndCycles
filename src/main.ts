@@ -7,6 +7,7 @@ import {
   worldRecordMessagePreview,
   defaultWorldRecordMessage,
   twitchMessageIsCustomized,
+  raceMessageIsCustomized,
   renderApplication,
   twitchPreviewMessages,
   trackingIsActive,
@@ -15,8 +16,11 @@ import {
 } from "./views";
 import "./styles.css";
 import "./reference-theme.css";
+import "./themes.css";
+import { applyTheme, normalizeTheme } from "./theme";
 import { icons } from "./icons";
 import { confirmClear } from "./confirm-dialog";
+import { initializeUpdates, bindUpdateSettings } from "./updates";
 import { installIntegrationHelp } from "./integration-help";
 import { openOverlayVariables } from "./overlay-help";
 import { openEventVariables } from "./streamer-events";
@@ -36,6 +40,8 @@ let state: Snapshot = {
   seasonPointsEarned: 0,
   sessionResults: [],
   config: {
+    theme: "default",
+    autoUpdateCheckEnabled: true,
     startMinimized: false,
     seasons: { raceName: "", cycleName: "",  },
     csv: {
@@ -55,7 +61,8 @@ let state: Snapshot = {
       },
     },
     twitch: {
-      postWorldRecords: false,
+      promoteMissionApp: true,
+      promotionIntervalMinutes: 60,      postWorldRecords: false,
       worldRecordMessageTemplate: defaultWorldRecordMessage,
       postResults: true,
       postCycleResults: false,
@@ -78,6 +85,9 @@ let state: Snapshot = {
   logs: [],
 };
 let currentPage = "home";
+let sidebarCollapsed = localStorage.getItem("sidebar-collapsed") === "true";
+let themeSaveInProgress = false;
+let themeSaveError = "";
 let overlayPreviewBR = false;
 let overlayDirectory = "";
 let overlaySetupError = "";
@@ -181,6 +191,7 @@ function renderMainWindow(): void {
   // Keep unsaved form values when connection/watcher events or button feedback redraw the page.
   const viewState = renderedPage === currentPage && document.querySelector("#settings-form")
     ? { ...state, config: readSettingsForm() } : state;
+  applyTheme(viewState.config.theme);
   root.innerHTML = renderApplication(
     viewState,
     currentPage,
@@ -191,6 +202,23 @@ function renderMainWindow(): void {
     resultsSort,
     overlayDirectory,
   );
+  root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+  const sidebarToggle = root.querySelector<HTMLButtonElement>("[data-collapse-sidebar]");
+  if (sidebarToggle) {
+    const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+    sidebarToggle.title = label;
+    sidebarToggle.setAttribute("aria-label", label);
+    sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
+    sidebarToggle.addEventListener("click", () => {
+      sidebarCollapsed = !sidebarCollapsed;
+      localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
+      root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+      const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
+      sidebarToggle.title = label;
+      sidebarToggle.setAttribute("aria-label", label);
+      sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
+    });
+  }
 
   if (animateHome) {
     root.querySelectorAll<HTMLButtonElement>(".home-watch-button").forEach(button => {
@@ -501,6 +529,8 @@ function readSettingsForm(): Config {
   );
   return {
     ...state.config,
+    theme: normalizeTheme(document.querySelector<HTMLSelectElement>("#appearance-theme")?.value ?? state.config.theme),
+    autoUpdateCheckEnabled: document.querySelector<HTMLInputElement>("#auto-update-check")?.checked ?? state.config.autoUpdateCheckEnabled ?? true,
     startMinimized: document.querySelector<HTMLInputElement>("#start-minimized")?.checked ?? state.config.startMinimized ?? false,
     csv: {
       ...state.config.csv,
@@ -513,11 +543,13 @@ function readSettingsForm(): Config {
       host: streamerHost?.value.trim() || state.config.streamerBot.host,
       port: Number(streamerPort?.value) || state.config.streamerBot.port,
       events: {
+        missionPromotion: document.querySelector<HTMLInputElement>("#streamer-promotion-enabled")?.checked ?? state.config.streamerBot.events?.missionPromotion ?? false,
         cycleComplete: document.querySelector<HTMLInputElement>("#streamer-cycle-enabled")?.checked ?? state.config.streamerBot.events?.cycleComplete ?? false,
         raceComplete: document.querySelector<HTMLInputElement>("#streamer-race-enabled")?.checked ?? state.config.streamerBot.events?.raceComplete ?? false,
         worldRecord: document.querySelector<HTMLInputElement>("#streamer-record-enabled")?.checked ?? state.config.streamerBot.events?.worldRecord ?? true,
       },
       actions: {
+        missionPromotion: document.querySelector<HTMLInputElement>("#streamer-promotion-action")?.value.trim() || state.config.streamerBot.actions.missionPromotion || "Marbles - Mission Promotion",
         cycleComplete: document.querySelector<HTMLInputElement>("#streamer-cycle-action")?.value.trim() || state.config.streamerBot.actions.cycleComplete || "Marbles - Cycle Complete",
         gameComplete:
           gameComplete?.value.trim() ||
@@ -529,11 +561,16 @@ function readSettingsForm(): Config {
     },
     twitch: {
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
-      worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
+      promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? true,
+      promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),      worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
       postCycleResults: document.querySelector<HTMLInputElement>("#twitch-post-cycles")?.checked ?? state.config.twitch.postCycleResults,
 
       postResults:
         twitchPostResults?.checked ?? state.config.twitch.postResults,
+      raceMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-race-message")?.value ?? state.config.twitch.raceMessageTemplate ?? "",
+      raceEntryTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-race-entry")?.value ?? state.config.twitch.raceEntryTemplate ?? "",
+      raceEntrySeparator: document.querySelector<HTMLInputElement>("#twitch-race-separator")?.value ?? state.config.twitch.raceEntrySeparator ?? " | ",
+      racePodiumTemplates: [1, 2, 3].map(place => document.querySelector<HTMLTextAreaElement>("#twitch-race-place-" + place)?.value ?? state.config.twitch.racePodiumTemplates?.[place - 1] ?? ""),
       messagePrefix:
         twitchMessagePrefix?.value ?? state.config.twitch.messagePrefix,
       cycleMessageTemplate:
@@ -543,6 +580,30 @@ function readSettingsForm(): Config {
 }
 
 function bindSettingsForm(): void {
+  bindUpdateSettings();
+  const themeSelect = document.querySelector<HTMLSelectElement>("#appearance-theme");
+  if (themeSelect) themeSelect.disabled = themeSaveInProgress;
+  const themeStatus = document.querySelector<HTMLElement>("#theme-save-status");
+  if (themeStatus) themeStatus.textContent = themeSaveError || "Changes save automatically.";
+  themeSelect?.addEventListener("change", async () => {
+    const theme = normalizeTheme(themeSelect.value);
+    themeSaveInProgress = true;
+    themeSaveError = "";
+    themeSelect.disabled = true;
+    applyTheme(theme);
+    try {
+      await invoke("save_theme", { theme });
+      state.config.theme = theme;
+    } catch (error) {
+      themeSaveError = `Unable to save theme: ${String(error)}`;
+      const currentSelect = document.querySelector<HTMLSelectElement>("#appearance-theme");
+      if (currentSelect) currentSelect.value = normalizeTheme(state.config.theme);
+      applyTheme(state.config.theme);
+    } finally {
+      themeSaveInProgress = false;
+      render();
+    }
+  });
   document.querySelectorAll<HTMLButtonElement>("[data-event-variables]").forEach(button => button.addEventListener("click", () => openEventVariables(button.dataset.eventVariables!)));
   const form = document.querySelector<HTMLFormElement>("#settings-form")!;
   form.querySelectorAll<HTMLElement>(".twitch-settings-section").forEach(card => {
@@ -558,23 +619,18 @@ function bindSettingsForm(): void {
     const field = status.dataset.customizedFor!;
     const input = document.getElementById(field) as HTMLInputElement | HTMLTextAreaElement | null;
     if (!input) return;
-    const update = () => { status.hidden = !twitchMessageIsCustomized(field, input.value); };
+    const update = () => { status.hidden = field === "twitch-message-prefix" ? !raceMessageIsCustomized(readSettingsForm().twitch) : !twitchMessageIsCustomized(field, input.value); };
     input.addEventListener("input", update);
     update();
   });
-  const messagePrefix = document.querySelector<HTMLInputElement>(
-    "#twitch-message-prefix",
-  );
-  const messagePreview = document.querySelector<HTMLElement>(
-    "#twitch-message-preview",
-  );
-  messagePrefix?.addEventListener("input", () => {
-    if (messagePreview) {
-      messagePreview.textContent = twitchPreviewMessages(
-        messagePrefix.value,
-        state.latestResult,
-      ).join("\n\n");
-    }
+  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#twitch-message-prefix, #twitch-race-message, #twitch-race-entry, #twitch-race-separator, [id^='twitch-race-place-']").forEach(input => {
+    input.addEventListener("input", () => {
+      const config = readSettingsForm().twitch;
+      const preview = document.querySelector<HTMLElement>("#twitch-message-preview");
+      if (preview) preview.textContent = twitchPreviewMessages(config.messagePrefix, undefined, config).join("\n\n");
+      const customized = input.closest(".twitch-message-customization")?.querySelector<HTMLElement>("[data-customized-for]");
+      if (customized) customized.hidden = !raceMessageIsCustomized(config);
+    });
   });
   const recordMessage = document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message");
   const recordPreview = document.querySelector<HTMLElement>("#twitch-world-record-preview");
@@ -702,6 +758,7 @@ async function initialize(): Promise<void> {
   // hold the dashboard hostage during application launch.
   render();
   document.title = "Marbles Stats — Ready";
+  void initializeUpdates(() => state.config.autoUpdateCheckEnabled ?? true).catch(error => console.error("Unable to initialize updates", error));
   void invoke<Partial<Record<OverlayName, OverlayOptions>>>("get_overlay_options").then(settings => {
     Object.assign(overlayOptions, settings);
     return invoke<{worldRecordSeconds: number; cycleSeconds: number}>("get_overlay_durations");

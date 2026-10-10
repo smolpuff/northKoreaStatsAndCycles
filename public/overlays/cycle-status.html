@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marbles Stats - Cycle standings</title>
+  <link rel="stylesheet" href="overlay.css">
+</head>
+<body data-overlay="cycle-status">
+  <main id="overlay" hidden aria-live="polite">
+    <section class="card">
+      <header class="heading"><i class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 9a8 8 0 0 0-14-3L3 9m0-5v5h5M4 15a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/></svg></i><div><h1>Cycle standings</h1><p class="subtitle">{cycleSeasonName} · {cyclePlayers} players · Green = collected this cycle</p></div><span class="brand">{brand}</span></header>
+      <div class="results-viewport">
+        <table>
+          <thead><tr><th>#</th><th>Player</th><th>Cycles</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>Left</th></tr></thead>
+          <tbody data-repeat="cycleStandings" data-key="playerKey">
+            <template>
+              <tr>
+                <td>{rank}</td>
+                <td><span class="name" title="{playerName}">{playerName}</span></td>
+                <td class="cycle-total">{cycles}</td>
+                <td data-class="ready:position1.ready">{position1.count}</td>
+                <td data-class="ready:position2.ready">{position2.count}</td>
+                <td data-class="ready:position3.ready">{position3.count}</td>
+                <td data-class="ready:position4.ready">{position4.count}</td>
+                <td data-class="ready:position5.ready">{position5.count}</td>
+                <td data-class="ready:position6.ready">{position6.count}</td>
+                <td data-class="ready:position7.ready">{position7.count}</td>
+                <td data-class="ready:position8.ready">{position8.count}</td>
+                <td data-class="ready:position9.ready">{position9.count}</td>
+                <td data-class="ready:position10.ready">{position10.count}</td>
+                <td class="cycle-left" title="Positions left: {missingPositions}">{left}</td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script src="overlay-config.js"></script>
+  <script src="overlay.js"></script>
+</body>
+</html>

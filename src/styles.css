@@ -128,7 +128,7 @@ nav>span {
   fill: currentColor;
 }
 
-.nav-item:hover {
+.nav-item:hover:not(.active) {
   background: rgba(255, 255, 255, 0.045);
   color: #fff;
 }

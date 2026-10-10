@@ -15,13 +15,21 @@ body { padding: 18px; }
 body[data-preview="true"] { padding: 0; }
 #overlay { width: 560px; transform: scale(var(--scale, 1)); transform-origin: top left; }
 .card {
+  position: relative;
   color: var(--ink);
   background: linear-gradient(110deg, rgba(30, 17, 47, .8), rgba(7, 19, 36, .8) 70%);
-  border: 1px solid var(--line);
-  border-left-color: #623478;
+  border: 1px solid transparent;
   border-radius: 10px;
   padding: 16px;
   box-shadow: 0 8px 30px #0004;
+}
+.card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: linear-gradient(110deg, var(--overlay-border-start, #493064), var(--overlay-border-end, #28395d));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude; pointer-events: none; z-index: 5;
 }
 .heading { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
 .heading > div { min-width: 0; }
@@ -67,8 +75,8 @@ body[data-overlay="cycles"] .foot { margin-top: 10px; font-size: 11px; }
 .completion { color: var(--teal); font-size: 17px; margin-bottom: 12px; }
 [hidden] { display: none !important; }
 [data-count-key] { font-variant-numeric: tabular-nums; }
-.results-viewport { max-height: calc(var(--visible-rows, 6) * 42px + 36px); overflow: hidden; }
-.results-viewport td { height: 42px; }
+.results-viewport { max-height: calc(var(--visible-rows, 6) * var(--row-height, 42px) + 36px); overflow: hidden; }
+.results-viewport td { height: var(--row-height, 42px); }
 .results-viewport th { position: sticky; top: 0; z-index: 1; background: rgba(10,19,38,.85); }
 body:is([data-overlay="world-record"], [data-overlay="cycle-complete"]) { padding: 0; }
 body:is([data-overlay="world-record"], [data-overlay="cycle-complete"]) #overlay { width: 100%; min-height: 100vh; }
@@ -83,6 +91,7 @@ body:is([data-overlay="world-record"], [data-overlay="cycle-complete"]) #overlay
 .celebration-points { font-size: clamp(16px,2vw,38px); color: var(--teal); margin-top: 2vh; }
 .celebration-cycle { font-size: clamp(32px,5vw,96px); color: #fff2a3; font-weight: 700; }
 .celebration-completion + .celebration-completion { margin-top: 4vh; }
+.cycle-celebration [data-cycle-carousel] > .celebration-completion { margin-top: 0; }
 .confetti { position: absolute; z-index: 2; inset: 0; pointer-events: none; overflow: hidden; }
 .confetti-piece { position: absolute; left: var(--x); top: -8%; width: clamp(5px,.7vw,14px); height: clamp(9px,1.1vw,22px); background: var(--confetti-color); opacity: .9; animation: confetti-fall var(--duration) var(--delay) linear infinite; }
 .confetti-piece:nth-child(3n) { border-radius: 50%; }
@@ -174,3 +183,24 @@ body.overlay-customized .heading h1, body.overlay-customized .heading .subtitle 
 body.overlay-customized[data-overlay="results"] th { height: 36px; line-height: 16px; }
 
 .results-viewport th { height: 36px; line-height: 16px; }
+
+/* Give cycle players breathing room; source height follows the visible row count. */
+body[data-overlay="cycle-status"] #overlay { width: 1164px; --row-height: 60px; }
+body[data-overlay="cycle-status"] .card { display: flex; flex-direction: column; }
+body[data-overlay="cycle-status"] .heading { gap: 14px; }
+body[data-overlay="cycle-status"] .heading h1 { font-size: 32px; line-height: 40px; }
+body[data-overlay="cycle-status"] .heading .subtitle { font-size: 18px; line-height: 24px; }
+body[data-overlay="cycle-status"] .heading .icon { width: 36px; height: 36px; }
+body[data-overlay="cycle-status"] .heading .brand { font-size: 18px; }
+body[data-overlay="cycle-status"] table { font-size: 32px; line-height: 32px; }
+body[data-overlay="cycle-status"] :is(th, td) { text-align: center; padding: 7px 4px; }
+body[data-overlay="cycle-status"] td { height: 60px; padding-top: 12px; padding-bottom: 12px; }
+body[data-overlay="cycle-status"] .results-viewport { max-height: calc(var(--visible-rows, 20) * 60px + 44px); }
+body[data-overlay="cycle-status"] :is(th, td):first-child { width: 46px; color: var(--muted); }
+body[data-overlay="cycle-status"] :is(th, td):nth-child(2) { text-align: left; }
+body[data-overlay="cycle-status"] th:not(:first-child):not(:nth-child(2)) { width: 56px; }
+body[data-overlay="cycle-status"] th:nth-child(3) { width: 78px; }
+body[data-overlay="cycle-status"] th { height: 44px; font-size: 22px; line-height: 28px; }
+body[data-overlay="cycle-status"] .cycle-total { color: var(--gold); font-weight: 700; }
+body[data-overlay="cycle-status"] td.ready { color: var(--teal); background: #00efaa18; font-weight: 700; }
+body[data-overlay="cycle-status"] .cycle-left { color: var(--gold); font-weight: 700; }

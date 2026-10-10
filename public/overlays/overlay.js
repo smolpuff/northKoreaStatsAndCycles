@@ -10,18 +10,18 @@
   for (const key of ["accent", "teal", "gold", "scale"]) {
     if (config[key] != null) document.documentElement.style.setProperty("--" + key, config[key]);
   }
-  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, Number(config.visibleRows ?? config.maxResults) || 6)));
+  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 20 : Number(config.visibleRows ?? config.maxResults) || 6))));
   let previewOptions;
   let previousOptions = "";
   let customHeading;
   function applyOptions() {
     let options = previewOptions || window.MarblesOverlayOptions?.[kind];
-    if (options && kind === "results") options = { ...options, height: options.visibleRows * 42 + (options.headerVisible ? 161 : 106) };
+    if (options && (kind === "results" || kind === "cycle-status")) options = { ...options, height: options.visibleRows * (kind === "cycle-status" ? 60 : 42) + (kind === "cycle-status" ? (options.headerVisible ? 192 : 114) : (options.headerVisible ? 161 : 106)) };
     const signature = JSON.stringify(options || null) + ":" + innerWidth + ":" + innerHeight;
     if (signature === previousOptions) return;
     previousOptions = signature;
     const page = document.documentElement;
-    for (const key of ["background", "opacity", "ink", "muted", "accent", "gold", "teal"]) page.style.removeProperty("--overlay-" + key);
+    for (const key of ["background", "opacity", "ink", "muted", "accent", "gold", "teal", "border-start", "border-end"]) page.style.removeProperty("--overlay-" + key);
     root.style.removeProperty("width"); root.style.removeProperty("height"); root.style.removeProperty("min-height"); root.style.removeProperty("transform");
     document.body.classList.toggle("overlay-customized", !!options);
     const heading = root.querySelector(".heading") || root.querySelector(".celebration-content > h1:not(.custom-overlay-heading)");
@@ -31,10 +31,12 @@
     if (heading) heading.style.display = options?.headerVisible === false ? "none" : "";
     if (title && title !== heading) title.style.display = "";
     customHeading?.remove(); customHeading = null;
-    root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, Number(config.visibleRows ?? config.maxResults) || 6)));
+    root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 20 : Number(config.visibleRows ?? config.maxResults) || 6))));
     if (!options) { if (!root.hidden) scrollResults(); return; }
     page.style.setProperty("--overlay-background", options.background);
     page.style.setProperty("--overlay-opacity", options.opacity / 100);
+    page.style.setProperty("--overlay-border-start", options.borderStart || "#493064");
+    page.style.setProperty("--overlay-border-end", options.borderEnd || "#28395d");
     for (const [key, variable] of [["text","ink"],["secondary","muted"],["accent","accent"],["gold","gold"],["teal","teal"]]) {
       page.style.setProperty("--overlay-" + variable, options[key]);
     }
@@ -70,7 +72,7 @@
   const repeats = new WeakMap();
   let numbers = new WeakMap();
   const activeCounters = new Set();
-  let numberFrame, scrollFrame, hideTimer, exitAnimation;
+  let numberFrame, scrollFrame, hideTimer, exitAnimation, cycleTimer, cycleStartTimer, cycleFade;
   let lastPacket = "", lastAlert = "";
 
   // Resolve fields by name, including dotted paths. Never interpret data as HTML.
@@ -195,6 +197,40 @@
     if (scrollFrame != null) window.cancelAnimationFrame?.(scrollFrame);
     scrollFrame = undefined;
   }
+  function stopCycleCarousel() {
+    clearInterval(cycleTimer); cycleTimer = undefined;
+    clearTimeout(cycleStartTimer); cycleStartTimer = undefined;
+    if (cycleFade) { cycleFade.onfinish = null; cycleFade.cancel(); cycleFade = undefined; }
+  }
+  function cycleCarousel(data) {
+    stopCycleCarousel();
+    const items = [...root.querySelectorAll("[data-cycle-carousel] > .celebration-completion")];
+    const received = Date.parse(data.receivedAt || "");
+    const elapsed = !preview && Number.isFinite(received) ? Math.max(0, Date.now() - received) : 0;
+    let current = items.length ? Math.floor(elapsed / 3000) % items.length : 0;
+    items.forEach((item, index) => { item.hidden = index !== current; });
+    if (items.length < 2 || (preview && !previewPlaying)) return;
+    const advance = () => {
+      const old = items[current];
+      const showNext = () => {
+        if (cycleFade) { cycleFade.onfinish = null; cycleFade.cancel(); cycleFade = undefined; }
+        old.hidden = true;
+        current = (current + 1) % items.length;
+        const next = items[current]; next.hidden = false;
+        if (animate() && next.animate) cycleFade = next.animate([{opacity:0}, {opacity:1}], {duration:300, fill:"both"});
+      };
+      cycleFade?.cancel();
+      if (animate() && old.animate) {
+        cycleFade = old.animate([{opacity:1}, {opacity:0}], {duration:300, fill:"both"});
+        cycleFade.onfinish = showNext;
+      } else showNext();
+    };
+    cycleStartTimer = setTimeout(() => {
+      cycleStartTimer = undefined;
+      advance();
+      cycleTimer = setInterval(advance, 3000);
+    }, 3000 - elapsed % 3000);
+  }
   function scrollResults() {
     stopScroll();
     const viewport = root.querySelector(".results-viewport");
@@ -227,8 +263,8 @@
     if (animate() && card?.animate) {
       exitAnimation?.cancel();
       exitAnimation = card.animate([{opacity:1}, {opacity:0}], {duration:280, easing:"ease-in", fill:"both"});
-      exitAnimation.onfinish = () => { root.hidden = true; cancelEntrance(); stopScroll(); };
-    } else { root.hidden = true; stopScroll(); }
+      exitAnimation.onfinish = () => { root.hidden = true; cancelEntrance(); stopScroll(); stopCycleCarousel(); };
+    } else { root.hidden = true; stopScroll(); stopCycleCarousel(); }
   }
   function remaining(data, seconds) {
     if (!(seconds > 0)) return 0;
@@ -243,6 +279,14 @@
       winner:player.place === 1, dead:br && player.place !== 1, ordinary:player.place !== 1 && !br,
     }));
     const result = Object.assign({}, data, {brand:config.title, race:br ? "Battle Royale" : "Race", br, placements, hasRecordPoints:data.wrplayerpoints != null,
+      // Rows arrive in backend standings order; only derive presentation fields here.
+      cycleStandings:(data.cycleStandings || []).map((player, index) => {
+        const positions = new Set(player.currentCyclePositions || []);
+        const missing = Array.from({length:10}, (_, i) => i + 1).filter(position => !positions.has(position));
+        const row = Object.assign({}, player, {rank:index + 1, left:missing.length, missingPositions:missing.join(", ") || "None"});
+        for (let position = 1; position <= 10; position++) row["position" + position] = {count:player.placementCounts?.[position - 1] ?? 0, ready:positions.has(position)};
+        return row;
+      }),
       cycleCompletions:(data.cycleCompletions || []).map(player => Object.assign({}, player, {completionKey:player.playerName+":"+player.cycleNumber, hasRaceCount:player.races != null})),
     });
     // Boolean race/BR visibility is separate from the printable {race} label.
@@ -266,7 +310,7 @@
       activeCounters.clear();
       if (numberFrame != null) window.cancelAnimationFrame?.(numberFrame);
       numberFrame = undefined; numbers = new WeakMap(); lastPacket = "";
-      exitAnimation?.cancel(); stopScroll();
+      exitAnimation?.cancel(); stopScroll(); stopCycleCarousel();
       cancelEntrance();
       // Preserve CSS effects: cancelling their animations permanently removes confetti on hover.
       root.getAnimations?.({subtree:true}).forEach(animation => { if (!("animationName" in animation)) animation.cancel(); });
@@ -283,15 +327,19 @@
         const id = String(data.eventId || data.gameId || data.timestamp || "");
         if (id && id === lastAlert) return;
         lastAlert = id;
-        seconds = remaining(data, preview ? 0 : (window.MarblesOverlayOptions?.[kind]?.durationSeconds ?? window.MarblesOverlayDurations?.[kind === "world-record" ? "worldRecordSeconds" : "cycleSeconds"] ?? (kind === "world-record" ? config.worldRecordSeconds : config.cycleSeconds)));
+        let duration = window.MarblesOverlayOptions?.[kind]?.durationSeconds ?? window.MarblesOverlayDurations?.[kind === "world-record" ? "worldRecordSeconds" : "cycleSeconds"] ?? (kind === "world-record" ? config.worldRecordSeconds : config.cycleSeconds);
+        if (kind === "cycle-complete" && duration > 0) duration = Math.max(duration, data.cycleCompletions.length * 3);
+        seconds = remaining(data, preview ? 0 : duration);
         if (seconds < 0) return;
       }
       clearTimeout(hideTimer);
       if (exitAnimation) { exitAnimation.onfinish = null; exitAnimation.cancel(); exitAnimation = undefined; }
       cancelEntrance();
+      stopCycleCarousel();
       const dataScope = scope(data);
       bindNode(root, dataScope);
       if ((kind === "results" || kind === "podium") && !dataScope.placements.length) { hide(); return; }
+      if (kind === "cycle-status" && !dataScope.cycleStandings.length) { hide(); return; }
       root.hidden = false;
       const card = root.firstElementChild;
       if (animate() && card?.animate) {
@@ -314,6 +362,7 @@
         }
       }
       scrollResults();
+      cycleCarousel(dataScope);
       if (seconds > 0) hideTimer = setTimeout(hide, seconds*1000);
       // Custom templates may listen for data without depending on Streamer.bot.
       root.dispatchEvent(new CustomEvent("marbles:update", {detail:dataScope}));

@@ -19,8 +19,8 @@ export type GuideArt =
   | "custom-source";
 const icon = (name: string, extra = "") =>
   `<i class="guide-icon ${extra}">${icons[name] ?? icons.file}</i>`;
-const cursor = `<svg class="guide-pointer" viewBox="0 0 26 32" aria-hidden="true"><path d="M3 2v24l6-6 6 11 5-3-6-10h10Z" fill="#f5f4ff" stroke="#071326" stroke-width="1.5" stroke-linejoin="round" /></svg>`;
-const arrow = `<svg class="guide-arrow" viewBox="0 0 36 24" aria-hidden="true"><path d="M3 12h28m-8-7 8 7-8 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>`;
+const cursor = icons.cursor.replace("phosphor-icon", "phosphor-icon guide-pointer");
+const arrow = icons.arrowRight.replace("phosphor-icon", "phosphor-icon guide-arrow");
 const check = `<span class="guide-success">${icons.check}</span>`;
 const switchOn = `<span class="guide-mini-switch on"><span></span></span>`;
 const switchOff = `<span class="guide-mini-switch"><span></span></span>`;
@@ -53,7 +53,7 @@ export function renderGuideIllustration(
       art = `<div class="guide-mini-panel guide-actions"><div class="guide-mini-bar"><b>Actions</b>${miniButton("+ Add Action")}</div>${actionRow("statRaceFlag", "Marbles - Game Complete")}${actionRow("trophy", "Marbles - World Record")}${actionRow("cycles", "Marbles - Cycle Complete")}</div>`;
       break;
     case "hook":
-      art = `<div class="guide-hook"><div class="guide-no-trigger">${icon("file")}<span>Trigger</span><svg viewBox="0 0 80 38" aria-hidden="true"><path d="m24 5 34 28M58 5 24 33" /></svg></div><div class="guide-hook-flow"><div class="guide-flow-node">${icon("cycles")}<b>Marbles Stats</b></div>${arrow}<div class="guide-flow-node">${icon("streamer")}<b>Streamer.bot<br>Action</b></div></div></div>`;
+      art = `<div class="guide-hook"><div class="guide-no-trigger">${icon("file")}<span>Trigger</span>${icons.close}</div><div class="guide-hook-flow"><div class="guide-flow-node">${icon("cycles")}<b>Marbles Stats</b></div>${arrow}<div class="guide-flow-node">${icon("streamer")}<b>Streamer.bot<br>Action</b></div></div></div>`;
       break;
     case "variables":
       art = `<div class="guide-variable-flow"><div class="guide-mini-panel"><div class="guide-mini-bar">${icon("file")}Event arguments</div><code>${playerToken}</code><span>Test Winner</span></div>${arrow}<div class="guide-source-frame"><span>Winner:</span><b>Test Winner</b><span class="guide-source-handle"></span></div></div>`;

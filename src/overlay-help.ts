@@ -1,7 +1,13 @@
+import { icons } from "./icons";
+import { showAnimatedDialog } from "./dialog-motion";
+
 const examples: Record<string, {title: string; example: string; fields: [string, string][]; row?: [string, string][]}> = {
   results: {title:"Results", example:"<p>{race} winner: {firstplace} (+{firstplacepoints} points)</p>",
     fields:[["race", "Race or Battle Royale"], ["mapName", "Track/map name"], ["firstplace", "Winner's name"], ["firstplacepoints", "Winner's earned points"]],
     row:[["name", "Player's display name"], ["place", "Placement"], ["points", "Points earned"], ["time", "Race time in seconds"], ["kills", "BR kills"], ["damage", "BR damage"]]},
+  "cycle-status": {title:"Cycle status", example:'<tbody data-repeat="cycleStandings" data-key="playerKey">\n  <template><tr><td>{rank}</td><td>{playerName}</td><td>{cycles}</td><td>{left}</td></tr></template>\n</tbody>',
+    fields:[["cycleSeasonName", "RaceCycles season label"], ["cyclePlayers", "All tracked cycle players"]],
+    row:[["rank", "Standings rank: cycles, then current progress, then name"], ["playerName", "Player display name"], ["cycles", "Completed cycles"], ["position1.count", "Total first-place finishes; position2 through position10 work the same way"], ["position1.ready", "Collected in the current cycle; use data-class to highlight"], ["left", "Number of positions still needed"], ["missingPositions", "Comma-separated positions still needed"]]},
   podium: {title:"Podium", example:"<h1>{firstplace}</h1>\n<p>+{firstplacepoints} points</p>",
     fields:[["firstplace", "First player's name"], ["firstplacepoints", "First player's points"], ["secondplace", "Second player's name"], ["secondplacepoints", "Second player's points"], ["thirdplace", "Third player's name"], ["thirdplacepoints", "Third player's points"]],
     row:[["name", "Player's display name"], ["place", "Placement"], ["points", "Points earned"], ["time", "Race time in seconds"], ["kills", "BR kills"], ["damage", "BR damage"]]},
@@ -24,7 +30,7 @@ export function openOverlayVariables(name: string): void {
   dialog.id = "overlay-variables-dialog";
   dialog.className = "overlay-preview-dialog event-variables-dialog";
   dialog.setAttribute("aria-label", `${help.title} HTML variables`);
-  dialog.innerHTML = `<header><h2>${help.title}: edit HTML &amp; variables</h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close" data-close><span aria-hidden="true">&times;</span></button></header>
+  dialog.innerHTML = `<header><h2>${help.title}: edit HTML &amp; variables</h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close" data-close>${icons.close}</button></header>
     <p>Open this overlay's HTML file in Notepad using the path on its card. Put the example below <b>inside <code>&lt;main id="overlay"&gt;</code></b>. Save it, then refresh its OBS Browser Source. The app's JavaScript fills the braces with live data; Streamer.bot is not involved.</p>
     <pre>${escape(help.example)}</pre><button type="button" class="compact-button" data-copy>Copy HTML example</button><p data-copy-status role="status"></p>
     <p><b>These work in the HTML file.</b> Typing <code>{firstplace}</code> into OBS's own text field does nothing. OBS displays the HTML page; <code>overlay.js</code> binds its values.</p>
@@ -39,5 +45,5 @@ export function openOverlayVariables(name: string): void {
   });
   dialog.addEventListener("close", () => dialog.remove(), {once:true});
   document.body.append(dialog);
-  dialog.showModal();
+  showAnimatedDialog(dialog);
 }

@@ -12,6 +12,14 @@ A lightweight Windows desktop app for tracking Marbles on Stream races and Battl
 
 Stats are stored locally in JSON. Twitch and Streamer.bot are optional.
 
+Settings includes the app version, automatic update checks and a manual **Check for updates** button. See [desktop update publishing and recovery](UPDATES.md).
+
+To release, commit your changes on `main`, then run `npm run release -- --notes "What changed"`. It increments the version, commits/tags/pushes it, and GitHub builds the Windows installer, portable EXE and updater manifest. Preview with `npm run release -- --dry-run`. No local app build is performed by the release script.
+
+Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
+
+Content and control icons use native Phosphor Regular SVGs, bundled locally without an icon runtime dependency. Their MIT license is included in `src/assets/Phosphor-LICENSE.txt`. Colored navigation artwork retains its existing design.
+
 ## Getting started
 
 1. Run Marbles on Stream and Marbles Stats on the same Windows computer.
@@ -59,7 +67,11 @@ Open **Variables** on an event card for its fields and examples. **Copy for Stre
 
 Connect your account from the **Twitch** page, enable the messages you want, and save. Race results, cycle completions, and world records have separate templates and test controls. Messages are sent to the connected account's own channel.
 
+Race results let you customize the overall message, each placement, the separator, and individual 1st/2nd/3rd wording. Use `{placements}` in the overall message and `{player}`, `{placement}`, `{place}`, `{points}`, or `{time}` in entries. Blank templates keep the defaults. The preview and Test button use these settings; long lists split into messages of up to 500 characters with the overall wording repeated.
+
 Twitch tokens are stored in Windows Credential Manager. Posting failures are logged without stopping stats processing.
+
+Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is on by default; turn it off to disable promotions. Save to apply; the first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
 
 **Development OAuth setup:** provide `TWITCH_APP_CLIENT_ID` and `TWITCH_APP_CLIENT_SECRET` in an ignored `.env.local` file. Register this redirect URI for that Twitch application:
 
@@ -151,3 +163,5 @@ Runtime stats and editable live overlays are stored in the writable application-
 - WR detection requires changed `LastCustomRaceMapPlayed.csv` metadata matching the latest completed match's map and winner. It uses `RecordHolderName`, `RecordTime`, and `DateSet`; `StreamerRecordHolder` is ignored. Race times must match within 0.001 seconds, and CSV writes must be within two minutes. Blank rows, existing records on startup, and repeated records do not trigger alerts. Late WR writes do not recount the match.
 - Race and Battle Royale are supported; Tilt is not implemented.
 - Normal HTML overlay data follows the latest match. Separate retained last-Race and last-BR bindings are not available.
+
+The Streamer.bot page also offers a separate Mission app promotion hook (off by default), using the same Settings interval without requiring Twitch. Its default action is `Marbles - Mission Promotion`. Arguments are `promotionMessage`, `downloadUrl`, `intervalMinutes`, `eventType` (`missionPromotion`), and `isTest`. Enabling both routes posts through Twitch and triggers the action independently.

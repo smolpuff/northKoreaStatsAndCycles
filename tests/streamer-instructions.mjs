@@ -21,7 +21,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/guide-illustrations.t
 const inputs={};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/input-field.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:inputs});
 const exports={};
-vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:(name)=>name.includes("guide-illustrations")?illustrations:name.includes("input-field")?inputs:icons,document,navigator:{clipboard:{async writeText(value){copied=value}}}});
+vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:(name)=>name.includes("dialog-motion")?{showAnimatedDialog:dialog=>dialog.showModal()}:name.includes("guide-illustrations")?illustrations:name.includes("input-field")?inputs:icons,document,navigator:{clipboard:{async writeText(value){copied=value}}}});
 const native = String.fromCharCode(37);
 assert.equal(exports.formatStreamerBotText('GG {wrplayer} (+{wrplayerpoints} points)'), `GG ${native}wrplayer${native} (+${native}wrplayerpoints${native} points)`);
 assert.equal(exports.formatStreamerBotText('{cycleplayer} #{cyclenumber}: {cycleraces} races'), `${native}cycleplayer${native} #${native}cyclenumber${native}: ${native}cycleraces${native} races`);

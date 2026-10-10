@@ -1,10 +1,12 @@
 mod models;
 mod overlays;
 mod parser;
+mod promotion;
 mod records;
 mod storage;
 mod streamer_bot;
 mod twitch;
+mod updater;
 
 use chrono::Utc;
 use models::*;
@@ -56,8 +58,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         .read::<AppConfig>("config.json")
         .unwrap_or_else(|_| AppConfig::default_for(default_csv_path()));
     config.csv.game_type = GameType::Auto;
-    let twitch_defaults = TwitchConfig::default();
-    if config.twitch.message_prefix.is_empty() {
+    let twitch_defaults = TwitchConfig::default();    if config.twitch.message_prefix.is_empty() {
         config.twitch.message_prefix = twitch_defaults.message_prefix;
         config.twitch.post_results = true;
     }
@@ -1100,6 +1101,9 @@ fn save_config(
     runtime: State<'_, SharedRuntime>,
     config: AppConfig,
 ) -> Result<AppSnapshot, String> {
+    if !(1..=1440).contains(&config.twitch.promotion_interval_minutes) {
+        return Err("Promotion interval must be between 1 and 1440 minutes".into());
+    }
     {
         let mut rt = runtime
             .lock()
@@ -1120,6 +1124,19 @@ fn save_config(
         .lock()
         .map(|rt| rt.snapshot.clone())
         .map_err(|_| "Application state unavailable".into())
+}
+
+#[tauri::command]
+fn save_theme(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, theme: AppearanceTheme) -> Result<(), String> {
+    {
+        let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
+        let mut config = rt.snapshot.config.clone();
+        config.theme = theme;
+        rt.storage.write("config.json", &config)?;
+        rt.snapshot.config = config;
+    }
+    emit_snapshot(&runtime, &app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1296,6 +1313,7 @@ async fn test_twitch_message(
         }),
         "cycles" if config.post_cycle_results => twitch::send_cycle_completion("Test Player", 1, Some(823), &config.cycle_message_template).map(|_| ()),
         "worldRecord" if config.post_world_records => twitch::send_world_record(&config, &game),
+        "promotion" => twitch::send_promotion(&config),
         "race" | "cycles" | "worldRecord" => Err("Enable this posting option before testing it".into()),
         _ => Err("Unknown Twitch test".into()),
     }).await.map_err(|error| format!("Twitch test task failed: {error}"))?;
@@ -1352,6 +1370,10 @@ fn test_streamer_bot_connection(
     config: StreamerBotConfig,
 ) -> Result<AppSnapshot, String> {
     let result = streamer_bot::test_connection(&config);
+    if let Err(error) = &result {
+        set_streamer_bot_status(&runtime, "Error", Some(error.clone()));
+        emit_snapshot(&runtime, &app);
+    }
     finish_streamer_bot_test(&runtime, &app, result, "Connection test succeeded")
 }
 
@@ -1419,6 +1441,10 @@ fn test_streamer_bot_action(
             streamer_bot::test_args("worldRecord"),
         ),
         "cycleComplete" => (config.actions.cycle_complete.clone(), streamer_bot::test_args("cycleComplete")),
+        "missionPromotion" => (
+            config.actions.mission_promotion.clone(),
+            streamer_bot::promotion_args(runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.promotion_interval_minutes, true),
+        ),
         _ => return Err("Unknown Streamer.bot test action".into()),
     };
     let result = streamer_bot::trigger_action(&config, &action, args);
@@ -1754,8 +1780,91 @@ fn start_connection_checks(runtime: &SharedRuntime, app: &tauri::AppHandle) {
     });
 }
 
+#[tauri::command]
+async fn check_app_updates(app: tauri::AppHandle, window: tauri::WebviewWindow, runtime: State<'_, SharedRuntime>, updates: State<'_, updater::Updater>, manual: bool) -> Result<updater::UpdateInfo, String> {
+    if window.label() != "main" { return Err("Updates are only available in the main window".into()); }
+    let enabled = manual || runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.auto_update_check_enabled;
+    {
+        let mut state = updates.state.lock().map_err(|_| "Update state unavailable")?;
+        if state.busy { return Err("An update operation is already in progress".into()); }
+        state.busy = true;
+    }
+    let current = app.package_info().version.to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || updater::check(current, enabled)).await.map_err(|e| e.to_string()).and_then(|r| r);
+    {
+        let mut state = updates.state.lock().map_err(|_| "Update state unavailable")?;
+        state.busy = false;
+        if let Ok(info) = &result {
+            if !info.skipped { state.offer = info.update_available.then(|| info.clone()); }
+        }
+    }
+    if let Err(error) = &result { log(&runtime, &app, "warn", &format!("[Updater] Check failed: {error}")); }
+    result
+}
+
+#[tauri::command]
+fn app_update_ready(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
+    if window.label() != "main" { return Err("Updates are only available in the main window".into()); }
+    updater::ready(&app)
+}
+
+#[tauri::command]
+async fn install_app_update(app: tauri::AppHandle, window: tauri::WebviewWindow, runtime: State<'_, SharedRuntime>, updates: State<'_, updater::Updater>, version: String) -> Result<(), String> {
+    if window.label() != "main" { return Err("Updates are only available in the main window".into()); }
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let mut state = updates.state.lock().map_err(|_| "Update state unavailable")?;
+        if state.busy { return Err("An update operation is already in progress".into()); }
+        if state.offer.as_ref().map(|offer| &offer.latest_version) != Some(&version) {
+            return Err("The update offer has changed. Check for updates again.".into());
+        }
+        state.busy = true;
+        state.cancel = Some(cancel.clone());
+    }
+    let shared = runtime.inner().clone();
+    let worker_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        log(&shared, &worker_app, "info", "[Updater] Downloading update");
+        let mut prepared = updater::prepare(&worker_app, &version, &cancel)?;
+        {
+            // Cancellation and the transition into installation share one lock.
+            let updates = worker_app.state::<updater::Updater>();
+            let mut state = updates.state.lock().map_err(|_| "Update state unavailable")?;
+            state.cancel = None;
+            if cancel.load(std::sync::atomic::Ordering::SeqCst) { return Err("Update cancelled".into()); }
+        }
+        let _ = worker_app.emit("app-update-status", serde_json::json!({"phase":"preparing"}));
+        stop_watcher_inner(&shared);
+        let processing = shared.lock().map_err(|_| "Application state unavailable")?.processing.clone();
+        let _guard = processing.lock().map_err(|_| "Processing state unavailable")?;
+        // The watcher has joined and any manual processing has finished its atomic writes.
+        prepared.commit()?;
+        log(&shared, &worker_app, "info", "[Updater] Verified update; restarting");
+        let _ = worker_app.emit("app-update-status", serde_json::json!({"phase":"restarting"}));
+        worker_app.exit(0);
+        Ok(())
+    }).await.map_err(|e| e.to_string()).and_then(|r| r);
+    if let Err(error) = &result {
+        if let Ok(mut state) = updates.state.lock() { state.busy = false; state.cancel = None; }
+        if error == "Update cancelled" { log(&runtime, &app, "info", "[Updater] Download cancelled"); }
+        else { log(&runtime, &app, "warn", &format!("[Updater] Installation failed: {error}")); }
+        emit_snapshot(&runtime, &app);
+    }
+    result
+}
+
+#[tauri::command]
+fn cancel_app_update(window: tauri::WebviewWindow, updates: State<'_, updater::Updater>) -> Result<(), String> {
+    if window.label() != "main" { return Err("Updates are only available in the main window".into()); }
+    let state = updates.state.lock().map_err(|_| "Update state unavailable")?;
+    let cancel = state.cancel.as_ref().ok_or("Installation has started; please wait for the restart")?;
+    cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .manage(updater::Updater::default())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let runtime = Arc::new(Mutex::new(
@@ -1770,14 +1879,20 @@ pub fn run() {
             app.manage(runtime.clone());
             emit_snapshot(&runtime, app.handle());
             start_connection_checks(&runtime, app.handle());
+            promotion::start(&runtime, app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            check_app_updates,
+            install_app_update,
+            cancel_app_update,
+            app_update_ready,
             get_app_snapshot,
             save_seasons,
             export_data,
             reread_last_file,
             save_config,
+            save_theme,
             open_twitch_authorization,
             complete_twitch_oauth,
             validate_twitch_session,

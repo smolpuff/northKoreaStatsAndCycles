@@ -29,6 +29,8 @@ pub struct CsvConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamerBotActions {
+    #[serde(default = "default_promotion_action")]
+    pub mission_promotion: String,
     #[serde(default = "default_cycle_action")]
     pub cycle_complete: String,
     pub game_complete: String,
@@ -36,10 +38,12 @@ pub struct StreamerBotActions {
 }
 
 fn default_cycle_action() -> String { "Marbles - Cycle Complete".into() }
+fn default_promotion_action() -> String { "Marbles - Mission Promotion".into() }
 
 impl Default for StreamerBotActions {
     fn default() -> Self {
         Self {
+            mission_promotion: default_promotion_action(),
             game_complete: "Marbles - Game Complete".into(),
             cycle_complete: default_cycle_action(),
             world_record: "Marbles - World Record".into(),
@@ -71,13 +75,14 @@ impl Default for StreamerBotConfig {
 
 impl StreamerBotConfig {
     pub fn has_enabled_events(&self) -> bool {
-        self.events.race_complete || self.events.world_record || self.events.cycle_complete
+        self.events.race_complete || self.events.world_record || self.events.cycle_complete || self.events.mission_promotion
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct StreamerBotEvents {
+    pub mission_promotion: bool,
     pub cycle_complete: bool,
     pub race_complete: bool,
     pub world_record: bool,
@@ -85,13 +90,17 @@ pub struct StreamerBotEvents {
 
 impl Default for StreamerBotEvents {
     fn default() -> Self {
-        Self { race_complete: false, world_record: true, cycle_complete: false }
+        Self { race_complete: false, world_record: true, cycle_complete: false, mission_promotion: false }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TwitchConfig {
+    #[serde(default = "default_promotion_enabled")]
+    pub promote_mission_app: bool,
+    #[serde(default = "default_promotion_interval")]
+    pub promotion_interval_minutes: u64,
     #[serde(default)]
     pub post_world_records: bool,
     #[serde(default = "default_world_record_message")]
@@ -102,6 +111,14 @@ pub struct TwitchConfig {
     #[serde(default)]
     pub message_prefix: String,
     #[serde(default)]
+    pub race_message_template: String,
+    #[serde(default)]
+    pub race_entry_template: String,
+    #[serde(default)]
+    pub race_podium_templates: Vec<String>,
+    #[serde(default = "default_race_separator")]
+    pub race_entry_separator: String,
+    #[serde(default)]
     pub cycle_message_template: String,
 }
 
@@ -109,23 +126,50 @@ pub fn default_world_record_message() -> String {
     "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!".into()
 }
 
+pub fn default_race_separator() -> String { " | ".into() }
+
+pub fn default_promotion_interval() -> u64 { 60 }
+pub fn default_promotion_enabled() -> bool { true }
+
+pub fn default_promotion_message() -> String {
+    "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol".into()
+}
+
 impl Default for TwitchConfig {
     fn default() -> Self {
         Self {
-            post_world_records: false,
+            promote_mission_app: default_promotion_enabled(),
+            promotion_interval_minutes: default_promotion_interval(),            post_world_records: false,
             world_record_message_template: default_world_record_message(),
             post_results: true,
             post_cycle_results: false,
             message_prefix: "🏁 Race results:".into(),
+            race_message_template: String::new(),
+            race_entry_template: String::new(),
+            race_podium_templates: Vec::new(),
+            race_entry_separator: default_race_separator(),
             cycle_message_template:
                 "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉".into(),
         }
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AppearanceTheme {
+    #[default]
+    Default,
+    Dark,
+    Minimal,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
+    #[serde(default)]
+    pub theme: AppearanceTheme,
+    #[serde(default = "default_update_checks")]
+    pub auto_update_check_enabled: bool,
     #[serde(default)]
     pub start_minimized: bool,
     #[serde(default)]
@@ -140,6 +184,8 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn default_for(path: String) -> Self {
         Self {
+            theme: AppearanceTheme::Default,
+            auto_update_check_enabled: true,
             seasons: SeasonConfig::default(),
             start_minimized: false,
             csv: CsvConfig {
@@ -153,6 +199,8 @@ impl AppConfig {
         }
     }
 }
+
+fn default_update_checks() -> bool { true }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]

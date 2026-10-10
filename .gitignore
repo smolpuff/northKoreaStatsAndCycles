@@ -1,6 +1,7 @@
 # Dependencies, build output, and generated Tauri files
 node_modules/
 /dist/
+/release-assets/
 /src-tauri/target/
 /src-tauri/gen/
 *.tsbuildinfo

@@ -44,7 +44,11 @@ export interface LogEntry {
   message: string;
 }
 
+export type AppearanceTheme = "default" | "dark" | "minimal";
+
 export interface Config {
+  theme: AppearanceTheme;
+  autoUpdateCheckEnabled: boolean;
   startMinimized: boolean;
   seasons: { raceName: string; cycleName: string };
   csv: {
@@ -56,19 +60,26 @@ export interface Config {
   streamerBot: {
     host: string;
     port: number;
-    events: { raceComplete: boolean; worldRecord: boolean; cycleComplete: boolean };
+    events: { raceComplete: boolean; worldRecord: boolean; cycleComplete: boolean; missionPromotion?: boolean };
     actions: {
+      missionPromotion?: string;
       gameComplete: string;
       worldRecord: string;
       cycleComplete: string;
     };
   };
   twitch: {
+    promoteMissionApp?: boolean;
+    promotionIntervalMinutes?: number;
     postWorldRecords: boolean;
     worldRecordMessageTemplate: string;
     postResults: boolean;
     postCycleResults: boolean;
     messagePrefix: string;
+    raceMessageTemplate?: string;
+    raceEntryTemplate?: string;
+    racePodiumTemplates?: string[];
+    raceEntrySeparator?: string;
     cycleMessageTemplate: string;
   };
 }

@@ -1,4 +1,4 @@
-﻿# Standalone HTML overlays
+# Standalone HTML overlays
 
 Marbles Stats creates these files in the live overlay folder shown in the app. The app writes their data directly. Streamer.bot custom-event hooks are a separate integration and are not required for these overlays.
 
@@ -99,3 +99,9 @@ The HTML loads its data immediately and checks again every **3 seconds**. Keep M
 Normal custom pages read `overlay-data.js`: latest match plus session/season totals. A Race or BR replaces the latest match; there are no separate last-Race/last-BR bindings. WR pages read `world-record-data.js`; cycle alerts read `cycle-complete-data.js`. Copy a celebration template to make an alert with the same data/timing; generic `custom.html` does not automatically read alert-only fields.
 
 Dotted paths such as `{placements.0.name}` select rows in placement order. Indexes start at zero and are not placement numbers. Missing text values are blank. This works in HTML, not as a Streamer.bot argument. Only first/second/third currently have direct name/points arguments in Streamer.bot; arrays require additional custom processing there.
+
+### Cycle status ? cycle-status.html
+
+Use a **1200 ? 1361** Browser Source and center it in your scene. Rows are 60px tall for readability. It shows 20 players at once and scrolls through all tracked players. Customize the visible row count, width, colors and scroll speed in the app; source height adjusts automatically.
+
+Columns show rank, player, completed cycles, total placement counts for positions 1?10, and **Left** (positions still needed for the current cycle). Green cells mark positions collected in the current cycle. Historical totals alone do not imply current progress. The data comes from `cycleStandings`, ordered by completed cycles, current progress, then name. Empty standings hide the overlay. It uses live `overlay-data.js` and stays visible; use your source visibility controls to show it when needed.

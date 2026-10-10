@@ -1,4 +1,5 @@
 import { iconInput } from "./input-field";
+import { showAnimatedDialog } from "./dialog-motion";
 import { icons } from "./icons";
 import { renderGuideIllustration } from "./guide-illustrations";
 const events: Record<string, {title: string; example: string; fields: [string, string][]}> = {
@@ -66,7 +67,7 @@ export function openEventVariables(kind: string): void {
     ? ["firstplace", "secondplace", "thirdplace"].flatMap(playerFields).concat([["secondplacetime", "Second player's time"], ["thirdplacetime", "Third player's time"]])
     : playerFields(kind === "worldRecord" ? "wrplayer" : "cycleplayer").concat(kind === "cycleComplete" ? [["cycleplayerpoints", "Points earned in the completing race"]] : []);
   const list = (fields: [string, string][]) => fields.map(([key, description]) => `<div><dt><code>{${key}}</code></dt><dd>${description}</dd></div>`).join("");
-  dialog.innerHTML = `<header><h2>${event.title} variables</h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close"><span aria-hidden="true">&times;</span></button></header>
+  dialog.innerHTML = `<header><h2>${event.title} variables</h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close">${icons.close}</button></header>
     <p>The app runs your named action with these values. Your normal Streamer.bot sub-actions decide what to update.</p>
     ${renderGuideIllustration("variables", kind)}
     <ol><li>In your Streamer.bot action, add <b>OBS Studio &gt; Sources &gt; Set GDI Text</b>. Choose your OBS connection, existing scene, and text source.</li><li>Write your text below using the listed brace variables. Click <b>Copy for Streamer.bot</b>, then paste into that sub-action's <b>Text</b> field. The copy button converts the variables to Streamer.bot's required format.</li><li>Enable this event here and click <b>Test</b>. Streamer.bot replaces the arguments and updates your source. Add your other sub-actions (show source, switch scene, sound) in the same action.</li></ol>
@@ -91,5 +92,5 @@ export function openEventVariables(kind: string): void {
   });
   dialog.addEventListener("close", () => dialog.remove(), {once:true});
   document.body.append(dialog);
-  dialog.showModal();
+  showAnimatedDialog(dialog);
 }

@@ -128,12 +128,22 @@ pub fn disconnect() -> Result<(), String> {
     delete_credential()
 }
 
+pub fn send_promotion(config: &TwitchConfig) -> Result<(), String> {
+    if !config.promote_mission_app {
+        return Err("Enable mission app promotion before testing it".into());
+    }
+    let credential = validate_saved()?;
+    let template = crate::models::default_promotion_message();
+    let message = template.trim().replace(['\r', '\n'], " ").chars().take(MAX_CHAT_MESSAGE_CHARS).collect::<String>();
+    send_chat_message(&credential, &message)
+}
+
 pub fn send_results(config: &TwitchConfig, game: &GameResult) -> Result<usize, String> {
     if !config.post_results {
         return Ok(0);
     }
     let credential = validate_saved()?;
-    let messages = format_race_result_messages(game, &config.message_prefix);
+    let messages = format_custom_race_result_messages(game, config);
     for message in &messages {
         send_chat_message(&credential, message)?;
     }
@@ -203,59 +213,61 @@ pub fn send_cycle_completion(
 }
 
 pub fn format_race_result_messages(game: &GameResult, message_prefix: &str) -> Vec<String> {
-    let match_type = match game.game_type {
-        GameType::BattleRoyale => "Battle Royale",
-        GameType::Tilt => "Tilt",
-        _ => "Race",
-    };
-    let prefix = message_prefix.trim().replace("{race}", match_type)
-        .chars().take(120).collect::<String>();
-    let message_start = if prefix.is_empty() {
-        String::new()
-    } else {
-        format!("{prefix} ")
-    };
-    let mut messages = Vec::new();
-    let mut current = message_start.clone();
-    let mut entries_in_current = 0;
+    let config = TwitchConfig { message_prefix: message_prefix.into(), ..TwitchConfig::default() };
+    format_custom_race_result_messages(game, &config)
+}
 
-    let has_scoring_players = game.results.iter().any(|result| result.season_points_earned > 0);
-    let fallback_places = if game.game_type == GameType::BattleRoyale { 1 } else { 3 };
-    for result in game.results.iter().filter(|result| {
-        if has_scoring_players { result.season_points_earned > 0 }
-        else { result.placement > 0 && result.placement <= fallback_places && result.eliminated != Some(true) }
-    }) {
-        let place = match result.placement {
-            1 => "\u{1f947}".into(),
-            2 => "\u{1f948}".into(),
-            3 => "\u{1f949}".into(),
-            placement => format!("#{placement}"),
-        };
-        let entry = if has_scoring_players {
-            format!("{place} {} +{}pts", result.player_name, result.season_points_earned)
+fn resolve_race_fields(template: &str, fields: &[(&str, String)]) -> String {
+    let mut message = String::new();
+    let mut rest = template;
+    while !rest.is_empty() {
+        if let Some((token, value)) = fields.iter().find(|(token, _)| rest.starts_with(*token)) {
+            message.push_str(value);
+            rest = &rest[token.len()..];
         } else {
-            // Blank CSV points must not suppress the completed match or invent points.
-            format!("{place} {}", result.player_name)
-        };
-        let separator = if entries_in_current == 0 { "" } else { " | " };
-        let candidate_length =
-            current.chars().count() + separator.chars().count() + entry.chars().count();
-
-        if entries_in_current > 0 && candidate_length > MAX_CHAT_MESSAGE_CHARS {
-            messages.push(current);
-            current = message_start.clone();
-            entries_in_current = 0;
+            let character = rest.chars().next().unwrap();
+            message.push(character);
+            rest = &rest[character.len_utf8()..];
         }
-
-        let separator = if entries_in_current == 0 { "" } else { " | " };
-        current.push_str(separator);
-        current.push_str(&entry);
-        entries_in_current += 1;
     }
+    message
+}
 
-    if entries_in_current > 0 {
-        messages.push(current);
+pub fn format_custom_race_result_messages(game: &GameResult, config: &TwitchConfig) -> Vec<String> {
+    let match_type = match game.game_type { GameType::BattleRoyale => "Battle Royale", GameType::Tilt => "Tilt", _ => "Race" };
+    let common = vec![("{race}", match_type.to_string()), ("{mapName}", game.map_name.clone().unwrap_or_else(|| "Unknown track".into())), ("{playerCount}", game.player_count.to_string())];
+    let intro = resolve_race_fields(config.message_prefix.trim(), &common).chars().take(120).collect::<String>();
+    let outer = if config.race_message_template.trim().is_empty() { "{intro} {placements}" } else { config.race_message_template.trim() };
+    let message = |placements: &str| {
+        let mut fields = common.clone();
+        fields.push(("{intro}", intro.clone())); fields.push(("{placements}", placements.to_string()));
+        resolve_race_fields(outer, &fields).replace(['\r', '\n'], " ").trim().to_string()
+    };
+    let scoring = game.results.iter().any(|result| result.season_points_earned > 0);
+    let fallback_places = if game.game_type == GameType::BattleRoyale { 1 } else { 3 };
+    let results = game.results.iter().filter(|result| if scoring { result.season_points_earned > 0 } else { result.placement > 0 && result.placement <= fallback_places && result.eliminated != Some(true) }).collect::<Vec<_>>();
+    if results.is_empty() { return Vec::new(); }
+    if !outer.contains("{placements}") { return vec![message("").chars().take(MAX_CHAT_MESSAGE_CHARS).collect()]; }
+    let mut messages = Vec::new();
+    let mut current = String::new();
+    for result in results {
+        let place = match result.placement { 1 => "\u{1f947}".into(), 2 => "\u{1f948}".into(), 3 => "\u{1f949}".into(), placement => format!("#{placement}") };
+        let podium = result.placement.checked_sub(1).and_then(|index| config.race_podium_templates.get(index as usize)).map(|text| text.trim()).filter(|text| !text.is_empty());
+        let template = podium.unwrap_or_else(|| if !config.race_entry_template.trim().is_empty() { config.race_entry_template.trim() } else if scoring { "{place} {player} +{points}pts" } else { "{place} {player}" });
+        let mut fields = common.clone();
+        fields.extend([("{place}", place), ("{placement}", result.placement.to_string()), ("{player}", result.player_name.clone()), ("{points}", result.season_points_earned.to_string()), ("{time}", result.finish_time.map(|time| format!("{time:.3}")).unwrap_or_else(|| "unknown".into()))]);
+        let entry = resolve_race_fields(template, &fields);
+        let candidate = if current.is_empty() { entry.clone() } else { format!("{}{}{}", current, config.race_entry_separator, entry) };
+        if !current.is_empty() && message(&candidate).chars().count() > MAX_CHAT_MESSAGE_CHARS { messages.push(message(&current)); current.clear(); }
+        let remaining = if current.is_empty() { entry.clone() } else { format!("{}{}{}", current, config.race_entry_separator, entry) };
+        if message(&remaining).chars().count() > MAX_CHAT_MESSAGE_CHARS {
+            let mut fitted = entry.chars().collect::<Vec<_>>();
+            while !fitted.is_empty() && message(&fitted.iter().collect::<String>()).chars().count() > MAX_CHAT_MESSAGE_CHARS { fitted.pop(); }
+            messages.push(message(&fitted.iter().collect::<String>()).chars().take(MAX_CHAT_MESSAGE_CHARS).collect());
+            current.clear();
+        } else { current = remaining; }
     }
+    if !current.is_empty() { messages.push(message(&current)); }
     messages
 }
 
@@ -437,6 +449,29 @@ fn delete_credential() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn custom_race_templates_format_entries_and_podium_without_replacing_names() {
+        let mut game = crate::streamer_bot::sample_game();
+        game.results = vec![result("{points}", 1, 12), result("Second", 2, 8)];
+        let config = TwitchConfig {
+            race_message_template: "{race} on {mapName}: {placements} — GG!".into(),
+            race_entry_template: "{placement}. {player}: {points} points".into(),
+            race_podium_templates: vec!["Champion {player}: +{points} points".into()],
+            race_entry_separator: " / ".into(),
+            ..TwitchConfig::default()
+        };
+        assert_eq!(format_custom_race_result_messages(&game, &config), vec!["Race on Test Map: Champion {points}: +12 points / 2. Second: 8 points — GG!"]);
+        game.results = (1..=30).map(|place| result(&format!("Player_{place}_{}", "😺".repeat(15)), place, 5)).collect();
+        let messages = format_custom_race_result_messages(&game, &config);
+        assert!(messages.len() > 1);
+        assert!(messages.iter().all(|message| message.chars().count() <= MAX_CHAT_MESSAGE_CHARS && message.ends_with("— GG!")));
+        assert!(game.results.iter().all(|player| messages.iter().any(|message| message.contains(&player.player_name))));
+        let old: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"messagePrefix":"My intro"}"#).unwrap();
+        assert_eq!(old.message_prefix, "My intro");
+        assert!(old.race_entry_template.is_empty());
+        assert_eq!(old.race_entry_separator, " | ");
+    }
 
     #[test]
     fn world_record_message_uses_record_holder_points_and_brace_fields() {

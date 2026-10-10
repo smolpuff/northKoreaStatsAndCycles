@@ -1,6 +1,7 @@
+import { icons } from "./icons";
 import { invoke } from "@tauri-apps/api/core";
 
-export type OverlayName = "results" | "podium" | "points" | "world-record" | "cycle-complete";
+export type OverlayName = "results" | "cycle-status" | "podium" | "points" | "world-record" | "cycle-complete";
 export interface OverlayOptions {
   width: number;
   height: number;
@@ -11,27 +12,30 @@ export interface OverlayOptions {
   accent: string;
   gold: string;
   teal: string;
+  borderStart: string;
+  borderEnd: string;
   headerVisible: boolean;
   headerText: string;
   durationSeconds: number;
   visibleRows: number;
   scrollPixelsPerSecond: number;
 }
+export const isScrollingOverlay = (name: string) => name === "results" || name === "cycle-status";
 export const isCelebration = (name: string) => name === "world-record" || name === "cycle-complete";
 export function defaultOverlayOptions(name: OverlayName): OverlayOptions {
   return {
-    width: isCelebration(name) ? 1920 : 400,
-    height: isCelebration(name) ? 1080 : name === "points" ? 260 : name === "podium" ? 300 : 413,
+    width: isCelebration(name) ? 1920 : name === "cycle-status" ? 1200 : 400,
+    height: isCelebration(name) ? 1080 : name === "cycle-status" ? 1392 : name === "points" ? 260 : name === "podium" ? 300 : 413,
     opacity: 80, background: "#071324", text: "#f5f5ff", secondary: "#b8c4e8",
-    accent: "#ff0081", gold: "#ffe024", teal: "#00efaa", headerVisible: true,
+    accent: "#ff0081", gold: "#ffe024", teal: "#00efaa", borderStart: "#493064", borderEnd: "#28395d", headerVisible: true,
     headerText: "", durationSeconds: isCelebration(name) ? 10 : 0,
-    visibleRows: 6, scrollPixelsPerSecond: 20,
+    visibleRows: name === "cycle-status" ? 20 : 6, scrollPixelsPerSecond: 20,
   };
 }
 export const overlayOptions: Partial<Record<OverlayName, OverlayOptions>> = {};
-export const sourceHeight = (name: OverlayName, options: OverlayOptions) => name === "results" ? options.visibleRows * 42 + (options.headerVisible ? 161 : 106) : options.height;
+export const sourceHeight = (name: OverlayName, options: OverlayOptions) => isScrollingOverlay(name) ? options.visibleRows * (name === "cycle-status" ? 60 : 42) + (name === "cycle-status" ? (options.headerVisible ? 192 : 114) : (options.headerVisible ? 161 : 106)) : options.height;
 export const optionsFor = (name: OverlayName) => {
-  const options = overlayOptions[name] ?? defaultOverlayOptions(name);
+  const options = { ...defaultOverlayOptions(name), ...overlayOptions[name] };
   return { ...options, height: sourceHeight(name, options) };
 };
 const drafts: Partial<Record<OverlayName, OverlayOptions>> = {};
@@ -41,7 +45,7 @@ const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&q
 export const overlayIsCustomized = (name: OverlayName) => JSON.stringify(optionsFor(name)) !== JSON.stringify(defaultOverlayOptions(name));
 
 export function renderOverlayCustomizeButton(name: OverlayName): string {
-  return `<div class="overlay-customize-control"><span class="twitch-customized-state" data-overlay-customized ${overlayIsCustomized(name) ? "" : "hidden"}>&#10003; Customized</span><button type="button" class="customize-button" data-toggle-overlay-customization="${name}" aria-expanded="${expanded.has(name)}" aria-controls="overlay-options-${name}">Customize<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 8 4 4 4-4" /></svg></button></div>`;
+  return `<div class="overlay-customize-control"><span class="twitch-customized-state" data-overlay-customized ${overlayIsCustomized(name) ? "" : "hidden"}>${icons.check} Customized</span><button type="button" class="customize-button" data-toggle-overlay-customization="${name}" aria-expanded="${expanded.has(name)}" aria-controls="overlay-options-${name}">Customize${icons.caretDown}</button></div>`;
 }
 
 export function renderOverlayCustomization(name: OverlayName): string {
@@ -52,15 +56,15 @@ export function renderOverlayCustomization(name: OverlayName): string {
     <form id="overlay-options-${name}" data-overlay-options="${name}">
       <div class="overlay-options-grid">
         <div class="overlay-layout-options">
-          ${number("width", "OBS width (px)", 280, 3840)}${name === "results" ? `<div class="field overlay-auto-height"><span>OBS height (auto)</span><output data-overlay-height>${sourceHeight(name, options)} px</output></div>` : number("height", "OBS height (px)", 180, 2160)}
+          ${number("width", "OBS width (px)", 280, 3840)}${isScrollingOverlay(name) ? `<div class="field overlay-auto-height"><span>OBS height (auto)</span><output data-overlay-height>${sourceHeight(name, options)} px</output></div>` : number("height", "OBS height (px)", 180, 2160)}
           ${isCelebration(name) ? number("durationSeconds", "Duration (seconds)", 1, 300) : ""}
           <label class="field overlay-opacity"><span>Background opacity <output data-overlay-opacity>${options.opacity}%</output></span><input type="range" min="0" max="100" step="1" id="overlay-${name}-opacity" name="opacity" value="${options.opacity}" /></label>
           <label class="field overlay-header-text"><span>Header text</span><input id="overlay-${name}-headerText" name="headerText" maxlength="100" value="${escape(options.headerText)}" placeholder="Default overlay heading" /></label>
           <label class="overlay-header-toggle toggle-row"><input type="checkbox" role="switch" id="overlay-${name}-headerVisible" name="headerVisible" ${options.headerVisible ? "checked" : ""} /> Show header</label>
-          ${name === "results" ? number("visibleRows", "Visible players", 1, 25) + number("scrollPixelsPerSecond", "Scroll speed (px/s)", 5, 100) : ""}
+          ${isScrollingOverlay(name) ? number("visibleRows", "Visible players", 1, 25) + number("scrollPixelsPerSecond", "Scroll speed (px/s)", 5, 100) : ""}
         </div>
         <div class="overlay-color-options">
-          ${([['background','Background'],['text','Text'],['secondary','Secondary text'],['accent','Accent'],['gold','Gold'],['teal','Green / points']] as const).map(([key,label]) => `<label class="field overlay-color-field"><span>${label}</span><input type="color" id="overlay-${name}-${key}" name="${key}" value="${options[key]}" /></label>`).join("")}
+          ${([['background','Background'],['text','Text'],['secondary','Secondary text'],['accent','Accent'],['gold','Gold'],['teal','Green / points'],['borderStart','Border gradient start'],['borderEnd','Border gradient end']] as const).map(([key,label]) => `<label class="field overlay-color-field"><span>${label}</span><input type="color" id="overlay-${name}-${key}" name="${key}" value="${options[key]}" /></label>`).join("")}
         </div>
       </div>
       <p class="overlay-options-note">Changes appear in this preview. Save to apply them in OBS. After resizing, use the updated source size shown above in OBS. Blank header text uses the original heading.</p>
@@ -106,7 +110,7 @@ export function installOverlayCustomization(run: (key: string, action: () => Pro
       for (const key of ["width", "height", "opacity", "durationSeconds", "visibleRows", "scrollPixelsPerSecond"] as const) {
         if (fields.has(key)) options[key] = Number(fields.get(key));
       }
-      for (const key of ["background", "text", "secondary", "accent", "gold", "teal", "headerText"] as const) options[key] = String(fields.get(key));
+      for (const key of ["background", "text", "secondary", "accent", "gold", "teal", "borderStart", "borderEnd", "headerText"] as const) options[key] = String(fields.get(key));
       options.headerVisible = fields.has("headerVisible");
       options.height = sourceHeight(name, options);
       return options;

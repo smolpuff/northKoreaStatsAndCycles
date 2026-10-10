@@ -87,6 +87,7 @@ export const structuredHelpFields: HelpFieldGroup = {
     ["placements", "Full player-result array. HTML sorts it by place before binding; Streamer.bot preserves normalized result order."],
     ["placementsJson", "JSON string of the full player-result array."],
     ["cycleCompletions", "New completions for this match: playerName, cycleNumber and races. Normal overlay state sends an empty array."],
+    ["cycleStandings", "All RaceCycles players in standings order, with the same fields as cycleLeaders. Used by the Cycle status overlay."],
     ["cycleLeaders", "Up to three RaceCycles leaders, ordered by completed cycles, then progress, then name. Contains playerKey, playerName, cycles, placementCounts, currentCyclePositions, cycleProgress and cycleRaceCounts."],
     ["overlayDataJson", "Streamer.bot only: JSON string of the complete event packet, without recursive overlayDataJson."],
     ["isTest", "Sample hook/overlay packets only: true. This field is absent in real event packets."],
@@ -115,7 +116,7 @@ export const cycleRowHelpFields: HelpFieldGroup = {
 
 export const cycleLeaderHelpFields: HelpFieldGroup = {
   title: "Cycle leader rows",
-  availability: "Inside data-repeat=cycleLeaders or structured cycleLeaders data. No built-in Cycle Leaders overlay is included.",
+  availability: "Inside data-repeat=cycleStandings (Cycle status overlay), data-repeat=cycleLeaders or structured cycle data.",
   fields: [["playerKey", "Tracked player identity."], ["playerName", "Player name."], ["cycles", "Completed cycles."],
     ["placementCounts", "Array of counts for places 1–10; use a dotted index or custom processing."],
     ["currentCyclePositions", "Distinct finishing positions 1–10 collected in the current progress set. After all ten are collected, the player's next match starts a fresh set; places above 10 add no slot."],
