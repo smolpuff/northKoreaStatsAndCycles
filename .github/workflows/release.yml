@@ -10,6 +10,11 @@ on:
         description: Existing version tag to build or retry (v0.1.1)
         required: true
         type: string
+      replace_existing:
+        description: Explicitly replace this published version after its build and tests pass
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -27,6 +32,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPLACE_EXISTING: ${{ github.event_name == 'workflow_dispatch' && inputs.replace_existing || false }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v7
@@ -42,12 +48,12 @@ jobs:
       - name: Validate tag and all version files
         run: node scripts/release.mjs --check --tag "$env:RELEASE_TAG"
 
-      - name: Refuse changes to an already published release
+      - name: Require explicit manual opt-in to replace a published release
         shell: pwsh
         run: |
           $existing = gh release view $env:RELEASE_TAG --json isDraft 2>$null
-          if ($LASTEXITCODE -eq 0 -and -not ($existing | ConvertFrom-Json).isDraft) {
-            throw "This version is already published. Create a new version instead of replacing its binaries."
+          if ($LASTEXITCODE -eq 0 -and -not ($existing | ConvertFrom-Json).isDraft -and $env:REPLACE_EXISTING -ne 'true') {
+            throw "This version is already published. Create a new version, or explicitly select replace_existing in a manual run."
           }
           $global:LASTEXITCODE = 0
 
@@ -94,6 +100,12 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+      - name: Temporarily unpublish the explicitly requested replacement
+        if: github.event_name == 'workflow_dispatch' && inputs.replace_existing
+        run: |
+          gh release edit "$env:RELEASE_TAG" --draft=true
+          if ($LASTEXITCODE -ne 0) { throw "Could not make the existing release a draft; its downloads will not be replaced" }
+
       - name: Upload all files to a draft release
         uses: softprops/action-gh-release@v3
         with:
@@ -103,6 +115,7 @@ jobs:
           body_path: release-assets/release-notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
+          overwrite_files: true
           files: |
             release-assets/*.exe
             release-assets/desktop-update.json

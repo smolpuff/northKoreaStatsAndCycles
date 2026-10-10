@@ -16,7 +16,7 @@ Reviewed on 2026-10-10 by an independent agent, with a follow-up review after th
 
 - Downloads are limited to the configured repository/tag, use HTTPS, and require exact size, SHA-256 and Windows executable architecture checks.
 - The updater runs without elevation, validates replacement paths and the parent executable, and retains a recovery backup until the replacement starts successfully.
-- GitHub builds the release and runs Twitch Rust tests before uploading/publishing assets. Existing published versions cannot be replaced by this workflow.
+- GitHub builds the release and runs Twitch Rust tests before uploading/publishing assets. Normal tag builds reject replacing published versions. An explicit manual replacement option, added for the requested 0.1.2 rebuild, requires the same checks before drafting the release, replacing downloads and publishing again.
 - Local CSV test PowerShell scripts are excluded; the production update helper remains included.
 
 ## Limits and validation

@@ -4,7 +4,7 @@
   "notes": [
     "Twitch now uses this app's own registration, with browser sign-in, clear code instructions and automatic login renewal. No .env.local or client secret is required.",
     "Fixed hover animations and Open preview playback across all overlay templates; previews keep playing during status updates and celebrations replay reliably.",
-    "Increased the default window width to 1000 pixels while retaining the 900-pixel minimum.",
+    "Set both the default and minimum window width to 1000 pixels.",
     "Reviewed credentials, authentication and updater security; excluded local test helpers and added Twitch checks before release publication."
   ]
 }
