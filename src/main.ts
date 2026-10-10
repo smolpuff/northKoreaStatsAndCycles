@@ -579,7 +579,35 @@ function readSettingsForm(): Config {
   };
 }
 
+let settingsToggleSaveQueue: Promise<void> = Promise.resolve();
+let settingsToggleSavesPending = 0;
+let settingsToggleSaveError = "";
+
+function refreshToggleSaveStatus(): void {
+  const status = document.querySelector<HTMLElement>("#settings-autosave-status");
+  if (status) status.textContent = settingsToggleSaveError || (settingsToggleSavesPending ? "Saving changes..." : "Toggles save automatically.");
+}
+
+function saveSettingsToggle(): void {
+  const config = readSettingsForm();
+  settingsToggleSavesPending++;
+  settingsToggleSaveError = "";
+  refreshToggleSaveStatus();
+  // Keep rapid changes in order so an older save cannot overwrite a later toggle.
+  settingsToggleSaveQueue = settingsToggleSaveQueue.then(async () => {
+    try {
+      state = await invoke<Snapshot>("save_config", { config });
+    } catch (error) {
+      settingsToggleSaveError = `Unable to save changes: ${String(error)}`;
+    } finally {
+      settingsToggleSavesPending--;
+      render();
+    }
+  });
+}
+
 function bindSettingsForm(): void {
+  refreshToggleSaveStatus();
   bindUpdateSettings();
   const themeSelect = document.querySelector<HTMLSelectElement>("#appearance-theme");
   if (themeSelect) themeSelect.disabled = themeSaveInProgress;
@@ -713,7 +741,10 @@ function bindSettingsForm(): void {
     });
   });
   form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach(toggle => {
-    toggle.addEventListener("change", syncFeatureSections);
+    toggle.addEventListener("change", () => {
+      syncFeatureSections();
+      saveSettingsToggle();
+    });
   });
   syncFeatureSections();
   form.addEventListener("submit", async event => {

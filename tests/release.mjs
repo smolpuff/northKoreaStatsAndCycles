@@ -53,7 +53,7 @@ try {
   } finally { console.log = originalLog; }
   assert(output.includes("nothing is written, committed, pushed or built locally"));
   assert.deepEqual(versionFiles.map(file => fs.readFileSync(path.join(root, file), "utf8")), current);
-  const workflow = fs.readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
+  const workflow = fs.readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8").replaceAll("\r\n", "\n");
   await prettier.format(workflow, { parser: "yaml" });
   assert(workflow.includes('tags:\n      - "v*"'));
   assert(workflow.includes("--draft=false --latest"));

@@ -5020,6 +5020,8 @@ dialog[open].dialog-closing::backdrop {
 }
 
 .app-update-controls { margin-left: 44px; padding-bottom: 16px; }
+.integration-page-layout .app-update-controls [data-check-updates] { width: auto; min-height: 26px; padding: 3px 9px; font-size: 12px; line-height: 18px; }
+.settings-autosave-status { margin: 0; font-size: 12px; color: var(--reference-secondary); }
 .app-update-controls p { margin: 10px 0 0; font-size: 13px; color: var(--reference-secondary); }
 .app-update-controls [data-app-version]:not(:empty) { margin-right: 12px; }
 .app-update-controls [data-update-message]:empty { display: none; }

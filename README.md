@@ -14,7 +14,7 @@ Stats are stored locally in JSON. Twitch and Streamer.bot are optional.
 
 Settings includes the app version, automatic update checks and a manual **Check for updates** button. See [desktop update publishing and recovery](UPDATES.md).
 
-To release, commit your changes on `main`, then run `npm run release -- --notes "What changed"`. It increments the version, commits/tags/pushes it, and GitHub builds the Windows installer, portable EXE and updater manifest. Preview with `npm run release -- --dry-run`. No local app build is performed by the release script.
+To release, commit your changes on `main`, then run `npm.cmd --% run release -- --notes "What changed"` in PowerShell. It increments the version, commits/tags/pushes it, and GitHub builds the Windows installer, portable EXE and updater manifest. Preview with `npm.cmd --% run release -- --dry-run`. No local app build is performed by the release script.
 
 Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
 
@@ -71,7 +71,7 @@ Race results let you customize the overall message, each placement, the separato
 
 Twitch tokens are stored in Windows Credential Manager. Posting failures are logged without stopping stats processing.
 
-Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is on by default; turn it off to disable promotions. Save to apply; the first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
+Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is on by default; turn it off to disable promotions. The toggle saves immediately; save to apply interval changes. The first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
 
 **Development OAuth setup:** provide `TWITCH_APP_CLIENT_ID` and `TWITCH_APP_CLIENT_SECRET` in an ignored `.env.local` file. Register this redirect URI for that Twitch application:
 

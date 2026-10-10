@@ -2,14 +2,14 @@
 
 The updater follows mos-mission-manager's Windows flow: check a repository-specific version file, offer release notes, download the verified executable, finish processing, replace the executable and restart. A backup is kept until the new dashboard reports ready. Stats, credentials, settings and overlays remain in the existing application data directory.
 
-Settings shows the installed version, an automatic check switch, last check time and a manual **Check for updates** button. Save settings to persist the switch. Like mission manager, automatic checks default to enabled and first run after 24 hours open, then daily. A manual check also works with automatic checking disabled. Installation always requires **Download and install** in the existing styled popup. Progress and failures appear in that popup.
+Settings shows the installed version below its heading, an automatic check switch, last check time and a manual **Check for updates** button. Toggles save immediately. Like mission manager, automatic checks default to enabled and first run after 24 hours open, then daily. A manual check also works with automatic checking disabled. Installation always requires **Download and install** in the existing styled popup. Progress and failures appear in that popup.
 
 ## Publish a Windows update
 
 Commit the app changes (including the workflow and release scripts) on `main`, then run:
 
 ```powershell
-npm run release -- --notes "Describe the changes in this release"
+npm.cmd --% run release -- --notes "Describe the changes in this release"
 ```
 
 Each run increments the patch version, synchronizes `version.json`, `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`, commits the version changes, creates `v<version>`, and atomically pushes `main` plus that tag to `smolpuff/northKoreaStatsAndCycles`. It requires a clean working tree and refuses a mismatched remote, conflicting versions, an existing tag, or a remote `main` that needs pulling. It never builds or launches the app locally.
@@ -17,13 +17,13 @@ Each run increments the patch version, synchronizes `version.json`, `package.jso
 Useful variations:
 
 ```powershell
-npm run release -- --dry-run
-npm run release -- --bump minor --notes "A bigger update"
-npm run release -- --bump major --notes-file release-notes.txt
+npm.cmd --% run release -- --dry-run
+npm.cmd --% run release -- --bump minor --notes "A bigger update"
+npm.cmd --% run release -- --bump major --notes-file release-notes.txt
 npm run release:check
 ```
 
-`--notes` can be repeated; `--notes-file` uses each non-empty line. Omitting notes clears the prior release's notes. Dry-run only reports the planned bump and push, without writing files, committing, tagging, fetching or pushing.
+The PowerShell examples use `npm.cmd --%` to preserve flags passed through npm. Other shells can use `npm run release -- ...`. `--notes` can be repeated; `--notes-file` uses each non-empty line. Omitting notes clears the prior release's notes. Dry-run only reports the planned bump and push, without writing files, committing, tagging, fetching or pushing.
 
 Pushing a `v*` tag starts **Build Desktop Release** on GitHub's Windows runner. The workflow validates every version against the tag, installs dependencies, builds the Windows x64 Tauri app and NSIS installer, and creates the SHA-256 updater manifest. It uploads all downloads to a draft before publishing:
 

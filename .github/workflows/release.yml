@@ -68,7 +68,7 @@ jobs:
         run: node tests/release.mjs
 
       - name: Build Windows application and installer
-        run: npm run build -- --ci --target x86_64-pc-windows-msvc
+        run: npm.cmd --% run build -- --ci --target x86_64-pc-windows-msvc
 
       - name: Prepare release files and verified updater manifest
         shell: pwsh
