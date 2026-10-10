@@ -27,4 +27,6 @@ Static TypeScript/JavaScript/Rust syntax checks and focused overlay runtime chec
 
 ## 0.2.0 release tooling verification
 
+The development branch was subsequently renamed from beta to dev at the user's request; the release command and current documentation now use dev. The 0.2.0 source tag and downloads remain unchanged.
+
 Development now lives on beta. The npm release command requires clean committed source, checks that both remote branches' commits are preserved, rejects conflicting tags/versions and a mismatched publishing remote, and atomically pushes beta/main/tag without force-pushing main. Isolated actual Git repository checks covered successful promotion and failed-push recovery. The real command promoted the full project to main as 0.2.0; GitHub passed the Windows build and Twitch tests before publishing. The downloaded portable executable matched the manifest size/SHA-256 and Windows x64 header without execution. These are release-tooling checks, not a new independent security audit; the authentication/updater review and its limits above still apply.

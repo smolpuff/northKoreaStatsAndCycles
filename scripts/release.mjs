@@ -7,7 +7,7 @@ import { repository } from "./create-update-manifest.mjs";
 export const versionFiles = ["package.json", "package-lock.json", "version.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"];
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-export const developmentBranch = "beta";
+export const developmentBranch = "dev";
 
 export function normalizeVersion(value) {
   const version = /^\d+\.\d+$/.test(value) ? `${value}.0` : value;
@@ -155,7 +155,7 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   const localMain = git("rev-parse", "main");
   if (git("merge-base", "HEAD", localMain) === localMain) {
     try { git("branch", "-f", "main", "HEAD"); }
-    catch { console.log("The release push succeeded. Local main could not be moved (it may be checked out in another worktree); the beta checkout remains at the release."); }
+    catch { console.log("The release push succeeded. Local main could not be moved (it may be checked out in another worktree); the dev checkout remains at the release."); }
   } else console.log("Remote main was released; local main has separate commits and was left untouched.");
   console.log(`GitHub is building ${release.tag}: https://github.com/${repository}/actions\nDownload after the workflow finishes: https://github.com/${repository}/releases/tag/${release.tag}`);
 }

@@ -6,13 +6,13 @@ Settings shows the installed version beside its manual **Check for updates** but
 
 ## Publish a Windows update
 
-Commit the full app changes on `beta` and add user-facing notes under `Unreleased` in CHANGELOG.md, then run:
+Commit the full app changes on `dev` and add user-facing notes under `Unreleased` in CHANGELOG.md, then run:
 
 ```powershell
 npm run release
 ```
 
-Each run promotes the complete committed beta project to main, increments the patch version and synchronizes `version.json`, `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It moves Unreleased notes into the new changelog section, commits the release, creates `v<version>`, and atomically pushes beta, main and that tag to `smolpuff/northKoreaStatsAndCycles`. The local checkout stays on beta, with both branches synchronized to the release. It requires a clean working tree and refuses a mismatched remote, conflicting versions, an existing tag, or missing commits from remote main/beta. It never force-pushes main, builds or launches the app locally.
+Each run promotes the complete committed dev project to main, increments the patch version and synchronizes `version.json`, `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It moves Unreleased notes into the new changelog section, commits the release, creates `v<version>`, and atomically pushes dev, main and that tag to `smolpuff/northKoreaStatsAndCycles`. The local checkout stays on dev, with both branches synchronized to the release. It requires a clean working tree and refuses a mismatched remote, conflicting versions, an existing tag, or missing commits from remote main/dev. It never force-pushes main, builds or launches the app locally.
 
 Useful variations:
 
@@ -38,7 +38,7 @@ GitHub release notes include your supplied notes plus GitHub's generated change 
 
 The root version file stays at `https://raw.githubusercontent.com/smolpuff/northKoreaStatsAndCycles/main/version.json`, separate from Mission Manager. A pushed version is offered by the app only after its tagged updater manifest is publicly downloadable. While CI is building, the check reports that the release is not ready rather than offering an unavailable installer.
 
-If the Git push fails, the script keeps the local release commit/tag on beta and prints the exact atomic retry command; do not bump again. If GitHub fails, fix the issue and rerun the workflow for that tag using **Actions → Build Desktop Release → Run workflow**, or rerun the failed job. A draft may be reused. Normal runs reject replacing published binaries; the manual workflow's explicit replace_existing option is reserved for a specifically requested same-version rebuild and retains build/test gates. Prefer a new version so installed apps detect the update. Build files are also retained as workflow artifacts for recovery.
+If the Git push fails, the script keeps the local release commit/tag on dev and prints the exact atomic retry command; do not bump again. If GitHub fails, fix the issue and rerun the workflow for that tag using **Actions → Build Desktop Release → Run workflow**, or rerun the failed job. A draft may be reused. Normal runs reject replacing published binaries; the manual workflow's explicit replace_existing option is reserved for a specifically requested same-version rebuild and retains build/test gates. Prefer a new version so installed apps detect the update. Build files are also retained as workflow artifacts for recovery.
 
 Only Windows x64 is built by this workflow. The updater still understands ARM64 manifests, but an ARM64 release requires adding its separate build and combining the manifest entries before publication.
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Renamed the development branch from beta to dev, updated the release command and documentation to use dev, and restored v0.1.2 to the source used for its published downloads with explicit approval. Validation: release-script syntax/version checks and a dry-run passed; no application was built or launched locally.
+
 ## 0.2.0 - 2026-10-10
 
 - Set both the default and minimum window width to 1000 pixels.
