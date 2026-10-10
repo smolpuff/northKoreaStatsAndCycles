@@ -2,7 +2,7 @@
 
 The updater follows mos-mission-manager's Windows flow: check a repository-specific version file, offer release notes, download the verified executable, finish processing, replace the executable and restart. A backup is kept until the new dashboard reports ready. Stats, credentials, settings and overlays remain in the existing application data directory.
 
-Settings shows the installed version below its heading, an automatic check switch, last check time and a manual **Check for updates** button. Toggles save immediately. Like mission manager, automatic checks default to enabled and first run after 24 hours open, then daily. A manual check also works with automatic checking disabled. Installation always requires **Download and install** in the existing styled popup. Progress and failures appear in that popup.
+Settings shows the installed version beside its manual **Check for updates** button, an automatic check switch and last check time. Toggles save immediately. Like mission manager, automatic checks default to enabled and first run after 24 hours open, then daily. A manual check also works with automatic checking disabled. Installation always requires **Download and install** in the existing styled popup. Progress and failures appear in that popup.
 
 ## Publish a Windows update
 

@@ -2,7 +2,9 @@
   "version": "0.1.1",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Test release: desktop update download, verification, installation and restart.",
-    "Settings, themes, customizable Twitch results, mission promotion and overlay improvements."
+    "Added verified app updates with download cancellation, installation, restart and recovery backup.",
+    "Settings toggles now save immediately; Save Settings remains, with a smaller update button and version beside it.",
+    "Added themes, configurable Twitch race messages, hourly Mission Manager promotion and its Streamer.bot event.",
+    "Improved dialogs, icons, errors and overlays; Twitch accordions start closed and overlay previews retain transparent backgrounds."
   ]
 }

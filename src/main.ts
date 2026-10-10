@@ -585,7 +585,7 @@ let settingsToggleSaveError = "";
 
 function refreshToggleSaveStatus(): void {
   const status = document.querySelector<HTMLElement>("#settings-autosave-status");
-  if (status) status.textContent = settingsToggleSaveError || (settingsToggleSavesPending ? "Saving changes..." : "Toggles save automatically.");
+  if (status) status.textContent = settingsToggleSaveError;
 }
 
 function saveSettingsToggle(): void {

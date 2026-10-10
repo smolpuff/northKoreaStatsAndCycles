@@ -691,7 +691,7 @@ function settingsPage(
         <div class="mission-promotion-controls">
           <div class="twitch-message-preview promotion-preview"><span>Preview</span><p>${escapeHtml(defaultPromotionMessage)}</p></div>
           <label class="field promotion-interval"><span>Post every (minutes)</span><input id="promotion-interval" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionIntervalMinutes ?? 60}" /></label>
-          <small>Posts while this app is open and Twitch is connected. The optional Mission app promotion hook on the Streamer.bot page uses this interval independently. The first post waits one full interval. The toggle saves automatically; save to apply an interval change.</small>
+          <small>Posts while this app is open and Twitch is connected. The optional Mission app promotion hook on the Streamer.bot page uses this interval independently. The first post waits one full interval. Save to apply an interval change.</small>
           <div class="promotion-actions">${feedbackButton("twitch-promotion", "Test promotion", `data-twitch-test="promotion" ${state.twitchStatus === "Connected" ? "" : "disabled"}`, "test")}${feedbackButton("save-promotion", "Save", "data-twitch-save", "file")}</div>
         </div>
         </details>
@@ -701,7 +701,7 @@ function settingsPage(
       <div class="app-update-settings">
         ${startupToggle("auto-update-check", "download", "Check for app updates automatically", "Check after 24 hours open, then daily. You choose when to download and restart.", state.config.autoUpdateCheckEnabled ?? true)}
         <div class="app-update-controls">
-          <button type="button" class="compact-button" data-check-updates>Check for updates</button>
+          <div class="app-update-check-row"><button type="button" class="compact-button" data-check-updates>Check for updates</button><span data-app-version></span></div>
           <p><span data-update-last-checked>Last checked: Never</span></p>
           <p data-update-message role="status" aria-live="polite"></p>
         </div>
@@ -968,7 +968,7 @@ function settingsPage(
       <div class="race-heading">
         <i class="race-heading-icon ${section === "twitch" ? "twitch-heading-icon" : ""}">${sidebarArtwork(section, `header-${section}`)}</i><div>
         <h1>${page.title}</h1>
-        ${section === "settings" ? '<p data-app-version aria-label="Installed app version"></p>' : `<p>${page.description}</p>`}
+        <p>${page.description}</p>
         </div>
       </div>
     </div>
@@ -977,6 +977,7 @@ function settingsPage(
     <form id="settings-form" class="integration-page-layout ${section}-page-layout">
       ${page.content}
       <p class="settings-autosave-status" id="settings-autosave-status" role="status" aria-live="polite"></p>
+      ${section !== "settings" ? "" : `<div class="integration-save">${feedbackButton("save-settings", "Save settings", "", "file", "submit")}</div>`}
     </form>
   `;
 }
