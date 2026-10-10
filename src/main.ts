@@ -180,6 +180,29 @@ const homeButtonTransitions = new Map<string, { started: number; background: str
 
 function renderMainWindow(): void {
   hideSidebarTooltip();
+  // Status events and button feedback must not reload playing preview iframes.
+  if (currentPage === "overlays" && renderedPage === currentPage && root.querySelector(".overlays-page")?.getAttribute("data-directory") === overlayDirectory) {
+    const next = document.createElement("template");
+    next.innerHTML = renderApplication(state, currentPage, watcherCommandIsRunning, logFilter, raceCycleSort, editingName, resultsSort, overlayDirectory);
+    const footer = root.querySelector(".sidebar-foot");
+    const updatedFooter = next.content.querySelector(".sidebar-foot");
+    if (footer && updatedFooter) footer.replaceWith(updatedFooter);
+    // Restore default labels before applying current feedback, without replacing buttons/listeners.
+    const defaults = [...next.content.querySelectorAll<HTMLButtonElement>("[data-feedback-key]")];
+    root.querySelectorAll<HTMLButtonElement>("[data-feedback-key]").forEach(button => {
+      const fresh = defaults.find(item => item.dataset.feedbackKey === button.dataset.feedbackKey);
+      if (!fresh) return;
+      button.innerHTML = fresh.innerHTML;
+      button.className = fresh.className;
+      button.disabled = fresh.disabled;
+      for (const property of ["width", "minWidth", "maxWidth"] as const) button.style[property] = fresh.style[property];
+    });
+    const error = root.querySelector<HTMLElement>("#overlay-setup-error");
+    if (error) error.textContent = overlaySetupError;
+    applyTheme(state.config.theme);
+    applyButtonFeedback();
+    return;
+  }
   const animateHome = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (animateHome) {
     root.querySelectorAll<HTMLButtonElement>(".home-watch-button").forEach(button => {
@@ -205,6 +228,7 @@ function renderMainWindow(): void {
     overlayDirectory,
   );
   root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+  root.querySelector(".overlays-page")?.setAttribute("data-directory", overlayDirectory);
   const sidebarToggle = root.querySelector<HTMLButtonElement>("[data-collapse-sidebar]");
   if (sidebarToggle) {
     const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
@@ -288,6 +312,7 @@ function renderMainWindow(): void {
       button.setAttribute("aria-pressed", String((button.dataset.overlayPreviewType === "br") === overlayPreviewBR));
     });
     document.querySelectorAll<HTMLIFrameElement>(".overlay-mini-preview iframe").forEach(frame => {
+      frame.dataset.previewBr = String(overlayPreviewBR);
       const name = new URL(frame.src).pathname.split("/").pop()!.replace(".html", "") as OverlayName;
       updateOverlayPreview(frame, name);
       frame.contentWindow?.postMessage({ type: "marbles-overlay-preview", br: overlayPreviewBR }, window.location.origin);
@@ -307,6 +332,7 @@ function renderMainWindow(): void {
     card.addEventListener("focusin", () => play(true));
     card.addEventListener("focusout", event => { if (!card.contains(event.relatedTarget as Node | null)) play(false); });
     preview?.addEventListener("load", () => play(card.matches(":hover, :focus-within")));
+    play(card.matches(":hover, :focus-within"));
   });
 
   document.querySelector("[data-reprocess-latest]")?.addEventListener("click", () => {
@@ -691,10 +717,7 @@ function bindSettingsForm(): void {
         await invoke<Snapshot>("save_config", {
           config: readSettingsForm(),
         });
-        const desktopId = crypto.randomUUID();
-        await invoke("open_twitch_authorization", { desktopId });
-        const authorization = await waitForTwitchAuthorization(desktopId);
-        state = await invoke<Snapshot>("complete_twitch_oauth", authorization);
+        state = await invoke<Snapshot>("connect_twitch");
       } catch (error) {
         alert(String(error));
       } finally {
@@ -759,26 +782,6 @@ function bindSettingsForm(): void {
   });
 }
 
-async function waitForTwitchAuthorization(desktopId: string): Promise<{
-  accessToken: string;
-  clientId: string;
-}> {
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    const response = await fetch(
-      `/api/public/auth/twitch/result?desktop=${encodeURIComponent(desktopId)}`,
-      { cache: "no-store" },
-    );
-    if (response.ok && response.status !== 204) {
-      return (await response.json()) as {
-        accessToken: string;
-        clientId: string;
-      };
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 1000));
-  }
-  throw new Error("Twitch authorization timed out. Try Connect Twitch again.");
-}
-
 async function initialize(): Promise<void> {
   const startupMessage = document.querySelector<HTMLElement>(".startup span");
   if (startupMessage) {
@@ -801,6 +804,8 @@ async function initialize(): Promise<void> {
     for (const [name, seconds] of [["world-record", durations.worldRecordSeconds], ["cycle-complete", durations.cycleSeconds]] as const) {
       if (!overlayOptions[name] && seconds !== 10) overlayOptions[name] = { ...optionsFor(name), durationSeconds: seconds };
     }
+    // Initial saved customization can arrive after the gallery's first render.
+    root.querySelector(".overlays-page")?.removeAttribute("data-directory");
     render();
   }).catch(error => {
     overlaySetupError = `Unable to load overlay customization: ${String(error)}`;

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-10-10
+
+- Registered a dedicated Twitch Public application, Marbles Stats and Cycles, and replaced development-only auth with Twitch device authorization. No client secret, .env.local, public auth server or callback listener is required. Only chat-posting permission is requested.
+- Store access and rotating refresh tokens in Windows Credential Manager, refresh expired access tokens automatically, reject sessions from the previous testing app, and show compact sign-in errors with clear instructions explaining the code supplied by this app. Token use requires Twitch validation against this app's ID and scope; credential writes are serialized.
+- Fixed all six overlay previews: hover starts/stops animation and Open preview plays automatically. Added a ready handshake, preserved playing iframes during status/feedback redraws, and made repeated celebrations replay reliably. Explicit samples animate even with Windows reduced motion enabled; live overlays retain that preference.
+- Increased default window width to 1000 pixels; minimum width remains 900.
+- Excluded local PowerShell CSV test helpers, removed deleted frontend tests and unused source SVG files, and removed their obsolete workflow/README references. The production updater helper remains bundled.
+- Added remote Twitch Rust tests as a publication gate, corrected a stale cycle-message test expectation, and recorded an independent credentials/auth/updater review in SECURITY-REVIEW.md.
+
+Validation: TypeScript, JavaScript and Rust syntax checks passed. Focused mocked runtime checks covered all six overlay previews, popup readiness, Race/BR switching, replay, status redraw preservation and feedback reset. Twitch accepted the dedicated Public client ID in a device authorization request; no user authorization was approved. Browser checks also confirmed Results scrolling and celebration confetti. Independent review found no release-blocking credential leak or exploit. GitHub build/tests and release download verification are pending; live sign-in and installation still require testing. No application was compiled or launched locally.
+
 ## 0.1.1 - 2026-10-10
 
 - Added app-specific version checks, verified downloads, cancellation, executable replacement and restart, with a recovery backup and compact animated update progress.
@@ -13,4 +24,4 @@
 - Centered the expand button in the collapsed sidebar, added immediate button/status hover tooltips and removed the broken dashboard rocket animation. Set the default window to 900 x 760 and the minimum width to 900.
 - Improved inline error layouts, overlay templates, cycle displays and promotional artwork.
 
-Validation: TypeScript checks and focused JavaScript checks passed. GitHub release build and download verification are pending; the running app has not been compiled or launched locally.
+Validation: TypeScript checks and focused JavaScript checks passed. GitHub release build passed; download verification was not performed; the running app has not been compiled or launched locally.

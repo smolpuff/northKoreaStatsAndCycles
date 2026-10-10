@@ -64,7 +64,8 @@
     applyOptions();
     scrollResults();
   });
-  const motion = config.animate !== false && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // Hover/Open preview explicitly requests playback; live overlays honor motion preferences.
+  const motion = preview || (config.animate !== false && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   let previewPlaying = false;
   const animate = () => motion && (!preview || previewPlaying);
   const textTemplates = new WeakMap();
@@ -309,7 +310,7 @@
       document.body.classList.toggle("preview-playing", previewPlaying);
       activeCounters.clear();
       if (numberFrame != null) window.cancelAnimationFrame?.(numberFrame);
-      numberFrame = undefined; numbers = new WeakMap(); lastPacket = "";
+      numberFrame = undefined; numbers = new WeakMap(); lastPacket = ""; lastAlert = "";
       exitAnimation?.cancel(); stopScroll(); stopCycleCarousel();
       cancelEntrance();
       // Preserve CSS effects: cancelling their animations permanently removes confetti on hover.

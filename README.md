@@ -73,13 +73,9 @@ Twitch tokens are stored in Windows Credential Manager. Posting failures are log
 
 Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is on by default; turn it off to disable promotions. The toggle saves immediately; save to apply interval changes. The first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
 
-**Development OAuth setup:** provide `TWITCH_APP_CLIENT_ID` and `TWITCH_APP_CLIENT_SECRET` in an ignored `.env.local` file. Register this redirect URI for that Twitch application:
+**Desktop sign-in:** Marbles Stats and Cycles has its own Twitch Public application ID. Connect Twitch opens Twitch's device approval page in your browser; approve there and return to the app. Sign-in requests only `user:write:chat`, validates the resulting account with Twitch, and saves access and rotating refresh tokens in Windows Credential Manager. Tokens refresh without a client secret; revoked or expired authorization requires connecting again.
 
-```text
-http://localhost:8080/api/public/auth/twitch/callback
-```
-
-Current sign-in depends on the local OAuth service supplied by the Vite development server. Packaged sign-in is not yet self-contained.
+No `.env.local`, hosted auth server, callback listener or client secret is required in development or in the packaged app. The registration retains a localhost redirect URL, but device authorization does not use it. Restart the development app after these backend changes before testing sign-in.
 
 ## Development
 
@@ -117,33 +113,7 @@ npx tsc --noEmit
 npm test
 ```
 
-`npm test` runs the Rust tests. Focused frontend checks are also available in `tests/`, for example `node tests/confirm-dialog.mjs`.
-
-### Test a race and world record
-
-With RaceStats watching, run this from the repository in PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-WorldRecord.ps1
-```
-
-Each run writes five fake players, a new snapshot ID, and a matching custom-map WR. The winner earns 10 points and always matches `RecordHolderName` and `RecordTime`. The WR file arrives one second after the race files to exercise delayed detection. These matches count in stats and can trigger enabled overlays, Streamer.bot actions, and Twitch posts. The script backs up the original three files once in `MarblesStats-WR-Test-Backup` beside the CSVs; avoid running a real game while testing.
-
-Stop the watcher before restoring the original files:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-WorldRecord.ps1 -Restore
-```
-
-Optional parameters: `-Winner "YourName"`, `-Players 10`, `-RecordDelayMilliseconds 0`, or `-SaveDirectory "C:\path\to\test\folder"`. Restoring files does not remove test matches already counted in app stats.
-
-For a cycle completion, start RaceCycles and run:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Test-Cycle.ps1
-```
-
-It writes 20 cycle-only snapshots in randomized placement order, waiting for the app to save each update before writing the next. The first twelve updates contain nine distinct positions and three repeats (including second place twice); update 13 supplies the missing position. The remaining seven updates collect seven distinct positions in a new set. From an empty set, this demonstrates completion on update 13 and progress restarting afterward. Use a fresh `-Player "NewTestPlayer"` name to observe that exact sequence without clearing existing stats; an existing player may already have progress. All players earn zero points. It confirms that a new cycle was saved before reporting success. If RaceCycles does not accept a snapshot within 15 seconds, it stops and reports the unprocessed placement. The WR file is untouched. Only the cycle completion overlay, hook, and enabled cycle chat message fire. Marked test snapshots do not update RaceStats totals or dashboard race results, or send race-result messages. Original race files are backed up; stop the watcher and run with `-Restore` to restore them. Optional `-Player "YourName"`, `-SaveDirectory`, `-TimeoutSeconds`, and `-IntervalMilliseconds` parameters are available; the interval is an optional extra pause after each accepted placement. `-StateFile` can select the app state JSON when testing an alternate installation. Test cycle progress already counted remains after restoring files.
+`npm test` runs the Rust tests.
 
 ### Project layout
 
@@ -153,8 +123,7 @@ It writes 20 cycle-only snapshots in randomized placement order, waiting for the
 | `src-tauri/src/` | CSV parsing, watching, persistence, and integrations |
 | `src-tauri/tests/fixtures/` | Parser fixtures |
 | `public/overlays/` | Bundled HTML templates, scripts, and styles |
-| `tests/` | Focused frontend and overlay checks |
-| `scripts/` | Manual CSV test helpers |
+| `scripts/` | Version release and updater-manifest scripts |
 
 Runtime stats and editable live overlays are stored in the writable application-data directory, outside the repository. Dependencies, builds, local credentials, and temporary files are excluded by `.gitignore`.
 

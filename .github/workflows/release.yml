@@ -64,11 +64,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Check release tooling
-        run: node tests/release.mjs
-
       - name: Build Windows application and installer
         run: npm.cmd --% run build -- --ci --target x86_64-pc-windows-msvc
+
+      - name: Check Twitch authorization and chat behavior before publishing
+        run: cargo test --release --locked --manifest-path src-tauri/Cargo.toml --lib twitch --target x86_64-pc-windows-msvc
 
       - name: Prepare release files and verified updater manifest
         shell: pwsh

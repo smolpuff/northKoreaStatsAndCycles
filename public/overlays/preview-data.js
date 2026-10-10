@@ -3,13 +3,14 @@
   let active = false;
   let tick = 0;
   let loop;
+  let revision = 0;
   const reportSize = () => window.parent.postMessage({type:"marbles-overlay-preview-size", height:document.getElementById("overlay").offsetHeight}, "*");
   new ResizeObserver(reportSize).observe(document.getElementById("overlay"));
   function sample(kind) {
     const wr = kind === "world-record";
     return {
       eventType: wr ? "worldRecord" : "raceComplete",
-      eventId: "preview:" + Date.now() + ":" + kind + ":" + tick,
+      eventId: "preview:" + kind + ":" + ++revision,
       receivedAt: new Date().toISOString(),
       gameId: "sample",
       gameType: br ? "battleRoyale" : "race",
@@ -80,4 +81,6 @@
     render();
   });
   render();
+  // Parent load/hover messages may precede this dynamically loaded script.
+  window.parent.postMessage({type:"marbles-overlay-preview-ready"}, "*");
 })();

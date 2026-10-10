@@ -806,8 +806,10 @@ function settingsPage(
   </div>
   </div>
   <div class="test-actions integration-connection-controls">
-    ${twitchConnected ? '<button id="twitch-disconnect" class="twitch-disconnect-button" type="button">Disconnect Twitch</button>' : '<button id="twitch-connect" class="twitch-connect-button" type="button">Connect Twitch</button>'}
-  </div>  `;
+    ${twitchConnected ? '<button id="twitch-disconnect" class="twitch-disconnect-button" type="button">Disconnect Twitch</button>' : `<button id="twitch-connect" class="twitch-connect-button" type="button" ${state.twitchStatus === "Authorizing" ? "disabled" : ""}>${state.twitchStatus === "Authorizing" ? "Waiting for Twitch..." : "Connect Twitch"}</button>`}
+    ${state.twitchMessage && ["Unavailable", "Expired"].includes(state.twitchStatus) ? `<span class="button-feedback-error" role="alert">${escapeHtml(state.twitchMessage)}</span>` : ""}
+  </div>
+  ${!twitchConnected ? `<div class="twitch-message-preview twitch-auth-preview" role="status"><span>Twitch sign-in</span><p>${escapeHtml(state.twitchStatus === "Authorizing" && state.twitchMessage ? state.twitchMessage : "Connect Twitch opens Twitch in your browser with your sign-in code already filled in. The code comes from this app. Confirm the code and click Authorize, then return here. Your login renews automatically.")}</p></div>` : ""}  `;
 
   const twitchMessages = `
   <div class="twitch-layout-heading twitch-message-heading"><i>${icons.webhook}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>

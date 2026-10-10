@@ -56,6 +56,7 @@ Desktop.ini
 # Local screenshots, inspection pages, and scratch files
 /screenshots/
 /public/*-review.html
+/scripts/Test-*.ps1
 /*-temp.mjs
 /edrwsfaserfgaszexdcfrgv
 /styles.css

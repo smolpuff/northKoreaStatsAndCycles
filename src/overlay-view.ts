@@ -4,7 +4,7 @@ import { iconInput } from "./input-field";
 import { icons } from "./icons";
 import { sidebarArtwork } from "./sidebar-icons";
 
-import { optionsFor, renderOverlayCustomization, renderOverlayCustomizeButton, updateOverlayPreview } from "./overlay-options";
+import { optionsFor, renderOverlayCustomization, renderOverlayCustomizeButton, updateOverlayPreview, type OverlayName } from "./overlay-options";
 
 const templates = [
   [
@@ -38,16 +38,25 @@ export function installOverlayPreviewSizing(): void {
   window.addEventListener("message", (event) => {
     if (
       event.origin !== window.location.origin ||
-      event.data?.type !== "marbles-overlay-preview-size"
+      !["marbles-overlay-preview-size", "marbles-overlay-preview-ready"].includes(event.data?.type)
     )
       return;
-    const height = Number(event.data.height);
-    if (!Number.isFinite(height) || height <= 0 || height > 4000) return;
     document
-      .querySelectorAll<HTMLIFrameElement>(".overlay-mini-preview iframe, .overlay-card-dialog iframe")
+      .querySelectorAll<HTMLIFrameElement>(".overlay-mini-preview iframe, .overlay-sample-dialog iframe")
       .forEach((frame) => {
         if (event.source !== frame.contentWindow) return;
-        if (frame.closest(".overlay-card-dialog")) {
+        if (event.data.type === "marbles-overlay-preview-ready") {
+          const name = new URL(frame.src).pathname.split("/").pop()!.replace(".html", "") as OverlayName;
+          updateOverlayPreview(frame, name);
+          frame.contentWindow?.postMessage({ type: "marbles-overlay-preview", br: frame.dataset.previewBr === "true" }, window.location.origin);
+          const card = frame.closest(".overlay-template");
+          const dialog = frame.closest<HTMLDialogElement>(".overlay-sample-dialog");
+          frame.contentWindow?.postMessage({ type: "marbles-overlay-preview-hover", active: Boolean(dialog?.open || card?.matches(":hover, :focus-within")) }, window.location.origin);
+          return;
+        }
+        const height = Number(event.data.height);
+        if (!Number.isFinite(height) || height <= 0 || height > 4000) return;
+        if (frame.closest(".overlay-sample-dialog")) {
           // Sized to its configured source aspect ratio by updateOverlayPreview.
           return;
         }
@@ -68,6 +77,7 @@ export function openOverlayPreview(name: string, br: boolean): void {
   dialog.setAttribute("aria-label", `${template[1]} preview`);
   dialog.innerHTML = `<header><h2>${template[1]} preview</h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close" data-close-preview>${icons.close}</button></header><p>Animated sample preview. Use <b>Copy path</b> on the card to add the live overlay in OBS.</p><div class="overlay-large-preview"><iframe title="${template[1]} animated sample"></iframe></div>`;
   const frame = dialog.querySelector<HTMLIFrameElement>("iframe")!;
+  frame.dataset.previewBr = String(br);
   updateOverlayPreview(frame, template[0]);
   frame.addEventListener("load", () => {
     updateOverlayPreview(frame, template[0]);

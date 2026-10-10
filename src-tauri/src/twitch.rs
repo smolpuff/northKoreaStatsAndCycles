@@ -1,15 +1,19 @@
 use crate::models::{GameResult, GameType, TwitchConfig};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{sync::Mutex, time::Duration};
 
 const CREDENTIAL_TARGET: &str = "MarblesStats/TwitchOAuth";
 const REQUIRED_SCOPE: &str = "user:write:chat";
 const MAX_CHAT_MESSAGE_CHARS: usize = 500;
+// Public refresh tokens rotate after one use. Serialize all credential writes.
+static CREDENTIAL_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct StoredTwitchCredential {
     access_token: String,
+    #[serde(default)]
+    refresh_token: String,
     client_id: String,
     pub user_id: String,
     pub login: String,
@@ -41,9 +45,11 @@ struct ChatDropReason {
 
 pub fn complete_authorization(
     access_token: String,
-    client_id: String,
+    refresh_token: String,
 ) -> Result<StoredTwitchCredential, String> {
-    if access_token.trim().is_empty() || client_id.trim().is_empty() {
+    let _guard = CREDENTIAL_LOCK.lock().map_err(|_| "Twitch credential storage unavailable")?;
+    let client_id = crate::twitch_oauth::CLIENT_ID.to_owned();
+    if access_token.trim().is_empty() || refresh_token.trim().is_empty() {
         return Err("Twitch authorization returned incomplete credentials".into());
     }
     let client = http_client()?;
@@ -51,6 +57,7 @@ pub fn complete_authorization(
     verify_authorization(&validation, &client_id)?;
     let credential = StoredTwitchCredential {
         access_token,
+        refresh_token,
         client_id,
         user_id: validation.user_id,
         login: validation.login,
@@ -60,21 +67,10 @@ pub fn complete_authorization(
 }
 
 #[cfg(windows)]
-pub fn open_authorization(desktop_id: &str) -> Result<(), String> {
+pub fn open_browser(address: &str) -> Result<(), String> {
     use std::{os::windows::ffi::OsStrExt, ptr};
     use windows_sys::Win32::{UI::Shell::ShellExecuteW, UI::WindowsAndMessaging::SW_SHOWNORMAL};
 
-    if desktop_id.is_empty()
-        || desktop_id.len() > 64
-        || !desktop_id
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
-    {
-        return Err("Invalid Twitch authorization request".into());
-    }
-
-    let address =
-        format!("http://localhost:8080/api/public/auth/twitch/start?next=%2F&desktop={desktop_id}");
     let address: Vec<u16> = std::ffi::OsStr::new(&address)
         .encode_wide()
         .chain(Some(0))
@@ -101,7 +97,7 @@ pub fn open_authorization(desktop_id: &str) -> Result<(), String> {
 }
 
 #[cfg(not(windows))]
-pub fn open_authorization(_desktop_id: &str) -> Result<(), String> {
+pub fn open_browser(_address: &str) -> Result<(), String> {
     Err("Twitch authorization is supported on Windows only".into())
 }
 
@@ -109,14 +105,36 @@ pub fn stored_identity() -> Option<String> {
     load_credential()
         .ok()
         .flatten()
+        .filter(|credential| credential.client_id == crate::twitch_oauth::CLIENT_ID)
         .map(|credential| credential.login)
 }
 
 pub fn validate_saved() -> Result<StoredTwitchCredential, String> {
+    let _guard = CREDENTIAL_LOCK.lock().map_err(|_| "Twitch credential storage unavailable")?;
     let mut credential = load_credential()?.ok_or("No Twitch account is connected")?;
+    if credential.client_id != crate::twitch_oauth::CLIENT_ID {
+        return Err("This Twitch login belongs to the previous test app; click Connect Twitch again".into());
+    }
     let client = http_client()?;
-    let validation = validate_access_token(&client, &credential.access_token)
-        .map_err(|_| "Twitch login expired; click Connect Twitch again".to_string())?;
+    let response = validation_response(&client, &credential.access_token)?;
+    let validation = if response.status().as_u16() == 401 {
+        if credential.refresh_token.is_empty() {
+            return Err("Twitch login expired; click Connect Twitch again".into());
+        }
+        let tokens = crate::twitch_oauth::refresh(&client, &credential.refresh_token)?;
+        if tokens.access_token.is_empty() || tokens.refresh_token.is_empty() {
+            return Err("Twitch returned incomplete login refresh credentials".into());
+        }
+        credential.access_token = tokens.access_token;
+        credential.refresh_token = tokens.refresh_token;
+        // The old refresh token is already consumed. Persist the rotated pair
+        // securely even if the following validation request loses connectivity.
+        // No caller receives these credentials until validation succeeds.
+        save_credential(&credential)?;
+        let validation = validate_access_token(&client, &credential.access_token)?;
+        verify_authorization(&validation, &credential.client_id)?;
+        validation
+    } else { parse_validation(response)? };
     verify_authorization(&validation, &credential.client_id)?;
     credential.user_id = validation.user_id;
     credential.login = validation.login;
@@ -125,6 +143,7 @@ pub fn validate_saved() -> Result<StoredTwitchCredential, String> {
 }
 
 pub fn disconnect() -> Result<(), String> {
+    let _guard = CREDENTIAL_LOCK.lock().map_err(|_| "Twitch credential storage unavailable")?;
     delete_credential()
 }
 
@@ -304,21 +323,30 @@ fn send_chat_message(credential: &StoredTwitchCredential, message: &str) -> Resu
     Ok(())
 }
 
-fn http_client() -> Result<Client, String> {
+pub(crate) fn http_client() -> Result<Client, String> {
     Client::builder()
         .connect_timeout(Duration::from_secs(8))
         .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
         .user_agent("MarblesStats/0.1")
         .build()
         .map_err(|error| format!("Unable to initialize Twitch connection: {error}"))
 }
 
 fn validate_access_token(client: &Client, access_token: &str) -> Result<TokenValidation, String> {
+    parse_validation(validation_response(client, access_token)?)
+}
+
+fn validation_response(client: &Client, access_token: &str) -> Result<reqwest::blocking::Response, String> {
     client
         .get("https://id.twitch.tv/oauth2/validate")
         .header("Authorization", format!("OAuth {access_token}"))
         .send()
-        .map_err(|error| format!("Unable to validate Twitch login: {error}"))?
+        .map_err(|_| "Unable to reach Twitch to validate login".into())
+}
+
+fn parse_validation(response: reqwest::blocking::Response) -> Result<TokenValidation, String> {
+    response
         .error_for_status()
         .map_err(|_| "Saved Twitch login has expired".to_string())?
         .json::<TokenValidation>()
@@ -613,7 +641,7 @@ mod tests {
                 Some(823),
                 "✨ {player} completed cycle #{cycle}! ✨"
             ),
-            "✨ rmrfkorea completed cycle #3! ✨ Only took 823 races for this cycle!"
+            "✨ rmrfkorea completed cycle #3! ✨"
         );
     }
 }

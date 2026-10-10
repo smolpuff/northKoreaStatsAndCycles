@@ -6,6 +6,7 @@ mod records;
 mod storage;
 mod streamer_bot;
 mod twitch;
+mod twitch_oauth;
 mod updater;
 
 use chrono::Utc;
@@ -1220,30 +1221,29 @@ async fn reread_last_file(app: tauri::AppHandle, runtime: State<'_, SharedRuntim
 }
 
 #[tauri::command]
-fn open_twitch_authorization(desktop_id: String) -> Result<(), String> {
-    twitch::open_authorization(&desktop_id)
-}
-
-#[tauri::command]
-async fn complete_twitch_oauth(
+async fn connect_twitch(
     app: tauri::AppHandle,
     runtime: State<'_, SharedRuntime>,
-    access_token: String,
-    client_id: String,
 ) -> Result<AppSnapshot, String> {
     let shared = runtime.inner().clone();
     {
         let mut rt = shared.lock().map_err(|_| "Application state unavailable")?;
+        if rt.snapshot.twitch_status == "Authorizing" {
+            return Err("Twitch sign-in is already open in your browser".into());
+        }
         rt.snapshot.twitch_status = "Authorizing".into();
         rt.snapshot.twitch_message = Some("Finishing Twitch authorization".into());
     }
     emit_snapshot(&shared, &app);
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        twitch::complete_authorization(access_token, client_id)
-    })
+    let auth_runtime = shared.clone();
+    let auth_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || twitch_oauth::authorize(|message| {
+        set_twitch_status(&auth_runtime, "Authorizing", Some(message.to_owned()), None);
+        emit_snapshot(&auth_runtime, &auth_app);
+    }))
     .await
-    .map_err(|error| format!("Twitch authorization task failed: {error}"))?;
+    .unwrap_or_else(|_| Err("Twitch authorization stopped. Try Connect Twitch again.".into()));
     match result {
         Ok(credential) => {
             set_twitch_status(
@@ -1893,8 +1893,7 @@ pub fn run() {
             reread_last_file,
             save_config,
             save_theme,
-            open_twitch_authorization,
-            complete_twitch_oauth,
+            connect_twitch,
             validate_twitch_session,
             disconnect_twitch,
             test_twitch_message,
