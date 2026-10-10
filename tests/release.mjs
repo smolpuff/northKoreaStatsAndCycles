@@ -49,6 +49,7 @@ try {
   try {
     console.log = text => { output += text; };
     runRelease(["--dry-run"]);
+    assert.throws(() => runRelease([]), /Write release notes/);
     assert.throws(() => runRelease(["--check", "--tag", "v9.9.9"]), /does not match/);
   } finally { console.log = originalLog; }
   assert(output.includes("nothing is written, committed, pushed or built locally"));

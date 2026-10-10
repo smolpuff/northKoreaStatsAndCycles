@@ -92,6 +92,7 @@ export function runRelease(args) {
     return;
   }
   const git = (...args) => execFileSync("git", args, { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+  if (!options.notes.length || options.notes.some(note => !note.trim())) throw new Error("Write release notes from CHANGELOG.md and supply --notes or --notes-file before publishing.");
   if (git("branch", "--show-current") !== "main") throw new Error("Run releases from main.");
   if (git("status", "--porcelain")) throw new Error("Commit your app changes first. Releases require a clean working tree, including untracked files.");
   const remote = git("remote", "get-url", "--push", "origin");
@@ -101,7 +102,8 @@ export function runRelease(args) {
   if (git("tag", "--list", release.tag)) throw new Error(`${release.tag} already exists.`);
   for (const [file, text] of Object.entries(release.changes)) fs.writeFileSync(path.join(projectRoot, file), text);
   git("add", "--", ...versionFiles);
-  git("commit", "-m", `Release ${release.tag}`);
+  git("commit", "-m", `Release ${release.tag}`, "-m",
+    `Synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n") || "See CHANGELOG.md for this version's changes."}\n\nGitHub builds and publishes the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
   git("tag", "-a", release.tag, "-m", `Marbles Stats ${release.tag}`);
   console.log(`Pushing ${release.tag}. No local build is performed.`);
   try {
