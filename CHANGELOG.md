@@ -9,7 +9,7 @@
 - Add npm run build:local for local Windows executable/installer testing without version changes, commits or publishing. Keep npm run dev for the existing live development flow.
 - Add an exact-version release option and use the Unreleased changelog as the default release notes. Normal releases increment the patch version; a release can select a minor bump or an explicit version.
 
-Validation: release-script checks are recorded in the preceding development commit. GitHub build/tests and download verification are pending. No application was compiled or launched locally.
+Validation: release-script checks used isolated local Git repositories to prove full-source promotion and atomic pushes, synchronized versions/notes/changelog, dry-run, dirty/wrong-branch/existing-tag guards, preservation of independent main commits, and failed-push recovery. The actual npm release command promoted beta to main and tagged 0.2.0. GitHub built the Windows executable/installer and passed Twitch Rust tests before publishing. The downloaded portable update matched the manifest's exact size and SHA-256 and was confirmed as Windows x64. Live updater installation remains a manual check. No application was compiled or launched locally.
 
 ## 0.1.2 - 2026-10-10
 
