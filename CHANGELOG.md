@@ -9,7 +9,8 @@
 - Added Default, Dark and I hate my retinas mode themes, animated sidebar collapse, consistent dialog animations and updated icons.
 - Added fully editable race-result messages, with prefilled one-line fields and a five-place preview. Twitch message accordions now start closed.
 - Added the fixed hourly Mission Manager promotion and an optional Streamer.bot promotion event. Promotion is the final separate Settings section; update controls sit with general options.
-- Settings toggles save immediately while retaining Save Settings. The smaller update check button, version and last-check time share one row, with the last-check time aligned right. Removed the update test button and corrected white overlay preview backgrounds.
+- Settings toggles save immediately while retaining Save Settings. The smaller update check button, version, check result and last-check time share one row, with the last-check time aligned right. Removed the update test button and corrected white overlay preview backgrounds.
+- Centered the expand button in the collapsed sidebar, added immediate button/status hover tooltips and removed the broken dashboard rocket animation. Set the default window to 900 x 760 and the minimum width to 900.
 - Improved inline error layouts, overlay templates, cycle displays and promotional artwork.
 
 Validation: TypeScript checks and focused JavaScript checks passed. GitHub release build and download verification are pending; the running app has not been compiled or launched locally.

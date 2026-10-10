@@ -701,8 +701,7 @@ function settingsPage(
       <div class="app-update-settings">
         ${startupToggle("auto-update-check", "download", "Check for app updates automatically", "Check after 24 hours open, then daily. You choose when to download and restart.", state.config.autoUpdateCheckEnabled ?? true)}
         <div class="app-update-controls">
-          <div class="app-update-check-row"><button type="button" class="compact-button" data-check-updates>Check for updates</button><span data-app-version></span><span data-update-last-checked>Last checked: Never</span></div>
-          <p data-update-message role="status" aria-live="polite"></p>
+          <div class="app-update-check-row"><button type="button" class="compact-button" data-check-updates>Check for updates</button><span data-app-version></span><span data-update-message role="status" aria-live="polite"></span><span data-update-last-checked>Last checked: Never</span></div>
         </div>
       </div>
   `;
@@ -1165,15 +1164,7 @@ function homePage(state: Snapshot, busy: boolean): string {
     </section>`;
   };
   return `<div class="home-page">
-    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("home", "header-home")}</i><div><h1 class="home-pew-heading">North Korea Stats <span class="home-missiles" aria-hidden="true"><svg class="home-missile-show" viewBox="0 0 76 58" fill="none">
-      <defs>
-      <clipPath id="home-launcher-exit" clipPathUnits="userSpaceOnUse"><rect x="-100000" y="-100000" width="200000" height="100000"/></clipPath>
-      <g id="home-ballistic-missile"><path d="M6 0C3 4 2 6 2 9h8c0-3-1-5-4-9Z" fill="#ff657f"/><path d="M2 9h8v16H2Z" fill="#dbe3f4"/><path d="m2 20-3 7h3m8-7 3 7h-3" fill="#8997b2"/><circle cx="6" cy="17" r="4" fill="#ffda19"/><text x="6" y="20" text-anchor="middle" font-size="8" fill="#15203a">&#9762;</text><path d="m3 26 3 9 3-9" fill="#ffb347"/><path d="m4 26 2 6 2-6" fill="#fff2a3"/></g></defs>
-      <g class="home-launcher">
-        <g transform="translate(49 11) rotate(56)"><g clip-path="url(#home-launcher-exit)"><g class="home-fired-missile"><use href="#home-ballistic-missile" transform="translate(-6 1)"/></g></g></g>
-        <image href="${new URL("./assets/assets/truck-header@2x.png", import.meta.url).href}" x="4" y="6" width="72" height="48" preserveAspectRatio="xMidYMid meet"/>
-      </g>
-    </svg></span></h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
+    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("home", "header-home")}</i><div><h1>North Korea Stats</h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
     <div class="home-watchers">${watcherCard("stats", "RaceStats", "raceFlag", state.config.seasons.raceName)}${watcherCard("cycles", "RaceCycles", "repeatOnce", state.config.seasons.cycleName)}</div>
     <div class="home-results">
       <section class="panel"><header><div class="home-card-heading"><i>${icons.crown}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">

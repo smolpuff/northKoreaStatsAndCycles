@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "Marbles Stats",
-        "width": 1120,
+        "width": 900,
         "height": 760,
-        "minWidth": 1120,
+        "minWidth": 900,
         "minHeight": 560,
         "backgroundColor": "#040812"
       }

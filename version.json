@@ -2,9 +2,9 @@
   "version": "0.1.1",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Added verified app updates with download cancellation, installation, restart and recovery backup.",
-    "Settings toggles now save immediately; Save Settings remains. The smaller update button, version and last-check time share one row.",
-    "Added themes, configurable Twitch race messages, hourly Mission Manager promotion and its Streamer.bot event.",
-    "Improved dialogs, icons, errors and overlays; Twitch accordions start closed and overlay previews retain transparent backgrounds."
+    "Initial",
+    "Settings toggles save immediately and Save Settings remains. Update controls, version, result and last-check time share one compact row.",
+    null,
+    "Improved dialogs, icons, errors and overlays; fixed the collapsed sidebar with hover tooltips, removed the rocket animation, and set the default/minimum width to 900."
   ]
 }

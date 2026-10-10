@@ -25,6 +25,7 @@ import { installIntegrationHelp } from "./integration-help";
 import { openOverlayVariables } from "./overlay-help";
 import { openEventVariables } from "./streamer-events";
 import { openOverlayPreview, installOverlayPreviewSizing } from "./overlay-view";
+import { hideSidebarTooltip, installSidebarTooltips } from "./sidebar-tooltips";
 
 import { overlayOptions, optionsFor, updateOverlayPreview, installOverlayCustomization, type OverlayName, type OverlayOptions } from "./overlay-options";
 
@@ -178,6 +179,7 @@ function syncFeatureSections(): void {
 const homeButtonTransitions = new Map<string, { started: number; background: string; border: string; shadow: string; color: string }>();
 
 function renderMainWindow(): void {
+  hideSidebarTooltip();
   const animateHome = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (animateHome) {
     root.querySelectorAll<HTMLButtonElement>(".home-watch-button").forEach(button => {
@@ -210,6 +212,7 @@ function renderMainWindow(): void {
     sidebarToggle.setAttribute("aria-label", label);
     sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
     sidebarToggle.addEventListener("click", () => {
+      hideSidebarTooltip();
       sidebarCollapsed = !sidebarCollapsed;
       localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
       root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
@@ -847,6 +850,7 @@ async function initialize(): Promise<void> {
 
 // Paint the complete application immediately. Backend hydration happens after
 // the user can already see and resize the window.
+installSidebarTooltips(() => sidebarCollapsed);
 render();
 
 initialize().catch((error) => {

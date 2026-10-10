@@ -5021,9 +5021,10 @@ dialog[open].dialog-closing::backdrop {
 
 .app-update-controls { margin-left: 44px; padding-bottom: 16px; }
 .app-update-check-row { display: flex; align-items: center; gap: 10px; }
-.app-update-check-row [data-update-last-checked] { margin-left: auto; color: var(--reference-secondary); font-size: 12px; }
-.app-update-check-row [data-app-version] { font-size: 12px; }
-.integration-page-layout .app-update-controls [data-check-updates] { width: auto; height: 26px; min-height: 26px; padding: 0 8px; font-size: 11px; line-height: 18px; }
+.app-update-check-row [data-update-last-checked] { margin-left: auto; flex: none; white-space: nowrap; color: var(--reference-secondary); font-size: 12px; }
+.app-update-check-row [data-app-version] { flex: none; white-space: nowrap; font-size: 12px; }
+.app-update-check-row [data-update-message] { min-width: 0; font-size: 12px; color: var(--reference-secondary); overflow-wrap: anywhere; }
+.integration-page-layout .app-update-controls [data-check-updates] { flex: none; width: auto; height: 26px; min-height: 26px; padding: 0 8px; font-size: 11px; line-height: 18px; }
 .settings-autosave-status { margin: 0; font-size: 12px; color: var(--reference-secondary); }
 .settings-autosave-status:empty { display: none; }
 .app-update-controls p { margin: 10px 0 0; font-size: 13px; color: var(--reference-secondary); }
@@ -5182,19 +5183,6 @@ dialog[open].dialog-closing::backdrop {
 .overlay-auto-height output { display: flex; align-items: center; height: 28px; font-size: 12px; color: var(--reference-secondary); }
 @media (max-width: 800px) { .overlay-options-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; } .overlay-color-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.home-pew-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
-.home-missiles { display: inline-flex; flex: none; align-items: center; }
-.home-missile-show { display: block; width: 76px; height: 58px; overflow: visible; }
-.home-fired-missile { animation: home-missile-fire 3.2s ease-in infinite; }
-@keyframes home-missile-fire {
-  0% { transform: translateY(0); opacity: 0; }
-  15%, 25% { transform: translateY(0); opacity: 1; }
-  55% { transform: translateY(-90px); opacity: 1; }
-  85% { transform: translateY(-140vh); opacity: 1; }
-  86%, 100% { transform: translateY(-140vh); opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) { .home-fired-missile { animation: none; } }
-
 .home-koreajongil {
   position: fixed;
   opacity: 1;
@@ -5222,7 +5210,7 @@ dialog[open].dialog-closing::backdrop {
 .home-page { position: relative; z-index: 0; }
 .home-page > :not(.home-koreajongil) { position: relative; z-index: 1; }
 
-/* Decorative artwork stays inside the viewport, including flying missiles. */
+/* Decorative artwork stays inside the viewport. */
 .content:has(.home-page) { overflow-x: hidden; }
 
 .home-page .panel {
@@ -5245,6 +5233,7 @@ dialog[open].dialog-closing::backdrop {
 .sidebar-heading { display: flex; align-items: center; justify-content: space-between; margin: 8px 10px 4px; color: var(--reference-secondary); font-size: 11px; text-transform: uppercase; }
 .sidebar-collapse-button { display: flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; color: var(--reference-secondary); background: transparent; cursor: pointer; }
 .sidebar-collapse-button:hover { color: var(--reference-ink); background: #ffffff0b; }
+.sidebar-tooltip { position: fixed; z-index: 1000; max-width: 320px; padding: 6px 9px; border: 1px solid var(--reference-border); border-radius: 4px; background: var(--dropdown-background, #10172d); color: var(--reference-ink); font-size: 12px; line-height: 18px; box-shadow: 0 3px 10px #0004; pointer-events: none; overflow-wrap: anywhere; }
 .sidebar-collapse-button svg { width: 18px; height: 18px; transition: transform 280ms ease; }
 .sidebar { min-width: 0; }
 .sidebar nav { min-width: 0; transition: padding 280ms ease; }
@@ -5257,7 +5246,9 @@ dialog[open].dialog-closing::backdrop {
 .sidebar-status-icon { display: none; }
 .app-shell.sidebar-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
 .sidebar-collapsed .sidebar nav { padding: 16px 8px; }
-.sidebar-collapsed .sidebar-heading { margin: 8px 10px 4px; }
+.sidebar-collapsed .sidebar-heading { margin: 8px 0 4px; justify-content: center; }
+.sidebar-heading > span { max-width: 120px; transition: max-width 280ms ease, opacity 180ms ease; }
+.sidebar-collapsed .sidebar-heading > span { max-width: 0; width: 0; flex: 0 0 0; }
 .sidebar-heading > span { min-width: 0; }
 .sidebar-collapsed .sidebar-heading > span,
 .sidebar-collapsed .sidebar nav > span,
