@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-10
+
 - Set both the default and minimum window width to 1000 pixels.
 - Move development to the beta branch. The release command promotes the full committed project to main, synchronizes all six version files, commits release notes, tags and atomically pushes both branches for GitHub to build and publish.
 - Add npm run build:local for local Windows executable/installer testing without version changes, commits or publishing. Keep npm run dev for the existing live development flow.
 - Add an exact-version release option and use the Unreleased changelog as the default release notes. Normal releases increment the patch version; a release can select a minor bump or an explicit version.
 
-Validation: tested the script against isolated local Git repositories for actual full-source promotion and atomic branch/tag pushes, all version files, notes/changelog, exact and patch versions, dry-run, dirty/wrong-branch/existing-tag protection, preservation of independent main commits, and failed-push recovery. JavaScript syntax and version consistency checks passed. No application was built or launched locally.
+Validation: release-script checks are recorded in the preceding development commit. GitHub build/tests and download verification are pending. No application was compiled or launched locally.
 
 ## 0.1.2 - 2026-10-10
 
