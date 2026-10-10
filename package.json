@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
-    "build:local": "tauri build",
+    "build": "tauri build --no-bundle",
+    "build:local": "tauri build --no-bundle",
     "release": "node scripts/release.mjs",
     "release:check": "node scripts/release.mjs --check",
     "frontend:dev": "vite",

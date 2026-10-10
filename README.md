@@ -14,7 +14,9 @@ Stats are stored locally in JSON. Twitch and Streamer.bot are optional.
 
 Settings includes the app version, automatic update checks and a manual **Check for updates** button. Updates verify the download before replacing the executable and restarting.
 
-Develop and commit the complete project on `dev`. Run `npm run build:local` for a local Windows executable and installer; it does not change versions or publish anything. Run `npm run release` to increment the patch version, promote dev to `main`, synchronize all version files, commit/tag/push both branches and let GitHub build and publish. Release notes come from your local Unreleased changelog or explicit `--notes` / `--notes-file` arguments; a fresh clone needs explicit notes because working documentation is kept out of Git. The checkout stays on dev. Preview with `npm.cmd --% run release -- --dry-run`; choose a specific release with `npm.cmd --% run release -- --version 0.2.0`. The release command never builds or launches locally.
+Download `marbles-stats.exe` from the latest GitHub release and run it. This is the single application download; no installer is needed. The accompanying `desktop-update.json` is metadata used automatically by the app's updater.
+
+Develop and commit the complete project on `dev`. Run `npm run build:local` for a local Windows executable; it does not change versions or publish anything. Run `npm run release` to increment the patch version, promote dev to `main`, synchronize all version files, commit/tag/push both branches and let GitHub build and publish. Release notes come from your local Unreleased changelog or explicit `--notes` / `--notes-file` arguments; a fresh clone needs explicit notes because working documentation is kept out of Git. The checkout stays on dev. Preview with `npm.cmd --% run release -- --dry-run`; choose a specific release with `npm.cmd --% run release -- --version 0.2.0`. The release command never builds or launches locally.
 
 Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
 
@@ -91,7 +93,6 @@ Build output:
 
 ```text
 src-tauri/target/release/marbles-stats.exe
-src-tauri/target/release/bundle/nsis/
 ```
 
 ### Checks

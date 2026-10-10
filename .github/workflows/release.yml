@@ -70,7 +70,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Windows application and installer
+      - name: Build Windows application
         run: npm.cmd --% run build -- --ci --target x86_64-pc-windows-msvc
 
       - name: Check Twitch authorization and chat behavior before publishing
@@ -81,16 +81,13 @@ jobs:
         run: |
           $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
           $binary = "src-tauri/target/x86_64-pc-windows-msvc/release/marbles-stats.exe"
-          $installers = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter *.exe)
-          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS installer" }
           New-Item -ItemType Directory -Path release-assets -Force | Out-Null
           Copy-Item -LiteralPath $binary -Destination release-assets/marbles-stats.exe
-          Copy-Item -LiteralPath $installers[0].FullName -Destination "release-assets/Marbles-Stats-$version-x64-setup.exe"
           node scripts/create-update-manifest.mjs release-assets/marbles-stats.exe release-assets/desktop-update.json
           if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed" }
           $metadata = Get-Content version.json -Raw | ConvertFrom-Json
           $notes = @($metadata.notes) | Where-Object { $_ -and $_.Trim() } | ForEach-Object { "- $_" }
-          $body = "## Marbles Stats $env:RELEASE_TAG`n`n" + ($notes -join "`n") + "`n`nWindows x64. Use the setup EXE for installation, or marbles-stats.exe for a portable copy. Existing installs use desktop-update.json for automatic updates.`n"
+          $body = "## Marbles Stats $env:RELEASE_TAG`n`n" + ($notes -join "`n") + "`n`nWindows x64. Download marbles-stats.exe and run it. This is the only application download; no separate installer is needed. desktop-update.json is used automatically by the in-app updater.`n"
           Set-Content release-assets/release-notes.md -Value $body -Encoding utf8
 
       - name: Keep build artifacts for recovery
@@ -117,7 +114,7 @@ jobs:
           fail_on_unmatched_files: true
           overwrite_files: true
           files: |
-            release-assets/*.exe
+            release-assets/marbles-stats.exe
             release-assets/desktop-update.json
 
       - name: Publish only after all downloads are uploaded

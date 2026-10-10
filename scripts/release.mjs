@@ -146,7 +146,7 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   if (changelog !== undefined) fs.writeFileSync(changelogPath, changelog);
   git("add", "--", ...versionFiles);
   git("commit", "-m", `Release ${release.tag}`, "-m",
-    `Promote the complete ${developmentBranch} project to main and synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n")}\n\nKeep changelog and working documentation local; publish user-facing notes through version.json and GitHub. GitHub builds and tests before publishing the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
+    `Promote the complete ${developmentBranch} project to main and synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n")}\n\nKeep changelog and working documentation local; publish user-facing notes through version.json and GitHub. GitHub builds and tests before publishing one Windows executable and its verified updater manifest. No local app build is performed.`);
   git("tag", "-a", release.tag, "-m", `Marbles Stats ${release.tag}`);
   console.log(`Pushing ${release.tag}. No local build is performed.`);
   try {
