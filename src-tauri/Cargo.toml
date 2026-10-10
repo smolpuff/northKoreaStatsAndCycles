@@ -1,6 +1,6 @@
 [package]
 name = "marbles-stats"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local Marbles on Stream statistics tool"
 authors = ["Marbles Stats"]
 edition = "2021"

@@ -1,10 +1,10 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Initial",
-    "Settings toggles save immediately and Save Settings remains. Update controls, version, result and last-check time share one compact row.",
-    null,
-    "Improved dialogs, icons, errors and overlays; fixed the collapsed sidebar with hover tooltips, removed the rocket animation, and set the default/minimum width to 900."
+    "Twitch now uses this app's own registration, with browser sign-in, clear code instructions and automatic login renewal. No .env.local or client secret is required.",
+    "Fixed hover animations and Open preview playback across all overlay templates; previews keep playing during status updates and celebrations replay reliably.",
+    "Increased the default window width to 1000 pixels while retaining the 900-pixel minimum.",
+    "Reviewed credentials, authentication and updater security; excluded local test helpers and added Twitch checks before release publication."
   ]
 }
