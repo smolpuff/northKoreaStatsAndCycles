@@ -12,7 +12,6 @@ interface UpdateInfo {
 }
 interface UpdateStatus { phase: string; percent?: number; error?: string }
 const day = 24 * 60 * 60 * 1000;
-const openedAt = Date.now();
 let currentVersion = "";
 let lastChecked = 0;
 let lastAttempt = 0;
@@ -32,7 +31,7 @@ function scheduleBackground(): void {
   backgroundTimer = undefined;
   enabledPreviously = automaticEnabled();
   if (!initialized || !enabledPreviously) return;
-  const due = Math.max(openedAt + day, lastAttempt ? lastAttempt + day : openedAt + day);
+  const due = lastAttempt ? lastAttempt + day : Date.now();
   backgroundTimer = window.setTimeout(() => void check(false), Math.max(1000, due - Date.now()));
 }
 
@@ -234,5 +233,7 @@ export async function initializeUpdates(isEnabled = () => true): Promise<void> {
   message = info.recovery ?? "";
   refreshSettings();
   initialized = true;
-  scheduleBackground();
+  enabledPreviously = automaticEnabled();
+  if (enabledPreviously) await check(false);
+  else scheduleBackground();
 }

@@ -699,7 +699,7 @@ function settingsPage(
   `;
   const updateSettings = `
       <div class="app-update-settings">
-        ${startupToggle("auto-update-check", "download", "Check for app updates automatically", "Check after 24 hours open, then daily. You choose when to download and restart.", state.config.autoUpdateCheckEnabled ?? true)}
+        ${startupToggle("auto-update-check", "download", "Check for app updates automatically", "Check when the app opens, then daily. You choose when to download and restart.", state.config.autoUpdateCheckEnabled ?? true)}
         <div class="app-update-controls">
           <div class="app-update-check-row"><button type="button" class="compact-button" data-check-updates>Check for updates</button><span data-app-version></span><span data-update-message role="status" aria-live="polite"></span><span data-update-last-checked>Last checked: Never</span></div>
         </div>
