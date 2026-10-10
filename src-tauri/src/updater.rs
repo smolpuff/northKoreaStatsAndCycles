@@ -150,7 +150,7 @@ pub fn check(current: String, enabled: bool) -> Result<UpdateInfo, String> {
     let available = version_parts(&metadata.version)? > version_parts(&current)?;
     if available {
         // main/version.json is pushed before CI finishes. Draft downloads are
-        // private, so require the tagged manifest before offering installation.
+        // private, so require the repo metadata published after the download.
         let manifest = release_manifest(&metadata.version)
             .map_err(|error| format!("Release v{} is not ready to download yet; GitHub may still be building it. {error}", metadata.version))?;
         let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
@@ -177,7 +177,7 @@ pub fn check(current: String, enabled: bool) -> Result<UpdateInfo, String> {
 }
 fn release_manifest(version: &str) -> Result<Manifest, String> {
     version_parts(version)?;
-    let url = format!("https://github.com/{REPOSITORY}/releases/download/v{version}/desktop-update.json");
+    let url = format!("https://raw.githubusercontent.com/{REPOSITORY}/main/updates/v{version}.json");
     let manifest: Manifest = read_json(&client(Duration::from_secs(8))?, &url)?;
     if manifest.schema_version != 1 || manifest.version != version {
         return Err("Update metadata does not match the offered version".into());

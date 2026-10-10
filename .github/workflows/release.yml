@@ -38,6 +38,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -83,11 +84,11 @@ jobs:
           $binary = "src-tauri/target/x86_64-pc-windows-msvc/release/marbles-stats.exe"
           New-Item -ItemType Directory -Path release-assets -Force | Out-Null
           Copy-Item -LiteralPath $binary -Destination release-assets/marbles-stats.exe
-          node scripts/create-update-manifest.mjs release-assets/marbles-stats.exe release-assets/desktop-update.json
+          node scripts/create-update-manifest.mjs release-assets/marbles-stats.exe "release-assets/v$version.json"
           if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed" }
           $metadata = Get-Content version.json -Raw | ConvertFrom-Json
           $notes = @($metadata.notes) | Where-Object { $_ -and $_.Trim() } | ForEach-Object { "- $_" }
-          $body = "## Marbles Stats $env:RELEASE_TAG`n`n" + ($notes -join "`n") + "`n`nWindows x64. Download marbles-stats.exe and run it. This is the only application download; no separate installer is needed. desktop-update.json is used automatically by the in-app updater.`n"
+          $body = "## Marbles Stats $env:RELEASE_TAG`n`n" + ($notes -join "`n") + "`n`nWindows x64. Download marbles-stats.exe and run it. This is the only application download; no separate installer is needed. Update metadata is stored in the repository.`n"
           Set-Content release-assets/release-notes.md -Value $body -Encoding utf8
 
       - name: Keep build artifacts for recovery
@@ -115,7 +116,42 @@ jobs:
           overwrite_files: true
           files: |
             release-assets/marbles-stats.exe
-            release-assets/desktop-update.json
 
       - name: Publish only after all downloads are uploaded
-        run: gh release edit "$env:RELEASE_TAG" --draft=false --latest
+        run: |
+          gh release edit "$env:RELEASE_TAG" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed; repository update metadata will not be published" }
+
+      - name: Publish verified download metadata in the repository
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
+          $manifest = [IO.Path]::GetFullPath("release-assets/v$version.json")
+          # A separate checkout preserves the build tree. Merge current branch
+          # tips and push atomically: never overwrite concurrent development.
+          git fetch origin +refs/heads/main:refs/remotes/origin/main +refs/heads/dev:refs/remotes/origin/dev
+          if ($LASTEXITCODE -ne 0) { throw "Cannot fetch current branches" }
+          git worktree add --detach metadata-publish origin/main
+          if ($LASTEXITCODE -ne 0) { throw "Cannot create metadata checkout" }
+          Push-Location metadata-publish
+          try {
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            New-Item -ItemType Directory -Path updates -Force | Out-Null
+            Copy-Item -LiteralPath $manifest -Destination "updates/v$version.json"
+            git add -- "updates/v$version.json"
+            if ($LASTEXITCODE -ne 0) { throw "Cannot stage updater metadata" }
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 1) {
+              git commit -m "Publish verified update metadata for v$version" -m 'Store the exact release EXE URL, byte size and SHA-256 in the repository after the download is public. Release downloads contain only the application.'
+              if ($LASTEXITCODE -ne 0) { throw "Cannot commit updater metadata" }
+            } elseif ($LASTEXITCODE -ne 0) { throw "Cannot inspect metadata changes" }
+            $mainCommit = git rev-parse HEAD
+            git checkout --detach origin/dev
+            if ($LASTEXITCODE -ne 0) { throw "Cannot check out development branch" }
+            git merge --no-edit $mainCommit
+            if ($LASTEXITCODE -ne 0) { throw "Merge current main into dev before retrying metadata publication; no remote branch was changed" }
+            git push --atomic origin "${mainCommit}:refs/heads/main" HEAD:refs/heads/dev
+            if ($LASTEXITCODE -ne 0) { throw "Branches changed during publication. Retry this step; no branch was overwritten" }
+          } finally { Pop-Location }

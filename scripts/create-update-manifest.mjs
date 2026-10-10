@@ -34,8 +34,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     throw new Error("Set the same version in version.json, package.json, Cargo.toml and tauri.conf.json before publishing.");
   }
   const exe = path.resolve(process.argv[2] ?? path.join(root, "src-tauri/target/release/marbles-stats.exe"));
-  const output = path.resolve(process.argv[3] ?? path.join(path.dirname(exe), "desktop-update.json"));
+  const output = path.resolve(process.argv[3] ?? path.join(root, "updates", `v${version}.json`));
   const manifest = createManifest(fs.readFileSync(exe), version, path.basename(exe));
+  fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(manifest, null, 2) + "\n");
-  console.log(`Created ${output} for v${version}. Upload it and ${path.basename(exe)} to release v${version}.`);
+  console.log(`Created ${output} for v${version}. Publish this metadata in the repo after uploading ${path.basename(exe)} to release v${version}.`);
 }
