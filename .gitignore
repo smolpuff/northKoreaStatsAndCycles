@@ -62,6 +62,12 @@ Desktop.ini
 /styles.css
 
 # Local development notes; README and app help remain included
+/AGENTS.md
+/CHANGELOG.md
+/SECURITY-REVIEW.md
+/security-review.mf
+/UPDATES.md
+/output/marketing/
 /plan.md
 /marbles-stats-remaining-plan.md
 /MARBLES-STATS-UNIFIED-DESIGN-SYSTEM.md

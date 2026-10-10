@@ -25,6 +25,7 @@ function newerVersion(candidate, previous) {
 }
 
 export function unreleasedNotes(root = projectRoot) {
+  if (!fs.existsSync(path.join(root, "CHANGELOG.md"))) return [];
   const text = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
   const section = text.match(/^## Unreleased\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)?.[1] ?? "";
   return section.split(/\r?\n/).filter(line => /^-\s+/.test(line)).map(line => line.replace(/^-\s+/, "").trim()).filter(Boolean);
@@ -121,11 +122,11 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   if (!options.notes.length) options.notes = unreleasedNotes(root);
   const release = prepareRelease(root, options.bump, options.notes, options.version);
   if (options.dryRun) {
-    console.log(`Dry run: ${release.previous} -> ${release.version}. Would promote the complete ${developmentBranch} project to main, update ${versionFiles.join(", ")} and CHANGELOG.md, commit, tag ${release.tag}, and atomically push ${developmentBranch} + main + tag to ${repository}. GitHub builds and publishes; nothing is written, committed, pushed or built locally.`);
+    console.log(`Dry run: ${release.previous} -> ${release.version}. Would promote the complete ${developmentBranch} project to main, update ${versionFiles.join(", ")} and the local changelog if present, commit version files, tag ${release.tag}, and atomically push ${developmentBranch} + main + tag to ${repository}. GitHub builds and publishes; nothing is written, committed, pushed or built locally.`);
     return;
   }
   const git = gitRunner ?? ((...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim());
-  if (!options.notes.length || options.notes.some(note => !note.trim())) throw new Error("Write release notes from CHANGELOG.md and supply --notes or --notes-file before publishing.");
+  if (!options.notes.length || options.notes.some(note => !note.trim())) throw new Error("Add notes to your local CHANGELOG.md, or supply --notes / --notes-file before publishing. Local documentation is not included in Git.");
   if (git("branch", "--show-current") !== developmentBranch) throw new Error(`Run releases from ${developmentBranch}. Main is only updated by a release.`);
   if (git("status", "--porcelain")) throw new Error("Commit your app changes first. Releases require a clean working tree, including untracked files.");
   const remote = git("remote", "get-url", "--push", "origin");
@@ -139,12 +140,13 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   const mainVersion = normalizeVersion(JSON.parse(git("show", "origin/main:version.json")).version);
   if (!newerVersion(release.version, mainVersion)) throw new Error(`Release must be newer than main's ${mainVersion}.`);
   if (git("tag", "--list", release.tag)) throw new Error(`${release.tag} already exists.`);
-  const changelog = releaseChangelog(fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), release.version, options.notes);
+  const changelogPath = path.join(root, "CHANGELOG.md");
+  const changelog = fs.existsSync(changelogPath) ? releaseChangelog(fs.readFileSync(changelogPath, "utf8"), release.version, options.notes) : undefined;
   for (const [file, text] of Object.entries(release.changes)) fs.writeFileSync(path.join(root, file), text);
-  fs.writeFileSync(path.join(root, "CHANGELOG.md"), changelog);
-  git("add", "--", ...versionFiles, "CHANGELOG.md");
+  if (changelog !== undefined) fs.writeFileSync(changelogPath, changelog);
+  git("add", "--", ...versionFiles);
   git("commit", "-m", `Release ${release.tag}`, "-m",
-    `Promote the complete ${developmentBranch} project to main and synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n")}\n\nMove Unreleased notes into CHANGELOG.md. GitHub builds and tests before publishing the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
+    `Promote the complete ${developmentBranch} project to main and synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n")}\n\nKeep changelog and working documentation local; publish user-facing notes through version.json and GitHub. GitHub builds and tests before publishing the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
   git("tag", "-a", release.tag, "-m", `Marbles Stats ${release.tag}`);
   console.log(`Pushing ${release.tag}. No local build is performed.`);
   try {
