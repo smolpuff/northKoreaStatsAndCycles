@@ -1,5 +1,8 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
-  "notes": []
+  "notes": [
+    "Test release: desktop update download, verification, installation and restart.",
+    "Settings, themes, customizable Twitch results, mission promotion and overlay improvements."
+  ]
 }
