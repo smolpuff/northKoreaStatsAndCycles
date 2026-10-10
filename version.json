@@ -1,10 +1,7 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.2",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Use repository-hosted update metadata for version checks and verified downloads, with download and restart handled by the app.",
-    "Publish one Windows download: marbles-stats.exe. Remove the separate installer and updater JSON from release attachments.",
-    "Keep development on dev and publish releases from main with synchronized version files and automatic GitHub builds.",
-    "Keep working notes, security reviews and marketing images local; simplify the public README."
+    "Check for application updates immediately on startup when automatic updates are enabled, then daily while the app stays open. Enabling automatic checks also schedules a prompt check if none has run. Update the settings description to match."
   ]
 }
