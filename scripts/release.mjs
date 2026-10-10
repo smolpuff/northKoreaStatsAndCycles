@@ -7,6 +7,36 @@ import { repository } from "./create-update-manifest.mjs";
 export const versionFiles = ["package.json", "package-lock.json", "version.json", "src-tauri/tauri.conf.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"];
 const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const semver = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+export const developmentBranch = "beta";
+
+export function normalizeVersion(value) {
+  const version = /^\d+\.\d+$/.test(value) ? `${value}.0` : value;
+  if (!semver.test(version) || !version.split(".").map(Number).every(Number.isSafeInteger)) throw new Error("Version must be major.minor.patch (or major.minor) with safe integer parts.");
+  return version;
+}
+
+function newerVersion(candidate, previous) {
+  const next = candidate.split(".").map(Number);
+  const old = previous.split(".").map(Number);
+  for (let index = 0; index < 3; index++) {
+    if (next[index] !== old[index]) return next[index] > old[index];
+  }
+  return false;
+}
+
+export function unreleasedNotes(root = projectRoot) {
+  const text = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+  const section = text.match(/^## Unreleased\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)?.[1] ?? "";
+  return section.split(/\r?\n/).filter(line => /^-\s+/.test(line)).map(line => line.replace(/^-\s+/, "").trim()).filter(Boolean);
+}
+
+export function releaseChangelog(text, version, notes, date = new Date()) {
+  const heading = /^## Unreleased[^\r\n]*\r?\n[\s\S]*?(?=^## |$(?![\s\S]))/m;
+  if (!heading.test(text)) throw new Error("CHANGELOG.md must have an Unreleased section.");
+  if (text.includes(`## ${version} -`)) throw new Error(`CHANGELOG.md already contains ${version}.`);
+  const day = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+  return text.replace(heading, `## Unreleased\n\n## ${version} - ${day}\n\n${notes.map(note => `- ${note}`).join("\n")}\n\nValidation: release-script checks are recorded in the preceding development commit. GitHub build/tests and download verification are pending. No application was compiled or launched locally.\n\n`);
+}
 
 export function bumpVersion(version, kind = "patch") {
   if (!semver.test(version)) throw new Error("Version must be major.minor.patch.");
@@ -40,9 +70,10 @@ export function readVersions(root = projectRoot) {
   return { version, contents };
 }
 
-export function prepareRelease(root = projectRoot, kind = "patch", notes = []) {
+export function prepareRelease(root = projectRoot, kind = "patch", notes = [], exactVersion) {
   const { version: previous, contents } = readVersions(root);
-  const version = bumpVersion(previous, kind);
+  const version = exactVersion ? normalizeVersion(exactVersion) : bumpVersion(previous, kind);
+  if (!newerVersion(version, previous)) throw new Error(`Release ${version} must be newer than ${previous}.`);
   const changes = {};
   for (const file of versionFiles.filter(file => file.endsWith(".json"))) {
     const data = JSON.parse(contents[file]);
@@ -61,56 +92,71 @@ export function prepareRelease(root = projectRoot, kind = "patch", notes = []) {
 }
 
 function parseArgs(args) {
-  const options = { bump: "patch", notes: [], dryRun: false, check: false, tag: undefined };
+  const options = { bump: "patch", notes: [], dryRun: false, check: false, tag: undefined, version: undefined };
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--check") options.check = true;
-    else if (["--bump", "--notes", "--notes-file", "--tag"].includes(arg)) {
+    else if (["--bump", "--version", "--notes", "--notes-file", "--tag"].includes(arg)) {
       const value = args[++index];
       if (!value || value.startsWith("--")) throw new Error(`Missing value for ${arg}.`);
       if (arg === "--bump") options.bump = value;
+      if (arg === "--version") options.version = normalizeVersion(value);
       if (arg === "--tag") options.tag = value;
       if (arg === "--notes") options.notes.push(value);
       if (arg === "--notes-file") options.notes.push(...fs.readFileSync(value, "utf8").split(/\r?\n/).map(line => line.trim()).filter(Boolean));
-    } else throw new Error(`Unknown option ${arg}. Use --bump patch|minor|major, --notes, --notes-file or --dry-run.`);
+    } else throw new Error(`Unknown option ${arg}. Use --version, --bump patch|minor|major, --notes, --notes-file or --dry-run.`);
   }
   return options;
 }
 
-export function runRelease(args) {
+export function runRelease(args, root = projectRoot, gitRunner) {
   const options = parseArgs(args);
   if (options.check) {
-    const { version } = readVersions();
+    const { version } = readVersions(root);
     if (options.tag && options.tag !== `v${version}`) throw new Error(`Tag ${options.tag} does not match v${version}.`);
     console.log(`Version files agree: v${version}`);
     return;
   }
-  const release = prepareRelease(projectRoot, options.bump, options.notes);
+  if (!options.notes.length) options.notes = unreleasedNotes(root);
+  const release = prepareRelease(root, options.bump, options.notes, options.version);
   if (options.dryRun) {
-    console.log(`Dry run: ${release.previous} -> ${release.version}. Would update ${versionFiles.join(", ")}, commit, tag ${release.tag}, and atomically push main + tag to ${repository}. GitHub builds and publishes; nothing is written, committed, pushed or built locally.`);
+    console.log(`Dry run: ${release.previous} -> ${release.version}. Would promote the complete ${developmentBranch} project to main, update ${versionFiles.join(", ")} and CHANGELOG.md, commit, tag ${release.tag}, and atomically push ${developmentBranch} + main + tag to ${repository}. GitHub builds and publishes; nothing is written, committed, pushed or built locally.`);
     return;
   }
-  const git = (...args) => execFileSync("git", args, { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim();
+  const git = gitRunner ?? ((...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }).trim());
   if (!options.notes.length || options.notes.some(note => !note.trim())) throw new Error("Write release notes from CHANGELOG.md and supply --notes or --notes-file before publishing.");
-  if (git("branch", "--show-current") !== "main") throw new Error("Run releases from main.");
+  if (git("branch", "--show-current") !== developmentBranch) throw new Error(`Run releases from ${developmentBranch}. Main is only updated by a release.`);
   if (git("status", "--porcelain")) throw new Error("Commit your app changes first. Releases require a clean working tree, including untracked files.");
   const remote = git("remote", "get-url", "--push", "origin");
   if (![ `https://github.com/${repository}.git`, `https://github.com/${repository}`, `git@github.com:${repository}.git`, `ssh://git@github.com/${repository}.git` ].includes(remote)) throw new Error(`origin must point to ${repository}.`);
-  git("fetch", "origin", "main", "--tags");
-  if (git("merge-base", "HEAD", "FETCH_HEAD") !== git("rev-parse", "FETCH_HEAD")) throw new Error("Remote main has changes you have not incorporated. Pull/rebase before releasing.");
+  git("fetch", "origin", "+refs/heads/main:refs/remotes/origin/main", `+refs/heads/${developmentBranch}:refs/remotes/origin/${developmentBranch}`, "--tags");
+  const remoteMain = git("rev-parse", "origin/main");
+  const remoteDevelopment = git("rev-parse", `origin/${developmentBranch}`);
+  for (const [branch, commit] of [["main", remoteMain], [developmentBranch, remoteDevelopment]]) {
+    if (git("merge-base", "HEAD", commit) !== commit) throw new Error(`Remote ${branch} has changes missing from ${developmentBranch}. Merge them before releasing; nothing will be overwritten.`);
+  }
+  const mainVersion = normalizeVersion(JSON.parse(git("show", "origin/main:version.json")).version);
+  if (!newerVersion(release.version, mainVersion)) throw new Error(`Release must be newer than main's ${mainVersion}.`);
   if (git("tag", "--list", release.tag)) throw new Error(`${release.tag} already exists.`);
-  for (const [file, text] of Object.entries(release.changes)) fs.writeFileSync(path.join(projectRoot, file), text);
-  git("add", "--", ...versionFiles);
+  const changelog = releaseChangelog(fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8"), release.version, options.notes);
+  for (const [file, text] of Object.entries(release.changes)) fs.writeFileSync(path.join(root, file), text);
+  fs.writeFileSync(path.join(root, "CHANGELOG.md"), changelog);
+  git("add", "--", ...versionFiles, "CHANGELOG.md");
   git("commit", "-m", `Release ${release.tag}`, "-m",
-    `Synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n") || "See CHANGELOG.md for this version's changes."}\n\nGitHub builds and publishes the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
+    `Promote the complete ${developmentBranch} project to main and synchronize all six version files from ${release.previous} to ${release.version}.\n\nRelease notes:\n${options.notes.map(note => `- ${note}`).join("\n")}\n\nMove Unreleased notes into CHANGELOG.md. GitHub builds and tests before publishing the Windows installer, portable executable and verified updater manifest. No local app build is performed.`);
   git("tag", "-a", release.tag, "-m", `Marbles Stats ${release.tag}`);
   console.log(`Pushing ${release.tag}. No local build is performed.`);
   try {
-    git("push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/${release.tag}`);
+    git("push", "--atomic", "origin", `HEAD:refs/heads/${developmentBranch}`, "HEAD:refs/heads/main", `refs/tags/${release.tag}`);
   } catch (error) {
-    throw new Error(`Push failed. The local release commit and ${release.tag} are retained. Fix the push error, then retry: git push --atomic origin HEAD:refs/heads/main refs/tags/${release.tag}. Do not run another version bump.`, { cause: error });
+    throw new Error(`Push failed. The local release commit and ${release.tag} are retained on ${developmentBranch}. Fix the push error, then retry: git push --atomic origin HEAD:refs/heads/${developmentBranch} HEAD:refs/heads/main refs/tags/${release.tag}. Do not run another version bump.`, { cause: error });
   }
+  const localMain = git("rev-parse", "main");
+  if (git("merge-base", "HEAD", localMain) === localMain) {
+    try { git("branch", "-f", "main", "HEAD"); }
+    catch { console.log("The release push succeeded. Local main could not be moved (it may be checked out in another worktree); the beta checkout remains at the release."); }
+  } else console.log("Remote main was released; local main has separate commits and was left untouched.");
   console.log(`GitHub is building ${release.tag}: https://github.com/${repository}/actions\nDownload after the workflow finishes: https://github.com/${repository}/releases/tag/${release.tag}`);
 }
 

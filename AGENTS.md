@@ -370,7 +370,9 @@ Whenever preparing to push or actually pushing, ALWAYS prepare useful Git commit
 
 For every version update, ALWAYS write user-facing release notes in this app's `version.json` and pass those notes to the release script. Keep the version notes consistent with `CHANGELOG.md`; GitHub publishes them and the updater displays them. Never ship empty notes or carry forward unrelated notes from an older release. Read the existing changelog and changes before drafting notes; do not ask the user to write them.
 
-Use the normal release script to synchronize versions and push tags. Build only on GitHub. The prohibition on compiling or launching the application locally still applies.
+Keep active development on `beta`; `main` is the release branch. `npm run release` must promote the entire committed beta project to main, synchronize all six version files, move Unreleased changelog notes into the release section, and atomically push beta, main and the new tag. Return/leave the working checkout on beta. Never force-push main or discard either branch's commits.
+
+Use `npm run build:local` for user-run local packaged Windows tests; it must not bump versions or publish. Agents must not compile or launch the application locally unless the user explicitly asks them to run it. `npm run release` builds only on GitHub.
 
 ---
 

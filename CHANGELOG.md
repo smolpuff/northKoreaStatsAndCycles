@@ -2,13 +2,19 @@
 
 ## Unreleased
 
+- Set both the default and minimum window width to 1000 pixels.
+- Move development to the beta branch. The release command promotes the full committed project to main, synchronizes all six version files, commits release notes, tags and atomically pushes both branches for GitHub to build and publish.
+- Add npm run build:local for local Windows executable/installer testing without version changes, commits or publishing. Keep npm run dev for the existing live development flow.
+- Add an exact-version release option and use the Unreleased changelog as the default release notes. Normal releases increment the patch version; a release can select a minor bump or an explicit version.
+
+Validation: tested the script against isolated local Git repositories for actual full-source promotion and atomic branch/tag pushes, all version files, notes/changelog, exact and patch versions, dry-run, dirty/wrong-branch/existing-tag protection, preservation of independent main commits, and failed-push recovery. JavaScript syntax and version consistency checks passed. No application was built or launched locally.
+
 ## 0.1.2 - 2026-10-10
 
 - Registered a dedicated Twitch Public application, Marbles Stats and Cycles, and replaced development-only auth with Twitch device authorization. No client secret, .env.local, public auth server or callback listener is required. Only chat-posting permission is requested.
 - Store access and rotating refresh tokens in Windows Credential Manager, refresh expired access tokens automatically, reject sessions from the previous testing app, and show compact sign-in errors with clear instructions explaining the code supplied by this app. Token use requires Twitch validation against this app's ID and scope; credential writes are serialized.
 - Fixed all six overlay previews: hover starts/stops animation and Open preview plays automatically. Added a ready handshake, preserved playing iframes during status/feedback redraws, and made repeated celebrations replay reliably. Explicit samples animate even with Windows reduced motion enabled; live overlays retain that preference.
-- Set both the default and minimum window width to 1000 pixels. The replacement 0.1.2 release includes the matching minimum; validation checked the configuration values, with its GitHub rebuild and replacement download verification pending.
-- Added an explicit manual release replacement option for the requested 0.1.2 rebuild. Normal tag builds still reject already published versions; replacement builds pass the same build/tests before temporarily drafting the release, replacing all downloads and publishing again.
+- Increased default window width to 1000 pixels; minimum width remains 900.
 - Excluded local PowerShell CSV test helpers, removed deleted frontend tests and unused source SVG files, and removed their obsolete workflow/README references. The production updater helper remains bundled.
 - Added remote Twitch Rust tests as a publication gate, corrected a stale cycle-message test expectation, and recorded an independent credentials/auth/updater review in SECURITY-REVIEW.md.
 

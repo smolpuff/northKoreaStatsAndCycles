@@ -14,7 +14,7 @@ Stats are stored locally in JSON. Twitch and Streamer.bot are optional.
 
 Settings includes the app version, automatic update checks and a manual **Check for updates** button. See [desktop update publishing and recovery](UPDATES.md).
 
-To release, commit your changes on `main`, then run `npm.cmd --% run release -- --notes "What changed"` in PowerShell. It increments the version, commits/tags/pushes it, and GitHub builds the Windows installer, portable EXE and updater manifest. Preview with `npm.cmd --% run release -- --dry-run`. No local app build is performed by the release script.
+Develop and commit the complete project on `beta`. Run `npm run build:local` for a local Windows executable and installer; it does not change versions or publish anything. Run `npm run release` to increment the patch version, promote beta to `main`, synchronize all version files, commit/tag/push both branches and let GitHub build and publish. Release notes come from the Unreleased changelog unless supplied explicitly. The checkout stays on beta. Preview with `npm.cmd --% run release -- --dry-run`; choose a specific release with `npm.cmd --% run release -- --version 0.2.0`. The release command never builds or launches locally.
 
 Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
 
@@ -97,6 +97,7 @@ Vite refreshes frontend changes; Tauri rebuilds Rust changes through its normal 
 
 ```bash
 npm run build
+npm run build:local
 ```
 
 Build output:

@@ -6,24 +6,27 @@ Settings shows the installed version beside its manual **Check for updates** but
 
 ## Publish a Windows update
 
-Commit the app changes (including the workflow and release scripts) on `main`, then run:
+Commit the full app changes on `beta` and add user-facing notes under `Unreleased` in CHANGELOG.md, then run:
 
 ```powershell
-npm.cmd --% run release -- --notes "Describe the changes in this release"
+npm run release
 ```
 
-Each run increments the patch version, synchronizes `version.json`, `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`, commits the version changes, creates `v<version>`, and atomically pushes `main` plus that tag to `smolpuff/northKoreaStatsAndCycles`. It requires a clean working tree and refuses a mismatched remote, conflicting versions, an existing tag, or a remote `main` that needs pulling. It never builds or launches the app locally.
+Each run promotes the complete committed beta project to main, increments the patch version and synchronizes `version.json`, `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json`. It moves Unreleased notes into the new changelog section, commits the release, creates `v<version>`, and atomically pushes beta, main and that tag to `smolpuff/northKoreaStatsAndCycles`. The local checkout stays on beta, with both branches synchronized to the release. It requires a clean working tree and refuses a mismatched remote, conflicting versions, an existing tag, or missing commits from remote main/beta. It never force-pushes main, builds or launches the app locally.
 
 Useful variations:
 
 ```powershell
 npm.cmd --% run release -- --dry-run
+npm.cmd --% run release -- --version 0.2.0
 npm.cmd --% run release -- --bump minor --notes "A bigger update"
 npm.cmd --% run release -- --bump major --notes-file release-notes.txt
 npm run release:check
 ```
 
-The PowerShell examples use `npm.cmd --%` to preserve flags passed through npm. Other shells can use `npm run release -- ...`. `--notes` can be repeated; `--notes-file` uses each non-empty line. Omitting notes clears the prior release's notes. Dry-run only reports the planned bump and push, without writing files, committing, tagging, fetching or pushing.
+The PowerShell examples use `npm.cmd --%` to preserve flags passed through npm. Other shells can use `npm run release -- ...`. `--notes` can be repeated; `--notes-file` uses each non-empty line. Without explicit notes, the command uses bullet points from Unreleased and refuses to publish without notes. `--version 0.2` is normalized to `0.2.0`; exact versions must be newer. Dry-run only reports the planned promotion, bump and push, without writing files, committing, tagging, fetching or pushing.
+
+For local packaged tests, run `npm run build:local`. This is the standard Tauri Windows build and produces the executable and NSIS installer under `src-tauri/target/release/`. It does not change branches/versions, commit, tag or push. `npm run dev` keeps the existing live development workflow; `npm run build` remains supported for GitHub and local builds.
 
 Pushing a `v*` tag starts **Build Desktop Release** on GitHub's Windows runner. The workflow validates every version against the tag, installs dependencies, builds the Windows x64 Tauri app and NSIS installer, and creates the SHA-256 updater manifest. It uploads all downloads to a draft before publishing:
 
@@ -35,7 +38,7 @@ GitHub release notes include your supplied notes plus GitHub's generated change 
 
 The root version file stays at `https://raw.githubusercontent.com/smolpuff/northKoreaStatsAndCycles/main/version.json`, separate from Mission Manager. A pushed version is offered by the app only after its tagged updater manifest is publicly downloadable. While CI is building, the check reports that the release is not ready rather than offering an unavailable installer.
 
-If the Git push fails, the script keeps the local release commit/tag and prints the exact retry command; do not bump again. If GitHub fails, fix the issue and rerun the workflow for that tag using **Actions → Build Desktop Release → Run workflow**, or rerun the failed job. A draft may be reused; already published binaries cannot be overwritten by this workflow. Publish changed app code under a new version. Build files are also retained as workflow artifacts for recovery.
+If the Git push fails, the script keeps the local release commit/tag on beta and prints the exact atomic retry command; do not bump again. If GitHub fails, fix the issue and rerun the workflow for that tag using **Actions → Build Desktop Release → Run workflow**, or rerun the failed job. A draft may be reused. Normal runs reject replacing published binaries; the manual workflow's explicit replace_existing option is reserved for a specifically requested same-version rebuild and retains build/test gates. Prefer a new version so installed apps detect the update. Build files are also retained as workflow artifacts for recovery.
 
 Only Windows x64 is built by this workflow. The updater still understands ARM64 manifests, but an ARM64 release requires adding its separate build and combining the manifest entries before publication.
 
