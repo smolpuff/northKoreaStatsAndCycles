@@ -203,4 +203,4 @@ body[data-overlay="cycle-status"] th:nth-child(3) { width: 78px; }
 body[data-overlay="cycle-status"] th { height: 44px; font-size: 22px; line-height: 28px; }
 body[data-overlay="cycle-status"] .cycle-total { color: var(--gold); font-weight: 700; }
 body[data-overlay="cycle-status"] td.ready { color: var(--teal); background: #00efaa18; font-weight: 700; }
-body[data-overlay="cycle-status"] .cycle-left { color: var(--gold); font-weight: 700; }
+body[data-overlay="cycle-status"] .cycle-left { color: var(--muted); font-weight: 400; }

@@ -88,7 +88,7 @@ Race results let you customize the overall message, each placement, the separato
 
 Twitch tokens are stored in Windows Credential Manager. Posting failures are logged without stopping stats processing.
 
-Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is on by default; turn it off to disable promotions. The toggle saves immediately; save to apply interval changes. The first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
+Settings also has an optional **Promote Korea's mission App in chat** toggle, interval in minutes (default 60), and Test button. It is off by default for new settings and older settings without this field; saved explicit choices are preserved. The toggle saves immediately; save to apply interval changes. The first automatic post waits a full interval while the app is open and Twitch is connected. Disconnecting or changing the interval restarts the timer, and missed intervals never produce a burst of posts.
 
 **Desktop sign-in:** Marbles Stats and Cycles has its own Twitch Public application ID. Connect Twitch opens Twitch's device approval page in your browser; approve there and return to the app. Sign-in requests only `user:write:chat`, validates the resulting account with Twitch, and saves access and rotating refresh tokens in Windows Credential Manager. Tokens refresh without a client secret; revoked or expired authorization requires connecting again.
 

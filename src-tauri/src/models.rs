@@ -129,7 +129,7 @@ pub fn default_world_record_message() -> String {
 pub fn default_race_separator() -> String { " | ".into() }
 
 pub fn default_promotion_interval() -> u64 { 60 }
-pub fn default_promotion_enabled() -> bool { true }
+pub fn default_promotion_enabled() -> bool { false }
 
 pub fn default_promotion_message() -> String {
     "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol".into()

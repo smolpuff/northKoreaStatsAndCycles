@@ -724,7 +724,7 @@ function settingsPage(
 
   const promotionSettings = `
       <div class="mission-promotion-settings">
-        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's Mission App in chat", "Give chat a nudge toward Korea's FREE Mission App. Because it's free. you don't have to buy my love.", state.config.twitch.promoteMissionApp ?? true)}
+        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's Mission App in chat", "Give chat a nudge toward Korea's FREE Mission App. Because it's free. you don't have to buy my love.", state.config.twitch.promoteMissionApp ?? false)}
         <details class="promotion-options twitch-message-customization">
           <summary><span class="customize-button">${icons.caretDown} Options</span></summary>
         <div class="mission-promotion-controls">

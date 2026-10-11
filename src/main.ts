@@ -66,7 +66,7 @@ let state: Snapshot = {
       },
     },
     twitch: {
-      promoteMissionApp: true,
+      promoteMissionApp: false,
       promotionIntervalMinutes: 60,
       postWorldRecords: false,
       worldRecordMessageTemplate: defaultWorldRecordMessage,
@@ -642,7 +642,7 @@ function readSettingsForm(): Config {
     },
     twitch: {
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
-      promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? true,
+      promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? false,
       promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),
       worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
       postCycleResults: document.querySelector<HTMLInputElement>("#twitch-post-cycles")?.checked ?? state.config.twitch.postCycleResults,

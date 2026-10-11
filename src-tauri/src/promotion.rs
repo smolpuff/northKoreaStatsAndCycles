@@ -104,13 +104,16 @@ mod tests {
     }
 
     #[test]
-    fn old_config_defaults_promotion_on_and_preserves_explicit_off() {
+    fn old_config_defaults_promotion_off_and_preserves_explicit_choices() {
         let config: TwitchConfig = serde_json::from_str(r#"{"postResults":true}"#).unwrap();
-        assert!(config.promote_mission_app);
+        assert!(!config.promote_mission_app);
+        assert!(!TwitchConfig::default().promote_mission_app);
         assert_eq!(config.promotion_interval_minutes, 60);
         assert!(crate::models::default_promotion_message().contains("Doing missions?"));
         let disabled: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promoteMissionApp":false}"#).unwrap();
         assert!(!disabled.promote_mission_app);
+        let enabled: TwitchConfig = serde_json::from_str(r#"{"promoteMissionApp":true}"#).unwrap();
+        assert!(enabled.promote_mission_app);
     }
 
     #[test]
