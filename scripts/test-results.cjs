@@ -82,6 +82,27 @@ assert(!raceSection.includes('Kills'));
 assert(!raceSection.includes('Damage'));
 assert(mixed.includes('<th>Kills</th>'));
 assert(mixed.includes('<td>4</td><td>900</td>'));
+assert(mixed.includes('<small>Races</small><b>1</b>'));
+assert(mixed.includes('<small>BRs</small><b>1</b>'));
+assert(render('racecycles').includes('data-import-marble-cycle'));
+assert(render('racecycles').includes('data-import-marble-cycle><svg'));
+assert(/<span>Import (?:data )?from MarblesCycles<\/span>/.test(render('racecycles')));
+assert(render('overview').includes('<option value="">Latest Results</option>'));
+assert(render('racecycles').includes('Race #'));
+assert(render('racecycles').includes('summary-icon statRaceFlag'));
+assert(!render('overview').includes('<h1>RaceStats</h1><p>'));
+assert(!render('racecycles').includes('Placements 1-10 accumulate and carry forward into every cycle.</p>'));
+assert(render('racecycles').includes('data-cycle-sort="races"'));
+const outsideTen = { ...game, id: 'outside', results: [{ ...result, placement: 11 }] };
+const participationCard = views.playerHistoryContent({ ...state, cycleHistory: [
+  { ...state.cycleHistory[0], game },
+  { gameId: outsideTen.id, timestamp: game.timestamp, game: outsideTen, earnings: [] },
+] }, 'cycles', 'twitch:racer').content;
+assert(participationCard.includes('<small>Races</small><b>3</b>')); // Includes archived participation without a point-earning entry.
+assert(!participationCard.includes('<td>11</td>'));
+const dates = load('src/dates.ts');
+assert(!dates.formatTimestamp(game.timestamp).includes('2026'));
+assert(!dates.formatTime(game.timestamp).includes(':00:'));
 state.raceCycles = [];
 state.latestResult = undefined;
 assert(views.playerHistoryContent(state, 'cycles', 'twitch:racer').content.includes('Cycle #1 completed'));

@@ -20,7 +20,7 @@ function clearDialog(title: string, description: string, action: string, offerBa
   dialog.setAttribute("aria-describedby", "clear-confirmation-description");
   dialog.innerHTML = `<header><h2 id="clear-confirmation-title"></h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close" data-close>${icons.close}</button></header>
     <p id="clear-confirmation-description"></p>
-    ${offerBackup ? `<label class="backup-choice"><input type="checkbox" data-backup /> Back up current results before clearing</label>` : ""}
+    ${offerBackup ? `<label class="backup-choice"><input type="checkbox" data-backup /> Back up current results before clearing (choose where to save)</label>` : ""}
     <footer class="confirmation-actions"><button type="button" class="compact-button" data-cancel autofocus>Cancel</button><button type="button" class="compact-button btn-error" data-confirm></button></footer>`;
   dialog.querySelector("h2")!.textContent = title;
   dialog.querySelector("p")!.textContent = description;

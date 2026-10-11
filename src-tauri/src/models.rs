@@ -239,6 +239,10 @@ pub struct GameResult {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RaceCyclePlayer {
+    #[serde(default)]
+    pub total_races: u64,
+    #[serde(default)]
+    pub total_races_complete: bool,
     pub player_key: String,
     pub player_name: String,
     pub placement_counts: Vec<u64>,

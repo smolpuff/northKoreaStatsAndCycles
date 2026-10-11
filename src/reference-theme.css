@@ -2588,7 +2588,7 @@ form.integration-page-layout {
   margin: 0;
 }
 
-:is(#watch-toggle, button[data-reprocess-latest]) {
+:is(#watch-toggle, button[data-reprocess-latest], button[data-import-marble-cycle]) {
   width: auto;
   height: 30px;
   min-height: 30px;
@@ -2599,7 +2599,7 @@ form.integration-page-layout {
   line-height: 18px;
 }
 
-:is(#watch-toggle, button[data-reprocess-latest]) svg {
+:is(#watch-toggle, button[data-reprocess-latest], button[data-import-marble-cycle]) svg {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
@@ -5059,8 +5059,8 @@ dialog[open].dialog-closing::backdrop {
 .app-update-dialog [data-install-status] { margin-top: 12px; overflow-wrap: anywhere; }
 .app-update-dialog.update-in-progress { width: min(360px, calc(100vw - 40px)); }
 .app-update-dialog [hidden] { display: none !important; }
-.app-update-dialog .app-update-primary { background: linear-gradient(180deg, #ff006d, #ed005b); border-color: #ff2e8b; color: #fff; }
-.app-update-dialog .app-update-primary:hover { background: linear-gradient(180deg, #ff3388, #ec0c65); border-color: #ff399d; }
+:is(.app-update-dialog, #marble-cycle-import-dialog) .app-update-primary { background: linear-gradient(180deg, #ff006d, #ed005b); border-color: #ff2e8b; color: #fff; }
+:is(.app-update-dialog, #marble-cycle-import-dialog) .app-update-primary:not(:disabled):hover { background: linear-gradient(180deg, #ff3388, #ec0c65); border-color: #ff399d; }
 .app-update-dialog .app-update-primary svg { width: 14px; height: 14px; flex: none; }
 
 .confirmation-dialog>p {
@@ -5374,3 +5374,8 @@ dialog[open].dialog-closing::backdrop {
 .player-history-placement:nth-child(-n+3) { border-color: color-mix(in srgb, var(--reference-teal) 35%, var(--reference-control-border)); }
 .player-history-dialog .history-achievement td { background: color-mix(in srgb, var(--reference-teal) 16%, transparent); }
 :is(.player-history-dialog, .history-view) table :is(th, td) { font-size: 12px; line-height: 17px; padding: 6px 8px; }
+
+#marble-cycle-import-dialog [data-success] h3 { display: flex; align-items: center; gap: 8px; color: var(--reference-teal); }
+#marble-cycle-import-dialog [data-success] h3 svg { width: 24px; height: 24px; flex: 0 0 auto; }
+
+#marble-cycle-import-dialog [data-import]:disabled { background: transparent; border-color: var(--reference-control-border); color: var(--reference-secondary); opacity: .45; cursor: not-allowed; }

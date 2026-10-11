@@ -40,7 +40,19 @@ Cycles player history shows summary cards for saved points, cycles earned and pl
 
 Both histories use compact player cards and smaller tables. RaceStats cards show saved 1st/2nd/3rd counts, total points from retained history, and event points from counted results since the last **Clear Results**; event membership survives restart and is independent of session counters. RaceStats keeps **Export session** beside search and Clear Results. Its result-info strip stays side by side with natural widths and the last item filling the remaining space.
 
-Both **Clear Results** dialogs offer a backup before clearing. Backups are timestamped JSON files in the writable app-data `backups` folder; a failed backup prevents clearing. Clearing current results preserves both independent histories. No data migrations run.
+RaceStats player cards also show Race and BR participation separately. Cycles cards show saved Race participation, including finishes outside the top ten, and the main Cycles table has a sortable **Races** column. **Race #** above that table is the current Cycles race counter. New data stores complete participation counts; older records without full rosters show a minimum known count (`≥`) instead of an invented total.
+
+### Import Marble Cycle history
+
+On **Cycles**, click **Import from MarblesCycles** beside Reprocess and paste a complete `https://marblecycle.com/session/<session ID>` URL. **Import** is ghosted until the URL is valid, then turns pink. Click it once to retrieve every source table and merge into the current named RaceStats/Cycles results. The progress bar shows retrieval and processed-result counts, then a checkmark and **Import complete** with **Close**. It creates no season and runs no migration.
+
+**Count BR wins as Cycles 1st places** is unchecked by default. MarbleCycles includes BR results in its Cycles totals; this option counts only BR wins as 1st places in our existing Cycles system. Other BR placements remain excluded, and BR participation never increases Race counts. Enabling the option on a repeat import can backfill previously excluded BR wins once; disabling it does not remove placements already earned. DNFs remain in complete race history and participation totals but earn no Cycles placement.
+
+Imports keep original race IDs, sequence numbers, names, placements, earned points, eliminations and available winner times. The public session format does not expose original dates, tracks, individual finish times or WR status. Missing dates/tracks stay unavailable; no import-date substitution is made. Source race sequence determines order for these undated results, before existing dated results; exact chronological interleaving cannot be recovered without the missing original timestamps.
+
+Import reuses the existing Race-only cumulative Cycles scoring. It replays known current-cycle races around the backfill and retains placements that lack complete saved race data as a baseline. Full Race/BR results enter the existing race archive; point-earning Race entries enter the independent Cycles archive. Existing displayed current results and season names are preserved. Stable race IDs prevent repeat awards, including importing the same session after clearing current results. Different race IDs remain distinct even when their complete results match. Re-importing repairs previously omitted races and incorrect imported DNF flags. A timestamped local backup includes state and both histories before merging. Historical imports refresh standings/overlays without replaying old chat posts or Streamer.bot celebration actions.
+
+Both **Clear Results** dialogs offer a backup before clearing. Checking backup opens **Save As** so you choose the JSON location before anything is cleared. Cancelling Save As cancels clearing; a failed backup leaves results intact. Import additionally creates an automatic timestamped JSON backup in the writable app-data `backups` folder. Clearing current results preserves both independent histories. No data migrations run.
 
 Session stats reset when the app opens. Season totals and cycle progress persist until their **Clear Results** action is confirmed. Clearing history is a separate action. The dashboard restores the latest saved result on restart without recounting it.
 
@@ -159,3 +171,5 @@ Runtime stats and editable live overlays are stored in the writable application-
 - Normal HTML overlay data follows the latest match. Separate retained last-Race and last-BR bindings are not available.
 
 The Streamer.bot page also offers a separate Mission app promotion hook (off by default), using the same Settings interval without requiring Twitch. Its default action is `Marbles - Mission Promotion`. Arguments are `promotionMessage`, `downloadUrl`, `intervalMinutes`, `eventType` (`missionPromotion`), and `isTest`. Enabling both routes posts through Twitch and triggers the action independently.
+
+Historical race/state JSON uses compact encoding with the same data and atomic replacement. Complete historical standings remain on disk; UI snapshots omit unused standings and repeated race payloads. Watcher start/stop and initial snapshot preparation run off the window thread.

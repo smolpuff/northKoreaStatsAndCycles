@@ -30,6 +30,8 @@ export interface GameResult {
 }
 
 export interface RaceCyclePlayer {
+  totalRaces?: number;
+  totalRacesComplete?: boolean;
   playerKey: string;
   playerName: string;
   placementCounts: number[];

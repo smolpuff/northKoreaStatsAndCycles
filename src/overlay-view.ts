@@ -104,7 +104,7 @@ export function overlaysPage(
   testButton: (file: string, kind: string) => string,
 ): string {
   return `<div class="overlays-page">
-    <div class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("overlays", "header-overlays")}</i><div><h1>Overlays</h1><p>Editable HTML sources for OBS, updated by Marbles Stats.</p></div></div></div>
+    <div class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("overlays", "header-overlays")}</i><div><h1>Overlays</h1></div></div></div>
     <section class="panel custom-overlay-intro">${renderGuideHeader("Custom HTML overlays", "Make your own design with the same live match data.", "custom", "file")}<div class="panel-body"><p>Copy <code>custom.html</code> to a new HTML file in the live overlay folder. Edit its HTML and CSS, combine the supported variables you want, then add that page as one OBS Browser Source. The custom-overlay help includes a starter shell and the full variable reference.</p></div></section>
     <section class="panel"><header><h2>Overlay templates</h2></header><div class="panel-body">
       <p id="overlay-setup-error" role="alert"></p>

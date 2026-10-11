@@ -108,3 +108,5 @@ Columns show rank, player, completed cycles, total placement counts for position
 
 
 Cycles uses Race results only. Placement counts 1-10 always accumulate; the minimum count is the number of completed cycles. Extra placements carry forward and are never reset by completion. Cycle status shows positions already filled beyond the completed cycles. Clearing current stats or Cycles results updates overlays while preserving their independent local histories; the clear dialog optionally saves a timestamped JSON backup first.
+
+The Cycles page can import complete public Marble Cycle session standings through its **Import** dialog. Imported finished Race placements use the same cumulative scoring and update overlay standings; the optional BR-win setting adds only winners as 1st places without increasing Race counts; historical import does not replay old celebration alerts or integration actions. Original dates/tracks unavailable from the source remain unknown. Participation counts are shown in the app's player cards and main Cycles table; older incomplete records use minimum known counts.

@@ -27,7 +27,9 @@ impl Storage {
     pub fn write<T: Serialize>(&self, name: &str, value: &T) -> Result<(), String> {
         let path = self.path(name);
         let temp = path.with_extension("json.tmp");
-        let bytes = serde_json::to_vec_pretty(value)
+        let bytes = if name == "race-state.json" || name == "history.json" {
+            serde_json::to_vec(value)
+        } else { serde_json::to_vec_pretty(value) }
             .map_err(|e| format!("Unable to serialize {name}: {e}"))?;
         fs::write(&temp, bytes).map_err(|e| format!("Unable to write {}: {e}", temp.display()))?;
         replace_file(&temp, &path).map_err(|e| format!("Unable to replace {}: {e}", path.display()))

@@ -37,6 +37,7 @@ coverage/
 *.log
 *.tmp
 *.bak
+*-backup-*.json
 
 # Editor, OS, and tool caches
 /.idea/

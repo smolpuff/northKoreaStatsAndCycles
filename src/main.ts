@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { Config, LogEntry, Snapshot } from "./types";
+import { openMarbleCycleImport } from "./marble-cycle-import";
 import {
   escapeHtml,
   playerHistoryContent,
@@ -349,6 +350,9 @@ function renderMainWindow(): void {
         throw new Error(state.watcherMessage ?? "Unable to reprocess the latest file");
       }
     }, "Reading…", "Read complete");
+  });
+  document.querySelector("[data-import-marble-cycle]")?.addEventListener("click", () => {
+    openMarbleCycleImport(state, imported => { state = imported; render(); });
   });
   applyButtonFeedback();
 

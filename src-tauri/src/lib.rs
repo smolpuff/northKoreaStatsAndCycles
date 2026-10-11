@@ -1,4 +1,5 @@
 mod models;
+mod marble_cycle;
 mod overlays;
 mod parser;
 mod promotion;
@@ -99,7 +100,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         race_state: race_state.clone(),
         snapshot: AppSnapshot {
             event_result_ids: current_event_result_ids(&race_state, &recent_results),
-            cycle_history: race_state.cycle_history.clone(),
+            cycle_history: cycle_history_for_ui(&race_state.cycle_history),
             total_race_count: race_state.total_race_count,
             total_battle_royale_count: race_state.total_battle_royale_count,
             season_points_earned: race_state.season_points_earned,
@@ -151,14 +152,64 @@ fn log(runtime: &SharedRuntime, app: &tauri::AppHandle, level: &str, message: im
     let _ = app.emit("log-entry", &entry);
 }
 
+// Full historical standings stay in race-state.json, not repeated UI updates.
+fn cycle_history_for_ui(history: &[CycleHistoryEntry]) -> Vec<CycleHistoryEntry> {
+    history.iter().map(|entry| CycleHistoryEntry {
+        standings: vec![], game: entry.game.as_ref().map(game_for_ui), earnings: entry.earnings.clone(),
+        timestamp: entry.timestamp.clone(), player_name: entry.player_name.clone(), cycle_number: entry.cycle_number,
+        map_name: entry.map_name.clone(), game_id: entry.game_id.clone(), winner_name: entry.winner_name.clone(),
+        winning_time: entry.winning_time, player_count: entry.player_count, completions: entry.completions.clone(),
+    }).collect()
+}
+
+fn game_for_ui(game: &GameResult) -> GameResult {
+    let mut result = game.clone();
+    // Import provenance is retained in local storage; the UI needs match statistics.
+    for player in &mut result.results { player.raw_data.retain(|key, _| !key.starts_with("MarbleCycle") || key == "MarbleCycleRaceNumber"); }
+    result
+}
+
+fn snapshot_for_ui(source: &AppSnapshot) -> AppSnapshot {
+    let mut cycles = cycle_history_for_ui(&source.cycle_history);
+    let archived: std::collections::HashSet<&str> = source.recent_results.iter().map(|game| game.id.as_str()).collect();
+    for entry in &mut cycles { if archived.contains(entry.game_id.as_str()) { entry.game = None; } }
+    AppSnapshot {
+        event_result_ids: source.event_result_ids.clone(),
+        cycle_history: cycles,
+        total_cycle_race_count: source.total_cycle_race_count,
+        total_race_count: source.total_race_count,
+        total_battle_royale_count: source.total_battle_royale_count,
+        season_points_earned: source.season_points_earned,
+        session_results: source.session_results.clone(),
+        config: source.config.clone(),
+        watcher_status: source.watcher_status.clone(),
+        stats_tracking_enabled: source.stats_tracking_enabled,
+        cycles_tracking_enabled: source.cycles_tracking_enabled,
+        watcher_message: source.watcher_message.clone(),
+        detected_game_type: source.detected_game_type.clone(),
+        last_update: source.last_update.clone(),
+        cycle_last_update: source.cycle_last_update.clone(),
+        latest_result: source.latest_result.clone(),
+        streamer_bot_status: source.streamer_bot_status.clone(),
+        streamer_bot_message: source.streamer_bot_message.clone(),
+        twitch_status: source.twitch_status.clone(),
+        twitch_message: source.twitch_message.clone(),
+        twitch_username: source.twitch_username.clone(),
+        session: source.session.clone(),
+        recent_results: source.recent_results.iter().map(game_for_ui).collect(),
+        race_cycles: source.race_cycles.clone(),
+        logs: source.logs.clone(),
+    }
+}
+
 fn emit_snapshot(runtime: &SharedRuntime, app: &tauri::AppHandle) {
     let mut warning = None;
     if let Ok(mut rt) = runtime.lock() {
-        let snapshot = rt.snapshot.clone();
+        let snapshot = snapshot_for_ui(&rt.snapshot);
         let error = rt.overlay_writer.update(&snapshot).err();
         if error != rt.overlay_writer.last_error { warning = error.clone(); }
         rt.overlay_writer.last_error = error;
-        let _ = app.emit("app-state", &rt.snapshot);
+        let _ = app.emit("app-state", &snapshot);
     }
     if let Some(error) = warning { log(runtime, app, "warning", format!("[Overlay] Unable to update: {error}")); }
 }
@@ -262,21 +313,35 @@ fn same_cycle_player(player: &RaceCyclePlayer, key: &str, name: &str) -> bool {
             && player.player_name.trim().to_lowercase() == name.trim().to_lowercase())
 }
 
+fn cycle_placement(game: &GameResult, result: &PlayerResult) -> Option<u32> {
+    if game.game_type == GameType::Race {
+        return (result.eliminated != Some(true) && (1..=10).contains(&result.placement)).then_some(result.placement);
+    }
+    (game.game_type == GameType::BattleRoyale && result.placement == 1
+        && game.results.first().and_then(|p| p.raw_data.get("MarbleCycleBrWinsAsFirst")).is_some_and(|v| v == "true")).then_some(1)
+}
+
+fn earns_cycle_placements(game: &GameResult) -> bool {
+    game.game_type == GameType::Race || game.results.iter().any(|result| cycle_placement(game, result).is_some())
+}
+
 fn update_race_cycles(
     players: &mut Vec<RaceCyclePlayer>,
     game: &GameResult,
 ) -> Vec<CycleCompletion> {
     let mut completions = Vec::new();
-    if game.game_type != GameType::Race { return completions; }
+    if !earns_cycle_placements(game) { return completions; }
     let mut seen_players = std::collections::HashSet::new();
 
     for result in &game.results {
+        if game.game_type == GameType::BattleRoyale && cycle_placement(game, result).is_none() { continue; }
         let key = race_cycle_player_key(result);
         let player_index = players
             .iter()
             .position(|player| same_cycle_player(player, &key, &result.player_name))
             .unwrap_or_else(|| {
                 players.push(RaceCyclePlayer {
+                    total_races: 0, total_races_complete: true,
                     player_key: key,
                     player_name: result.player_name.clone(),
                     placement_counts: vec![0; 10],
@@ -288,6 +353,8 @@ fn update_race_cycles(
             });
         if !seen_players.insert(player_index) { continue; }
         let player = &mut players[player_index];
+        if !player.total_races_complete { player.total_races = player.total_races.max(player.placement_counts.iter().sum()); }
+        if game.game_type == GameType::Race { player.total_races += 1; }
         player.player_name = if result.display_name.trim().is_empty() {
             result.player_name.clone()
         } else {
@@ -300,9 +367,9 @@ fn update_race_cycles(
         let pending = player.placement_counts.iter().copied().max().unwrap_or(0)
             .saturating_sub(before) as usize;
         player.cycle_race_counts.resize(pending.max(1), None);
-        for count in player.cycle_race_counts.iter_mut().flatten() { *count += 1; }
-        if !(1..=10).contains(&result.placement) { continue; }
-        player.placement_counts[result.placement as usize - 1] += 1;
+        if game.game_type == GameType::Race { for count in player.cycle_race_counts.iter_mut().flatten() { *count += 1; } }
+        let Some(placement) = cycle_placement(game, result) else { continue; };
+        player.placement_counts[placement as usize - 1] += 1;
         player.cycles = player.placement_counts.iter().copied().min().unwrap_or(0);
         player.current_cycle_positions = Some(player.current_positions());
         if player.cycles > before {
@@ -513,7 +580,7 @@ fn send_cycle_completions(
 
 fn send_streamer_bot_events(runtime: &SharedRuntime, app: &tauri::AppHandle, game: &GameResult, completions: &[CycleCompletion], stats_new: bool) {
     let snapshot = match runtime.lock() {
-        Ok(rt) => rt.snapshot.clone(),
+        Ok(rt) => snapshot_for_ui(&rt.snapshot),
         Err(_) => return,
     };
     let config = snapshot.config.streamer_bot.clone();
@@ -675,7 +742,7 @@ fn check_world_record(runtime: &SharedRuntime, app: &tauri::AppHandle, race_path
         refresh_counted_result(&mut rt.snapshot.recent_results, &game);
         refresh_counted_result(&mut rt.snapshot.session_results, &game);
         rt.race_state.current_result = Some(game.clone());
-        let snapshot = rt.snapshot.clone();
+        let snapshot = snapshot_for_ui(&rt.snapshot);
         if let Err(error) = rt.overlay_writer.alerts(&snapshot, &game, serde_json::json!([]), true) {
             drop(rt);
             log(runtime, app, "warning", format!("[Overlay] Unable to show WR alert: {error}"));
@@ -686,12 +753,12 @@ fn check_world_record(runtime: &SharedRuntime, app: &tauri::AppHandle, race_path
         confirmed.world_record_player.as_deref().unwrap_or(""), confirmed.map_name.as_deref().unwrap_or("")));
     if let Err(error) = persist_history(runtime) { log(runtime, app, "warning", format!("[History] Unable to save WR: {error}")); }
     emit_snapshot(runtime, app);
-    let snapshot = match runtime.lock() { Ok(rt) => rt.snapshot.clone(), Err(_) => return };
+    let snapshot = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
     let config = snapshot.config.streamer_bot;
     if config.events.world_record {
         let mut args = streamer_bot::world_record_args(&confirmed);
         // The snapshot still carries the full winner/points data for custom hooks.
-        let current = match runtime.lock() { Ok(rt) => rt.snapshot.clone(), Err(_) => return };
+        let current = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
         streamer_bot::add_overlay_data(&mut args, &current, &confirmed, serde_json::json!([]));
         match streamer_bot::trigger_action(&config, &config.actions.world_record, args) {
             Ok(()) => log(runtime, app, "info", format!("[Streamer.bot] Triggered {}", config.actions.world_record)),
@@ -731,7 +798,7 @@ fn prepare_race_commit(
     let stats_enabled = stats_enabled && !is_cycle_test_snapshot(game);
     let keys = game_keys(game);
     let stats_new = stats_enabled && !keys.iter().any(|key| current.processed_ids.contains(key));
-    let cycles_new = cycles_enabled && game.game_type == GameType::Race && !keys.iter().any(|key| current.cycle_processed_ids.contains(key));
+    let cycles_new = cycles_enabled && earns_cycle_placements(game) && !keys.iter().any(|key| current.cycle_processed_ids.contains(key));
     let points_key = game_points_key(game);
     let points = game_points_earned(game);
     let previous_points = current.game_points.get(&points_key).copied().flatten();
@@ -750,7 +817,7 @@ fn prepare_race_commit(
         next.game_points.insert(points_key, Some(points));
     }
     let cycle_completions = if cycles_new {
-        next.total_cycle_race_count += 1;
+        if game.game_type == GameType::Race { next.total_cycle_race_count += 1; }
         next.cycle_processed_ids.extend(keys);
         next.cycle_last_update = Some(timestamp.into());
         update_race_cycles(&mut next.race_cycles, game)
@@ -761,7 +828,7 @@ fn prepare_race_commit(
         for result in &game.results {
             let key = race_cycle_player_key(result);
             if let Some(player) = next.race_cycles.iter().find(|player| same_cycle_player(player, &key, &result.player_name)) {
-                if !seen.insert(player.player_key.clone()) || !(1..=10).contains(&result.placement) { continue; }
+                if !seen.insert(player.player_key.clone()) || cycle_placement(game, result).is_none() { continue; }
                 let previous_cycles = current.race_cycles.iter()
                     .find(|previous| same_cycle_player(previous, &key, &result.player_name))
                     .map(|previous| (0..10).map(|index| previous.placement_counts.get(index).copied().unwrap_or(0)).min().unwrap_or(0))
@@ -906,7 +973,14 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                 let stats_enabled = rt.snapshot.stats_tracking_enabled;
                 let cycles_enabled = rt.snapshot.cycles_tracking_enabled;
                 let timestamp = Utc::now().to_rfc3339();
-                if let Some((next, stats_new, cycle_completions)) = prepare_race_commit(&rt.race_state, &game, stats_enabled, cycles_enabled, &timestamp, reason) {
+                let mut retained_history = std::mem::take(&mut rt.race_state.cycle_history);
+                let prepared = prepare_race_commit(&rt.race_state, &game, stats_enabled, cycles_enabled, &timestamp, reason);
+                rt.race_state.cycle_history = std::mem::take(&mut retained_history);
+                if let Some((mut next, stats_new, cycle_completions)) = prepared {
+                    let new_history = std::mem::take(&mut next.cycle_history);
+                    let retained_history_len = rt.race_state.cycle_history.len();
+                    next.cycle_history = std::mem::take(&mut rt.race_state.cycle_history);
+                    next.cycle_history.extend(new_history);
                     let mut history = rt.snapshot.recent_results.clone();
                     if stats_new {
                         if history.iter().any(|previous| game_points_key(previous) == game_points_key(&game)) {
@@ -918,6 +992,8 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     let commit = rt.storage.write("history.json", &history)
                         .and_then(|_| rt.storage.write("race-state.json", &next));
                     if let Err(error) = commit {
+                        next.cycle_history.truncate(retained_history_len);
+                        rt.race_state.cycle_history = std::mem::take(&mut next.cycle_history);
                         rt.cached_file = None;
                         rt.snapshot.watcher_status = "Error".into();
                         rt.snapshot.watcher_message = Some(error.clone());
@@ -927,7 +1003,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                         return;
                     }
                     if !is_cycle_test_snapshot(&game) { refresh_latest_result(&mut rt.snapshot, &game); }
-                    rt.snapshot.cycle_history = next.cycle_history.clone();
+                    rt.snapshot.cycle_history = cycle_history_for_ui(&next.cycle_history);
                     rt.snapshot.total_race_count = next.total_race_count;
                     rt.snapshot.total_battle_royale_count = next.total_battle_royale_count;
                     rt.snapshot.season_points_earned = next.season_points_earned;
@@ -971,7 +1047,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
             emit_snapshot(runtime, app);
             if let Some((_, _, game, cycle_completions, stats_new)) = saved {
                 let overlay_error = if let Ok(mut rt) = runtime.lock() {
-                    let snapshot = rt.snapshot.clone();
+                    let snapshot = snapshot_for_ui(&rt.snapshot);
                     let completions = serde_json::json!(cycle_completions.iter().map(|completion| serde_json::json!({
                         "playerName": completion.player_name, "cycleNumber": completion.cycle_number, "races": completion.races,
                     })).collect::<Vec<_>>());
@@ -1030,10 +1106,18 @@ fn stop_watcher_inner(runtime: &SharedRuntime) {
 }
 
 #[tauri::command]
-fn get_app_snapshot(runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
+async fn get_app_snapshot(runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
+        result
+    }).await.map_err(|error| error.to_string())?
+}
+
+fn get_app_snapshot_inner(runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
     runtime
         .lock()
-        .map(|rt| rt.snapshot.clone())
+        .map(|rt| snapshot_for_ui(&rt.snapshot))
         .map_err(|_| "Application state unavailable".into())
 }
 
@@ -1064,7 +1148,7 @@ fn save_config(
     emit_snapshot(&runtime, &app);
     runtime
         .lock()
-        .map(|rt| rt.snapshot.clone())
+        .map(|rt| snapshot_for_ui(&rt.snapshot))
         .map_err(|_| "Application state unavailable".into())
 }
 
@@ -1091,7 +1175,7 @@ fn save_seasons(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, season
         rt.snapshot.config = config;
     }
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    get_app_snapshot_inner(runtime)
 }
 
 fn prepare_export(snapshot: &AppSnapshot, kind: &str) -> Result<(String, serde_json::Value), String> {
@@ -1157,7 +1241,7 @@ async fn reread_last_file(app: tauri::AppHandle, runtime: State<'_, SharedRuntim
         check_world_record(&worker, &app, Path::new(&path));
     })
         .await.map_err(|error| error.to_string())?;
-    let snapshot = shared.lock().map_err(|_| "Application state unavailable")?.snapshot.clone();
+    let snapshot = snapshot_for_ui(&shared.lock().map_err(|_| "Application state unavailable")?.snapshot);
     Ok(snapshot)
 }
 
@@ -1208,7 +1292,7 @@ async fn connect_twitch(
     emit_snapshot(&shared, &app);
     let snapshot = shared
         .lock()
-        .map(|rt| rt.snapshot.clone())
+        .map(|rt| snapshot_for_ui(&rt.snapshot))
         .map_err(|_| "Application state unavailable".to_string())?;
     Ok(snapshot)
 }
@@ -1234,7 +1318,7 @@ async fn validate_twitch_session(
     emit_snapshot(&shared, &app);
     let snapshot = shared
         .lock()
-        .map(|rt| rt.snapshot.clone())
+        .map(|rt| snapshot_for_ui(&rt.snapshot))
         .map_err(|_| "Application state unavailable".to_string())?;
     Ok(snapshot)
 }
@@ -1263,7 +1347,7 @@ async fn test_twitch_message(
             set_twitch_status(&shared, "Connected", None, None);
             log(&shared, &app, "info", "[Twitch] Test message posted");
             emit_snapshot(&shared, &app);
-            get_app_snapshot(runtime)
+            get_app_snapshot_inner(runtime)
         }
         Err(error) => {
             log(&shared, &app, "warning", format!("[Twitch] Test message failed ? {error}"));
@@ -1281,7 +1365,7 @@ fn disconnect_twitch(
     set_twitch_status(&runtime, "Disconnected", None, None);
     log(&runtime, &app, "info", "[Twitch] Account disconnected");
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    get_app_snapshot_inner(runtime)
 }
 
 fn finish_streamer_bot_test(
@@ -1295,7 +1379,7 @@ fn finish_streamer_bot_test(
             set_streamer_bot_status(runtime, "Connected", None);
             log(runtime, app, "info", format!("[Streamer.bot] {success_message}"));
             emit_snapshot(runtime, app);
-            runtime.lock().map(|rt| rt.snapshot.clone()).map_err(|_| "Application state unavailable".into())
+            runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into())
         }
         Err(error) => {
             log(runtime, app, "warning", format!("[Streamer.bot] {error}"));
@@ -1403,7 +1487,7 @@ fn start_watcher_inner(
 ) -> Result<AppSnapshot, String> {
     {
         let rt = runtime.lock().map_err(|_| "Application state unavailable")?;
-        if rt.watcher.is_some() { return Ok(rt.snapshot.clone()); }
+        if rt.watcher.is_some() { return Ok(snapshot_for_ui(&rt.snapshot)); }
     }
     let path = {
         runtime
@@ -1431,7 +1515,7 @@ fn start_watcher_inner(
         rt.snapshot.watcher_status = "File Missing".into();
         rt.snapshot.watcher_message =
             Some(format!("Folder does not exist: {}", watch_dir.display()));
-        return Ok(rt.snapshot.clone());
+        return Ok(snapshot_for_ui(&rt.snapshot));
     }
     let (event_tx, event_rx) = mpsc::channel();
     let mut watcher = notify::recommended_watcher(move |event| {
@@ -1508,7 +1592,7 @@ fn start_watcher_inner(
         }
         .into();
         rt.snapshot.watcher_message = None;
-        rt.snapshot.clone()
+        snapshot_for_ui(&rt.snapshot)
     };
     log(&runtime, &app, "info", format!("[Watcher] Watching Race and Battle Royale result/metadata files in {}", watch_dir.display()));
     emit_snapshot(&runtime, &app);
@@ -1516,9 +1600,15 @@ fn start_watcher_inner(
 }
 
 #[tauri::command]
-fn set_tracking_enabled(
+async fn set_tracking_enabled(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, kind: String, enabled: bool) -> Result<AppSnapshot, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || set_tracking_enabled_inner(app, runtime, kind, enabled))
+        .await.map_err(|error| error.to_string())?
+}
+
+fn set_tracking_enabled_inner(
     app: tauri::AppHandle,
-    runtime: State<'_, SharedRuntime>,
+    runtime: SharedRuntime,
     kind: String,
     enabled: bool,
 ) -> Result<AppSnapshot, String> {
@@ -1526,7 +1616,7 @@ fn set_tracking_enabled(
     let previous = {
         let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
         let previous = if kind == "stats" { rt.snapshot.stats_tracking_enabled } else { rt.snapshot.cycles_tracking_enabled };
-        if previous == enabled { return Ok(rt.snapshot.clone()); }
+        if previous == enabled { return Ok(snapshot_for_ui(&rt.snapshot)); }
         if kind == "stats" { rt.snapshot.stats_tracking_enabled = enabled; }
         else { rt.snapshot.cycles_tracking_enabled = enabled; }
         previous
@@ -1547,7 +1637,8 @@ fn set_tracking_enabled(
     }
     log(&runtime, &app, "info", format!("[{}] {}", if kind == "stats" { "RaceStats" } else { "RaceCycles" }, if enabled { "Started" } else { "Stopped" }));
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    let result = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
+    result
 }
 
 // Retained for callers using the original shared watcher command.
@@ -1569,7 +1660,7 @@ fn stop_watcher(
     stop_watcher_inner(&runtime);
     log(&runtime, &app, "info", "[Watcher] Stopped");
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    get_app_snapshot_inner(runtime)
 }
 
 #[tauri::command]
@@ -1588,7 +1679,7 @@ fn clear_history(
 
     log(&runtime, &app, "info", "[History] Race history cleared");
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    get_app_snapshot_inner(runtime)
 }
 
 #[tauri::command]
@@ -1603,7 +1694,7 @@ fn clear_cycle_history(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>)
     }
     log(&runtime, &app, "info", "[History] Cycle history cleared");
     emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+    get_app_snapshot_inner(runtime)
 }
 
 fn clear_session_results(snapshot: &mut AppSnapshot) {
@@ -1612,6 +1703,83 @@ fn clear_session_results(snapshot: &mut AppSnapshot) {
         snapshot.session = SessionSummary::default();
         snapshot.last_update = None;
         snapshot.detected_game_type = None;
+}
+
+#[tauri::command]
+async fn fetch_marble_cycle_session(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || marble_cycle::fetch(&url)).await.map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MarbleImportReport { snapshot: AppSnapshot, added: usize, cycle_races: usize, skipped: usize }
+
+#[tauri::command]
+async fn import_marble_cycle_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, url: String,
+    games: Vec<GameResult>, seasons: SeasonConfig, include_br_wins: bool) -> Result<MarbleImportReport, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let url = marble_cycle::session_url(&url)?;
+        let mut games = games;
+        if games.is_empty() || games.len() > 10000 { return Err("Session must contain 1-10000 complete results".into()); }
+        for game in &games {
+            if !matches!(game.game_type, GameType::Race | GameType::BattleRoyale) || game.results.is_empty()
+                || game.results.len() != game.player_count || game.player_count > 10000
+                || game.source_snapshot_id.as_deref() != Some(game.id.as_str())
+                || marble_cycle::session_url(&format!("https://marblecycle.com/session/{}", game.id)).is_err()
+                || game.results.iter().any(|p| p.raw_data.get("MarbleCycleSessionUrl") != Some(&url)
+                    || p.raw_data.get("MarbleCycleRaceId") != Some(&game.id)
+                    || p.player_name.trim().is_empty() || !(1..=game.player_count as u32).contains(&p.placement)
+                    || p.season_points_earned < 0 || p.platform != "Twitch") {
+                return Err("Session contains incomplete or invalid normalized results; nothing imported".into());
+            }
+        }
+        for game in &mut games {
+            if game.game_type == GameType::BattleRoyale {
+                for result in &mut game.results { result.raw_data.insert("MarbleCycleBrWinsAsFirst".into(), include_br_wins.to_string()); }
+            }
+        }
+        let processing = runtime.lock().map_err(|_| "Application state unavailable")?.processing.clone();
+        let _guard = processing.lock().map_err(|_| "Results processing unavailable")?;
+        let report = {
+            let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
+            if rt.snapshot.config.seasons.race_name != seasons.race_name || rt.snapshot.config.seasons.cycle_name != seasons.cycle_name {
+                return Err("The selected results names changed. Reopen Import for the current season.".into());
+            }
+            let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Starting import", "current": 0, "total": games.len(), "percent": 0 }));
+            let prepared = marble_cycle::prepare_with_progress(&rt.race_state, &rt.snapshot.recent_results, &games, |phase, current, total, percent| {
+                let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": phase, "current": current, "total": total, "percent": percent }));
+            });
+            // Backup the existing writable JSON state before the multi-file merge.
+            let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Saving backup and history", "current": games.len(), "total": games.len(), "percent": 95 }));
+            backup_current_results(&rt, "marble-cycle-import")?;
+            let previous_history = rt.snapshot.recent_results.clone();
+            rt.storage.write("history.json", &prepared.history)?;
+            if let Err(error) = rt.storage.write("race-state.json", &prepared.state) {
+                let rollback = rt.storage.write("history.json", &previous_history);
+                return Err(format!("Import not committed: {error}{}", rollback.err().map(|e| format!("; history rollback failed: {e}; restore the import backup")).unwrap_or_default()));
+            }
+            rt.race_state = prepared.state;
+            rt.snapshot.recent_results = prepared.history;
+            rt.snapshot.cycle_history = cycle_history_for_ui(&rt.race_state.cycle_history);
+            rt.snapshot.race_cycles = cycle_players_for_display(&rt.race_state.race_cycles);
+            rt.snapshot.total_race_count = rt.race_state.total_race_count;
+            rt.snapshot.total_battle_royale_count = rt.race_state.total_battle_royale_count;
+            rt.snapshot.total_cycle_race_count = rt.race_state.total_cycle_race_count;
+            rt.snapshot.season_points_earned = rt.race_state.season_points_earned;
+            rt.snapshot.event_result_ids = current_event_result_ids(&rt.race_state, &rt.snapshot.recent_results);
+            if rt.snapshot.latest_result.is_none() && prepared.added > 0 {
+                rt.snapshot.latest_result = rt.race_state.current_result.clone();
+                rt.snapshot.detected_game_type = rt.snapshot.latest_result.as_ref().map(|game| game.game_type.clone());
+            }
+            rt.overlay_writer.invalidate();
+            MarbleImportReport { snapshot: snapshot_for_ui(&rt.snapshot), added: prepared.added, cycle_races: prepared.cycle_races, skipped: prepared.skipped }
+        };
+        log(&runtime, &app, "info", format!("[Import] {} archived results added; {} Race results backfilled into Cycles; {} duplicates skipped", report.added, report.cycle_races, report.skipped));
+        emit_snapshot(&runtime, &app);
+        let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Import complete", "current": games.len(), "total": games.len(), "percent": 100 }));
+        Ok(report)
+    }).await.map_err(|e| e.to_string())?
 }
 
 fn reset_stats_totals(state: &mut RaceState) {
@@ -1635,63 +1803,77 @@ fn backup_current_results(rt: &Runtime, kind: &str) -> Result<(), String> {
     let name = format!("backups/{}-{}.json", kind, Utc::now().format("%Y%m%d-%H%M%S-%f"));
     std::fs::create_dir_all(rt.storage.path("backups"))
         .map_err(|error| format!("Unable to create backup directory: {error}"))?;
-    rt.storage.write(&name, &serde_json::json!({
+    rt.storage.write(&name, &current_results_backup(rt, kind))
+}
+
+fn current_results_backup(rt: &Runtime, kind: &str) -> serde_json::Value {
+    serde_json::json!({
         "timestamp": Utc::now().to_rfc3339(), "kind": kind,
         "state": rt.race_state, "sessionResults": rt.snapshot.session_results,
+        "history": rt.snapshot.recent_results,
         "latestResult": rt.snapshot.latest_result
-    }))
+    })
 }
 
 #[tauri::command]
-fn clear_race_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, backup: bool) -> Result<AppSnapshot, String> {
-    {
-        let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
-        let mut next = rt.race_state.clone();
-        if backup { backup_current_results(&rt, "race-stats")?; }
-        reset_stats_totals(&mut next);
-        rt.storage.write("race-state.json", &next)?;
-        rt.race_state = next;
-        rt.snapshot.season_points_earned = 0;
-        rt.snapshot.total_race_count = 0;
-        rt.snapshot.total_battle_royale_count = 0;
-        rt.snapshot.event_result_ids.clear();
-        clear_session_results(&mut rt.snapshot);
-        rt.overlay_writer.invalidate();
-    }
-
-    log(&runtime, &app, "info", "[RaceStats] Results and current session cleared");
-    emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+async fn clear_race_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, backup: bool) -> Result<AppSnapshot, String> {
+    clear_results_with_backup(app, runtime.inner().clone(), "race-stats", backup).await
 }
 
 #[tauri::command]
-fn clear_race_cycles(
-    app: tauri::AppHandle,
-    runtime: State<'_, SharedRuntime>,
-    backup: bool,
-) -> Result<AppSnapshot, String> {
-    {
-        let mut rt = runtime
-            .lock()
-            .map_err(|_| "Application state unavailable")?;
-        let mut next = rt.race_state.clone();
-        if backup { backup_current_results(&rt, "cycles")?; }
-        reset_cycle_totals(&mut next);
-        rt.storage.write("race-state.json", &next)?;
-        rt.race_state = next;
-        rt.snapshot.race_cycles.clear();
-        rt.snapshot.total_cycle_race_count = 0;
-        rt.snapshot.cycle_last_update = None;
-        rt.overlay_writer.invalidate();
-    }
-    log(
-        &runtime,
-        &app,
-        "info",
-        "[RaceCycles] Current results cleared; saved history retained",
-    );
-    emit_snapshot(&runtime, &app);
-    get_app_snapshot(runtime)
+async fn clear_race_cycles(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, backup: bool) -> Result<AppSnapshot, String> {
+    clear_results_with_backup(app, runtime.inner().clone(), "cycles", backup).await
+}
+
+async fn clear_results_with_backup(app: tauri::AppHandle, runtime: SharedRuntime, kind: &'static str, backup: bool) -> Result<AppSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let processing = runtime.lock().map_err(|_| "Application state unavailable")?.processing.clone();
+        let _guard = processing.lock().map_err(|_| "Results processing unavailable")?;
+        let backup_path = if backup {
+            let filename = format!("{}-backup-{}.json", kind, Utc::now().format("%Y%m%d-%H%M%S"));
+            let mut dialog = app.dialog().file().set_title("Save backup before clearing results")
+                .add_filter("JSON backup", &["json"]).set_file_name(filename);
+            if let Some(window) = app.get_webview_window("main") { dialog = dialog.set_parent(&window); }
+            let Some(selected) = dialog.blocking_save_file() else {
+                // Cancelling Save cancels clearing as well.
+                let snapshot = snapshot_for_ui(&runtime.lock().map_err(|_| "Application state unavailable")?.snapshot);
+                return Ok(snapshot);
+            };
+            Some(selected.into_path().map_err(|e| e.to_string())?)
+        } else { None };
+        {
+            let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
+            if let Some(path) = backup_path {
+                let parent = path.parent().ok_or("Invalid backup location")?;
+                let filename = path.file_name().and_then(|name| name.to_str()).ok_or("Invalid backup filename")?;
+                if parent.to_string_lossy().to_lowercase() == rt.storage.data_dir.to_string_lossy().to_lowercase()
+                    && ["race-state.json", "history.json", "config.json"].contains(&filename.to_lowercase().as_str()) {
+                    return Err("Choose a backup filename outside the live state/history files".into());
+                }
+                Storage::new(parent.to_path_buf())?.write(filename, &current_results_backup(&rt, kind))?;
+            }
+            let mut next = rt.race_state.clone();
+            if kind == "cycles" { reset_cycle_totals(&mut next); } else { reset_stats_totals(&mut next); }
+            rt.storage.write("race-state.json", &next)?;
+            rt.race_state = next;
+            if kind == "cycles" {
+                rt.snapshot.race_cycles.clear();
+                rt.snapshot.total_cycle_race_count = 0;
+                rt.snapshot.cycle_last_update = None;
+            } else {
+                rt.snapshot.season_points_earned = 0;
+                rt.snapshot.total_race_count = 0;
+                rt.snapshot.total_battle_royale_count = 0;
+                rt.snapshot.event_result_ids.clear();
+                clear_session_results(&mut rt.snapshot);
+            }
+            rt.overlay_writer.invalidate();
+        }
+        log(&runtime, &app, "info", format!("[{}] Current results cleared; persistent histories retained", kind));
+        emit_snapshot(&runtime, &app);
+        let snapshot = snapshot_for_ui(&runtime.lock().map_err(|_| "Application state unavailable")?.snapshot);
+        Ok(snapshot)
+    }).await.map_err(|e| e.to_string())?
 }
 
 fn start_connection_checks(runtime: &SharedRuntime, app: &tauri::AppHandle) {
@@ -1866,6 +2048,8 @@ pub fn run() {
             stop_watcher,
             clear_history,
             clear_cycle_history,
+            fetch_marble_cycle_session,
+            import_marble_cycle_results,
             clear_race_results,
             clear_race_cycles
         ])
@@ -1980,6 +2164,23 @@ mod pipeline_tests {
             race_cycles: vec![],
             logs: vec![],
         }
+    }
+
+    #[test]
+    fn ui_snapshot_omits_unused_standings_without_changing_saved_history() {
+        let mut source = test_snapshot();
+        let game = streamer_bot::sample_game();
+        let (state, _, _) = prepare_race_commit(&RaceState::default(), &game, true, true, "", ReadReason::Manual).unwrap();
+        source.cycle_history = state.cycle_history.clone();
+        source.recent_results = vec![game.clone()];
+        let ui = snapshot_for_ui(&source);
+        assert!(!source.cycle_history[0].standings.is_empty());
+        assert!(ui.cycle_history[0].standings.is_empty());
+        assert!(ui.cycle_history[0].game.is_none());
+        assert_eq!(ui.cycle_history[0].earnings.len(), source.cycle_history[0].earnings.len());
+        assert_eq!(ui.recent_results[0].results.len(), game.results.len());
+        source.recent_results.clear();
+        assert!(snapshot_for_ui(&source).cycle_history[0].game.is_some());
     }
 
     #[test]
@@ -2111,6 +2312,7 @@ mod pipeline_tests {
         let mut counts = vec![1; 10];
         counts[0] = 0;
         initial.race_cycles.push(RaceCyclePlayer {
+            total_races: 0, total_races_complete: false,
             player_key: race_cycle_player_key(&game.results[0]),
             player_name: game.results[0].player_name.clone(), placement_counts: counts, cycles: 0, current_cycle_positions: None, cycle_race_counts: vec![],
         });

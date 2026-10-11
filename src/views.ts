@@ -7,12 +7,27 @@ import { overlaysPage } from "./overlay-view";
 import type { Config, GameResult, Snapshot } from "./types";
 
 function cyclePositions(player: Snapshot["raceCycles"][number]): number[] {
-  const completed = Math.min(...Array.from({ length: 10 }, (_, index) => player.placementCounts[index] ?? 0));
-  return player.placementCounts.slice(0, 10).flatMap((count, index) => count > completed ? [index + 1] : []);
+  const completed = Math.min(
+    ...Array.from(
+      { length: 10 },
+      (_, index) => player.placementCounts[index] ?? 0,
+    ),
+  );
+  return player.placementCounts
+    .slice(0, 10)
+    .flatMap((count, index) => (count > completed ? [index + 1] : []));
 }
 
 function cycleProgress(player: Snapshot["raceCycles"][number]): number {
   return cyclePositions(player).length;
+}
+
+function cycleRaceTotal(player: Snapshot["raceCycles"][number]): number {
+  if (player.totalRacesComplete) return player.totalRaces ?? 0;
+  return Math.max(
+    player.totalRaces ?? 0,
+    player.placementCounts.reduce((sum, count) => sum + count, 0),
+  );
 }
 
 function compareCycleLeaders(
@@ -124,7 +139,7 @@ export function escapeHtml(value: unknown): string {
 }
 
 function formatDate(value?: string): string {
-  return formatTimestamp(value);
+  return value === "" ? "Unknown date" : formatTimestamp(value);
 }
 
 function formatRaceTime(value?: number): string {
@@ -140,7 +155,8 @@ function formatLabel(value?: string): string {
 
 export const defaultRaceMessage = "{intro} {placements}";
 export const defaultRaceEntry = "{place} {player} +{points}pts";
-export const defaultPromotionMessage = "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol";
+export const defaultPromotionMessage =
+  "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol";
 
 export function twitchPreviewMessages(
   messagePrefix: string,
@@ -282,9 +298,15 @@ export function twitchMessageIsCustomized(
 export function raceMessageIsCustomized(config: Config["twitch"]): boolean {
   return (
     twitchMessageIsCustomized("twitch-message-prefix", config.messagePrefix) ||
-    (!!config.raceMessageTemplate?.trim() && config.raceMessageTemplate.trim() !== defaultRaceMessage) ||
-    (!!config.raceEntryTemplate?.trim() && config.raceEntryTemplate.trim() !== defaultRaceEntry) ||
-    (config.racePodiumTemplates ?? []).some((text) => !!text.trim() && text.trim() !== (config.raceEntryTemplate?.trim() || defaultRaceEntry)) ||
+    (!!config.raceMessageTemplate?.trim() &&
+      config.raceMessageTemplate.trim() !== defaultRaceMessage) ||
+    (!!config.raceEntryTemplate?.trim() &&
+      config.raceEntryTemplate.trim() !== defaultRaceEntry) ||
+    (config.racePodiumTemplates ?? []).some(
+      (text) =>
+        !!text.trim() &&
+        text.trim() !== (config.raceEntryTemplate?.trim() || defaultRaceEntry),
+    ) ||
     (config.raceEntrySeparator ?? " | ") !== " | "
   );
 }
@@ -383,6 +405,7 @@ function stat(label: string, value: unknown): string {
       "Last updated": "clock",
       "Tracked racers": "racers",
       "Completed cycles": "cycles",
+      "Race #": "statRaceFlag",
       "Streamer.bot": "chain",
     } as Record<string, string>
   )[label];
@@ -472,7 +495,7 @@ function resultsTable(
     `;
   }
 
-  const winner = game.results.find(result => result.placement === 1);
+  const winner = game.results.find((result) => result.placement === 1);
   const battleRoyale = game.gameType === "battleRoyale";
   const sort: ResultsSort =
     (!battleRoyale && ["kills", "damage"].includes(requestedSort.key)) ||
@@ -530,7 +553,9 @@ function overviewPage(
   resultsSort: ResultsSort,
   selectedRaceId: string,
 ): string {
-  const displayedGame = selectedRaceId ? state.recentResults.find(game => game.id === selectedRaceId) : state.latestResult;
+  const displayedGame = selectedRaceId
+    ? state.recentResults.find((game) => game.id === selectedRaceId)
+    : state.latestResult;
   const fileName =
     state.config.csv.path.split(/[\\/]/).pop() || "LastSeasonRace.csv";
 
@@ -540,7 +565,7 @@ function overviewPage(
         <div>
           <div class="race-heading">
             <i class="race-heading-icon">${sidebarArtwork("overview", "header-overview")}</i>
-            <div><h1>RaceStats</h1><p>${escapeHtml(fileName)} · Race + Battle Royale</p></div>
+            <div><h1>RaceStats</h1></div>
           </div>
         </div>
 
@@ -549,16 +574,23 @@ function overviewPage(
         ${stat("Session BRs", state.sessionResults.filter((game) => game.gameType === "battleRoyale").length)}
         ${stat(
           "Last update",
-          state.lastUpdate
-            ? formatTime(state.lastUpdate)
-            : "Never",
+          state.lastUpdate ? formatTime(state.lastUpdate) : "Never",
         )}
       </div>
 
         <div class="head-actions tracking-controls">
           ${watcherControls(state, busy, "stats")}
           ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}
-          <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest</option>${[...state.recentResults].reverse().filter(game => game.id !== state.latestResult?.id).map(game => `<option value="${escapeHtml(game.id)}" ${selectedRaceId === game.id ? "selected" : ""}>${escapeHtml(formatDate(game.timestamp))} &middot; ${escapeHtml(game.mapName ?? "Unknown track")}</option>`).join("")}</select></div>
+          <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest Results</option>${[
+            ...state.recentResults,
+          ]
+            .reverse()
+            .filter((game) => game.id !== state.latestResult?.id)
+            .map(
+              (game) =>
+                `<option value="${escapeHtml(game.id)}" ${selectedRaceId === game.id ? "selected" : ""}>${escapeHtml(formatDate(game.timestamp))} &middot; ${escapeHtml(game.mapName ?? "Unknown track")}</option>`,
+            )
+            .join("")}</select></div>
         </div>
       </div>
 
@@ -641,7 +673,7 @@ function historyPage(state: Snapshot): string {
   return `
     <div class="history-view">
     <div class="page-head">
-      <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("history", "header-history")}</i><div><h1>History</h1><p>Saved races processed by Stats and Cycles.</p></div></div>
+      <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("history", "header-history")}</i><div><h1>History</h1></div></div>
     </div>
 
     <div class="history-panels">
@@ -759,10 +791,12 @@ function settingsPage(
         key: "promotion",
         kind: "missionPromotion",
         title: "Mission app promotion",
-        description: "Runs on the promotion interval in Settings, even without Twitch. Sends promotionMessage, downloadUrl, and intervalMinutes arguments.",
+        description:
+          "Runs on the promotion interval in Settings, even without Twitch. Sends promotionMessage, downloadUrl, and intervalMinutes arguments.",
         icon: icons.webhook,
         enabled: streamerBot.events?.missionPromotion ?? false,
-        action: streamerBot.actions.missionPromotion || "Marbles - Mission Promotion",
+        action:
+          streamerBot.actions.missionPromotion || "Marbles - Mission Promotion",
         input: "streamer-promotion-action",
       },
     ]
@@ -968,7 +1002,6 @@ function settingsPage(
       <div class="race-heading">
         <i class="race-heading-icon ${section === "twitch" ? "twitch-heading-icon" : ""}">${sidebarArtwork(section, `header-${section}`)}</i><div>
         <h1>${page.title}</h1>
-        <p>${page.description}</p>
         </div>
       </div>
     </div>
@@ -1028,6 +1061,8 @@ function raceCyclesPage(
       });
     } else if (sort.key === "cycles") {
       comparison = left.cycles - right.cycles;
+    } else if (sort.key === "races") {
+      comparison = cycleRaceTotal(left) - cycleRaceTotal(right);
     } else {
       const position = Number(sort.key.replace("position-", "")) - 1;
       comparison =
@@ -1060,6 +1095,7 @@ function raceCyclesPage(
             <button type="button" class="player-history-link" data-cycle-player="${escapeHtml(player.playerKey)}">${escapeHtml(player.playerName)}</button>
           </td>
           <td class="cycle-total">${player.cycles}</td>
+          <td title="${player.totalRacesComplete ? "Races participated in, including positions outside the top ten" : "Minimum known races; older saved results do not contain complete participation counts"}">${player.totalRacesComplete ? "" : "≥"}${cycleRaceTotal(player)}</td>
           ${Array.from({ length: 10 }, (_, index) => {
             const count = player.placementCounts[index] ?? 0;
             return `<td class="cycle-count ${cyclePositions(player).includes(index + 1) ? "ready" : ""}">${count}</td>`;
@@ -1074,17 +1110,18 @@ function raceCyclesPage(
     <div class="page-head tracking-page-head">
       <div class="race-heading">
         <i class="race-heading-icon">${sidebarArtwork("racecycles", "header-racecycles")}</i>
-        <div><h1>RaceCycles</h1>
-        <p>Placements 1-10 accumulate and carry forward into every cycle.</p></div>
+        <div><h1>RaceCycles</h1></div>
       </div>
     <div class="summary-row">
       ${stat("Tracked racers", players.length)}
       ${stat("Completed cycles", totalCycles)}
+      ${stat("Race #", state.totalCycleRaceCount)}
       ${stat("Last updated", state.cycleLastUpdate ? formatTime(state.cycleLastUpdate) : "Never")}
     </div>
 
       <div class="tracking-controls">${watcherControls(state, busy, "cycles")}
         ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}
+        ${feedbackButton("import-marble-cycle", "Import from MarblesCycles", "data-import-marble-cycle", "download")}
       </div>
     </div>
 
@@ -1105,7 +1142,7 @@ function raceCyclesPage(
           players.length
             ? `<div class="table-frame"><div class="table-wrap cycle-table-wrap">
                 <table class="cycle-table">
-                  <thead><tr><th>#</th>${sortableHeader("racer", "Racer")}${sortableHeader("cycles", "Cycles")}${Array.from({ length: 10 }, (_, index) => sortableHeader(`position-${index + 1}`, String(index + 1))).join("")}</tr></thead>
+                  <thead><tr><th>#</th>${sortableHeader("racer", "Racer")}${sortableHeader("cycles", "Cycles")}${sortableHeader("races", "Races")}${Array.from({ length: 10 }, (_, index) => sortableHeader(`position-${index + 1}`, String(index + 1))).join("")}</tr></thead>
                   <tbody>${rows}</tbody>
                 </table>
               </div></div>`
@@ -1324,7 +1361,7 @@ function logsPage(state: Snapshot, selectedFilter: string): string {
   return `
     <section class="log-window">
       <header class="page-head">
-        <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("logs", "header-logs")}</i><div><h1>Live log</h1><p>Watcher and parser activity updates here as it happens.</p></div></div>
+        <div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("logs", "header-logs")}</i><div><h1>Live log</h1></div></div>
 
         <div class="log-actions">
           <select id="log-filter">
@@ -1361,14 +1398,20 @@ export function playerKey(result: GameResult["results"][number]): string {
   return `${result.platform.trim().toLowerCase()}:${(result.username.trim() || result.playerName.trim()).toLowerCase()}`;
 }
 
-function playerHistorySummary(name: string, subtitle: string, totals: [string, number][], counts: number[]): string {
-  const ordinal = (place: number) => `${place}${place === 1 ? "st" : place === 2 ? "nd" : place === 3 ? "rd" : "th"}`;
+function playerHistorySummary(
+  name: string,
+  subtitle: string,
+  totals: [string, number | string][],
+  counts: number[],
+): string {
+  const ordinal = (place: number) =>
+    `${place}${place === 1 ? "st" : place === 2 ? "nd" : place === 3 ? "rd" : "th"}`;
   const medal = `<svg viewBox="0 0 24 30" fill="none" aria-hidden="true"><path d="m6 18-2 10 8-4 8 4-2-10" fill="currentColor" opacity=".45"/><circle cx="12" cy="11" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="11" r="6" fill="currentColor" opacity=".25"/><path d="m12 6 1.6 3.2 3.5.5-2.5 2.5.6 3.5-3.2-1.7-3.2 1.7.6-3.5L7 9.7l3.4-.5L12 6Z" fill="currentColor"/></svg>`;
   return `<section class="summary-item player-history-summary ${counts.length === 3 ? "player-history-podium" : "player-history-cycle-card"}" aria-label="${escapeHtml(subtitle)}">
     <div class="player-history-profile">
       <i class="player-history-emblem" aria-hidden="true">${icons.racers}</i>
       <div class="player-history-identity"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong></div>
-      <div class="player-history-totals">${totals.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${value}</b></span>`).join("")}</div>
+      <div class="player-history-totals">${totals.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join("")}</div>
     </div>
     <div class="player-history-placements" aria-label="Placement totals">${counts.map((count, index) => `<span class="player-history-placement" aria-label="${ordinal(index + 1)} places: ${count}">${index < 3 ? `<i class="player-history-medal">${medal}</i>` : ""}<span><small>${ordinal(index + 1)}</small><b>${count}</b></span></span>`).join("")}</div>
   </section>`;
@@ -1379,61 +1422,126 @@ export function playerHistoryContent(
   kind: "race" | "cycles",
   key: string,
 ): { title: string; content: string } {
-  const player = state.raceCycles.find(player => player.playerKey === key);
+  const player = state.raceCycles.find((player) => player.playerKey === key);
   let name = player?.playerName ?? key;
   const table = (headers: string[], rows: string[]): string =>
-    `<div class="table-frame"><div class="table-scroll"><table><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div></div>`;
+    `<div class="table-frame"><div class="table-scroll"><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div></div>`;
   if (kind === "cycles") {
     const rows: string[] = [];
     const counts = Array<number>(10).fill(0);
     let cyclesEarned = 0;
+    const participated = new Set(state.recentResults.filter(game => game.gameType === "race" && game.results.some(result => playerKey(result) === key)).map(game => game.id));
+    let participation = participated.size;
+    let incompleteParticipation = false;
     const seenGames = new Set<string>();
     for (const entry of [...state.cycleHistory].reverse()) {
       if (seenGames.has(entry.gameId)) continue;
       seenGames.add(entry.gameId);
       // Older saved entries have the race fingerprint but no per-player earnings.
       // Display only actual saved matching standings; never migrate or fabricate them.
-      const savedGame = entry.game ?? state.recentResults.find(game => game.id === entry.gameId);
-      const savedResult = savedGame?.gameType === "race"
-        ? savedGame.results.find(result => playerKey(result) === key)
-        : undefined;
-      let earned = entry.earnings?.find(earned => earned.playerKey === key);
-      if (!entry.earnings?.length && savedResult && savedResult.placement >= 1 && savedResult.placement <= 10) {
-        const completion = entry.completions?.find(completion =>
-          [savedResult.playerName, savedResult.displayName, savedResult.username].some(name =>
-            name.trim().toLowerCase() === completion.playerName.trim().toLowerCase()));
+      const savedGame =
+        entry.game ??
+        state.recentResults.find((game) => game.id === entry.gameId);
+      const savedResult =
+        savedGame?.gameType === "race"
+          ? savedGame.results.find((result) => playerKey(result) === key)
+          : undefined;
+      if (savedResult && !participated.has(entry.gameId)) { participation++; participated.add(entry.gameId); }
+      if (!savedGame) incompleteParticipation = true;
+      let earned = entry.earnings?.find((earned) => earned.playerKey === key);
+      if (
+        !entry.earnings?.length &&
+        savedResult &&
+        savedResult.eliminated !== true &&
+        savedResult.placement >= 1 &&
+        savedResult.placement <= 10
+      ) {
+        const completion = entry.completions?.find((completion) =>
+          [
+            savedResult.playerName,
+            savedResult.displayName,
+            savedResult.username,
+          ].some(
+            (name) =>
+              name.trim().toLowerCase() ===
+              completion.playerName.trim().toLowerCase(),
+          ),
+        );
         earned = {
-          playerKey: key, playerName: savedResult.playerName,
-          placement: savedResult.placement, pointsEarned: 1,
+          playerKey: key,
+          playerName: savedResult.playerName,
+          placement: savedResult.placement,
+          pointsEarned: 1,
           cyclesEarned: completion ? 1 : 0,
           cycleNumber: completion?.cycleNumber ?? 0,
           placementCounts: [],
         };
       }
       if (!earned && !entry.earnings?.length) {
-        const knownNames = [player?.playerName, key.split(":").slice(1).join(":")].filter(Boolean);
-        const completions = entry.completions?.length ? entry.completions
-          : entry.cycleNumber > 0 ? [{ playerName: entry.playerName, cycleNumber: entry.cycleNumber }] : [];
-        const completion = completions.find(completion => knownNames.some(name =>
-          name!.trim().toLowerCase() === completion.playerName.trim().toLowerCase()));
+        const knownNames = [
+          player?.playerName,
+          key.split(":").slice(1).join(":"),
+        ].filter(Boolean);
+        const completions = entry.completions?.length
+          ? entry.completions
+          : entry.cycleNumber > 0
+            ? [{ playerName: entry.playerName, cycleNumber: entry.cycleNumber }]
+            : [];
+        const completion = completions.find((completion) =>
+          knownNames.some(
+            (name) =>
+              name!.trim().toLowerCase() ===
+              completion.playerName.trim().toLowerCase(),
+          ),
+        );
         if (completion) {
           name = completion.playerName;
           cyclesEarned += 1;
-          rows.push(`<tr class="history-achievement"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? "Unknown track")}</td><td>—</td><td>—</td><td>Cycle #${completion.cycleNumber} completed</td><td>—</td><td>${entry.playerCount ?? "—"}</td></tr>`);
+          rows.push(
+            `<tr class="history-achievement"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? "Unknown track")}</td><td>—</td><td>—</td><td>Cycle #${completion.cycleNumber} completed</td><td>—</td><td>${entry.playerCount ?? "—"}</td></tr>`,
+          );
         }
       }
       if (!earned) continue;
       name = earned.playerName;
-      if (earned.placement >= 1 && earned.placement <= 10) counts[earned.placement - 1] += earned.pointsEarned;
+      if (earned.placement >= 1 && earned.placement <= 10)
+        counts[earned.placement - 1] += earned.pointsEarned;
       cyclesEarned += earned.cyclesEarned;
-      rows.push(`<tr class="${earned.cyclesEarned ? "history-achievement" : ""}"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? savedGame?.mapName ?? "Unknown track")}</td><td>${earned.placement}</td><td>${earned.pointsEarned}</td><td>${earned.cyclesEarned ? `Cycle #${earned.cycleNumber} completed` : "\u2014"}</td><td>${earned.placementCounts.length ? earned.placementCounts.join(" / ") : "\u2014"}</td><td>${entry.playerCount ?? savedGame?.playerCount ?? "\u2014"}</td></tr>`);
+      rows.push(
+        `<tr class="${earned.cyclesEarned ? "history-achievement" : ""}"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? savedGame?.mapName ?? "Unknown track")}</td><td>${earned.placement}</td><td>${earned.pointsEarned}</td><td>${earned.cyclesEarned ? `Cycle #${earned.cycleNumber} completed` : "\u2014"}</td><td>${earned.placementCounts.length ? earned.placementCounts.join(" / ") : "\u2014"}</td><td>${entry.playerCount ?? savedGame?.playerCount ?? "\u2014"}</td></tr>`,
+      );
     }
-    const summary = playerHistorySummary(name, "Cycles · saved history", [["Points", counts.reduce((sum, count) => sum + count, 0)], ["Cycles", cyclesEarned]], counts);
+    const summary = playerHistorySummary(
+      name,
+      "Cycles · saved history",
+      [
+        ["Points", counts.reduce((sum, count) => sum + count, 0)],
+        ["Cycles", cyclesEarned],
+        [
+          "Races",
+          incompleteParticipation ? `≥${participation}` : participation,
+        ],
+      ],
+      counts,
+    );
     return {
       title: `${name} \u2014 Cycles history`,
-      content: summary + (rows.length
-        ? table(["Date/time", "Track", "Placement", "Points earned", "Cycles earned", "Placements 1-10", "Participants"], rows)
-        : '<div class="empty-state">No saved point-earning races for this player.</div>'),
+      content:
+        summary +
+        (rows.length
+          ? table(
+              [
+                "Date/time",
+                "Track",
+                "Placement",
+                "Points earned",
+                "Cycles earned",
+                "Placements 1-10",
+                "Participants",
+              ],
+              rows,
+            )
+          : '<div class="empty-state">No saved point-earning races for this player.</div>'),
     };
   }
   const raceRows: string[] = [];
@@ -1441,25 +1549,61 @@ export function playerHistoryContent(
   const podiumCounts = [0, 0, 0];
   let earnedPoints = 0;
   let eventPoints = 0;
-  const eventIds = new Set(state.eventResultIds ?? state.sessionResults.map(game => game.id));
+  const eventIds = new Set(
+    state.eventResultIds ?? state.sessionResults.map((game) => game.id),
+  );
   for (const game of [...state.recentResults].reverse()) {
-    for (const result of game.results.filter(result => playerKey(result) === key)) {
+    for (const result of game.results.filter(
+      (result) => playerKey(result) === key,
+    )) {
       name = result.playerName;
-      if (result.placement >= 1 && result.placement <= 3) podiumCounts[result.placement - 1]++;
+      if ((game.gameType === "battleRoyale" || result.eliminated !== true) && result.placement >= 1 && result.placement <= 3)
+        podiumCounts[result.placement - 1]++;
       earnedPoints += result.seasonPointsEarned;
       if (eventIds.has(game.id)) eventPoints += result.seasonPointsEarned;
       const br = game.gameType === "battleRoyale";
-      const worldRecord = game.hasWorldRecord && [result.playerName, result.username, result.displayName].some(name => name.trim().toLowerCase() === game.worldRecordPlayer?.trim().toLowerCase());
+      const worldRecord =
+        game.hasWorldRecord &&
+        [result.playerName, result.username, result.displayName].some(
+          (name) =>
+            name.trim().toLowerCase() ===
+            game.worldRecordPlayer?.trim().toLowerCase(),
+        );
       const row = `<tr class="${worldRecord ? "history-achievement" : ""}"><td>${formatDate(game.timestamp)}</td><td>${escapeHtml(game.mapName ?? "Unknown track")}</td><td>${result.placement}</td><td class="race-time">${formatRaceTime(result.finishTime)}</td><td>${result.seasonPointsEarned}</td><td>${result.seasonPointsTotal ?? "\u2014"}</td><td>${game.playerCount}</td><td>${result.eliminated == null ? "\u2014" : result.eliminated ? "Yes" : "No"}</td>${br ? `<td>${escapeHtml(result.rawData?.MatchKills ?? "\u2014")}</td><td>${escapeHtml(result.rawData?.MatchDamageDealt ?? "\u2014")}</td>` : ""}<td>${worldRecord ? "World record" : "\u2014"}</td></tr>`;
       (br ? brRows : raceRows).push(row);
     }
   }
-  const headers = ["Date/time", "Track", "Placement", "Time", "Points earned", "Season total", "Participants", "Eliminated"];
-  const summary = playerHistorySummary(name, "RaceStats · player results", [["Total points", earnedPoints], ["Event points", eventPoints]], podiumCounts);
+  const headers = [
+    "Date/time",
+    "Track",
+    "Placement",
+    "Time",
+    "Points earned",
+    "Season total",
+    "Participants",
+    "Eliminated",
+  ];
+  const summary = playerHistorySummary(
+    name,
+    "RaceStats · player results",
+    [
+      ["Total points", earnedPoints],
+      ["Event points", eventPoints],
+      ["Races", raceRows.length],
+      ["BRs", brRows.length],
+    ],
+    podiumCounts,
+  );
   return {
     title: `${name} \u2014 Detailed race results`,
-    content: summary + ((raceRows.length ? `<h3>Race results</h3>${table([...headers, "Record"], raceRows)}` : "")
-      + (brRows.length ? `<h3>Battle Royale results</h3>${table([...headers, "Kills", "Damage", "Record"], brRows)}` : "")
-      || '<div class="empty-state">No saved races for this player.</div>'),
+    content:
+      summary +
+      ((raceRows.length
+        ? `<h3>Race results</h3>${table([...headers, "Record"], raceRows)}`
+        : "") +
+        (brRows.length
+          ? `<h3>Battle Royale results</h3>${table([...headers, "Kills", "Damage", "Record"], brRows)}`
+          : "") ||
+        '<div class="empty-state">No saved races for this player.</div>'),
   };
 }
