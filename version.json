@@ -1,8 +1,12 @@
 {
-  "version": "0.2.5",
+  "version": "0.2.6",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Added auto update.",
-    "Added MarblesCycles import."
+    "Added a sortable Wins column to the main RaceStats results table.",
+    "Restored podium row colors in alternate themes and aligned result headers with their values.",
+    "Simplified player history cards by showing the name once with its icon in the heading.",
+    "Show sidebar tooltips only when collapsed.",
+    "Turn off Mission Manager chat promotion by default while preserving saved choices.",
+    "Use muted text for the Cycles overlay Left count so completed cycles stand out."
   ]
 }
