@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { Config, LogEntry, Snapshot } from "./types";
 import {
   escapeHtml,
+  playerHistoryContent,
   cycleMessagePreview,
   worldRecordMessagePreview,
   defaultWorldRecordMessage,
@@ -19,7 +20,8 @@ import "./reference-theme.css";
 import "./themes.css";
 import { applyTheme, normalizeTheme } from "./theme";
 import { icons } from "./icons";
-import { confirmClear } from "./confirm-dialog";
+import { showAnimatedDialog } from "./dialog-motion";
+import { confirmClear, confirmClearWithBackup } from "./confirm-dialog";
 import { initializeUpdates, bindUpdateSettings } from "./updates";
 import { installIntegrationHelp } from "./integration-help";
 import { openOverlayVariables } from "./overlay-help";
@@ -34,6 +36,7 @@ installIntegrationHelp();
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 let state: Snapshot = {
+  eventResultIds: [],
   cycleHistory: [],
   totalCycleRaceCount: 0,
   totalRaceCount: 0,
@@ -63,7 +66,8 @@ let state: Snapshot = {
     },
     twitch: {
       promoteMissionApp: true,
-      promotionIntervalMinutes: 60,      postWorldRecords: false,
+      promotionIntervalMinutes: 60,
+      postWorldRecords: false,
       worldRecordMessageTemplate: defaultWorldRecordMessage,
       postResults: true,
       postCycleResults: false,
@@ -97,6 +101,8 @@ let pageTransitionStarted = 0;
 let watcherCommandIsRunning = true;
 let logFilter = "all";
 let cycleSearch = "";
+let raceSearch = "";
+let selectedRaceId = "";
 let editingName = false;
 let exportIsRunning = false;
 let raceCycleSort: RaceCycleSort = { key: "cycles", direction: "desc" };
@@ -183,7 +189,7 @@ function renderMainWindow(): void {
   // Status events and button feedback must not reload playing preview iframes.
   if (currentPage === "overlays" && renderedPage === currentPage && root.querySelector(".overlays-page")?.getAttribute("data-directory") === overlayDirectory) {
     const next = document.createElement("template");
-    next.innerHTML = renderApplication(state, currentPage, watcherCommandIsRunning, logFilter, raceCycleSort, editingName, resultsSort, overlayDirectory);
+    next.innerHTML = renderApplication(state, currentPage, watcherCommandIsRunning, logFilter, raceCycleSort, editingName, resultsSort, overlayDirectory, selectedRaceId);
     const footer = root.querySelector(".sidebar-foot");
     const updatedFooter = next.content.querySelector(".sidebar-foot");
     if (footer && updatedFooter) footer.replaceWith(updatedFooter);
@@ -226,6 +232,7 @@ function renderMainWindow(): void {
     editingName,
     resultsSort,
     overlayDirectory,
+    selectedRaceId,
   );
   root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
   root.querySelector(".overlays-page")?.setAttribute("data-directory", overlayDirectory);
@@ -397,10 +404,51 @@ function renderMainWindow(): void {
     });
   });
   document.querySelector("#clear-race-results")?.addEventListener("click", async () => {
-    if (!await confirmClear("Clear RaceStats results?", "Reset total races, total BRs, session stats, season points, and the latest results shown on the dashboard. Saved history will remain.", "Clear results")) return;
-    try { state = await invoke<Snapshot>("clear_race_results"); }
+    const decision = await confirmClearWithBackup("Clear RaceStats results?", "Reset total races, total BRs, session stats, season points, and latest results. Persistent race history will remain.");
+    if (!decision.confirmed) return;
+    try { state = await invoke<Snapshot>("clear_race_results", { backup: decision.backup }); selectedRaceId = ""; }
     catch (error) { alert(String(error)); }
     finally { render(); }
+  });
+  document.querySelector<HTMLSelectElement>("#previous-race-results")?.addEventListener("change", event => {
+    selectedRaceId = (event.target as HTMLSelectElement).value;
+    render();
+  });
+  const raceInput = document.querySelector<HTMLInputElement>("#race-search");
+  if (raceInput) {
+    raceInput.value = raceSearch;
+    const filter = () => {
+      raceSearch = raceInput.value;
+      let matched = 0;
+      const rows = document.querySelectorAll<HTMLTableRowElement>(".race-results tbody tr, .battle-royale-results tbody tr");
+      rows.forEach(row => {
+        row.hidden = !row.querySelector(".player")!.textContent!.toLocaleLowerCase().includes(raceSearch.trim().toLocaleLowerCase());
+        if (!row.hidden) matched++;
+      });
+      document.querySelector("#race-filter-count")!.textContent = `${matched} of ${rows.length} racers`;
+    };
+    raceInput.addEventListener("input", filter);
+    filter();
+  }
+  document.querySelectorAll<HTMLElement>("[data-race-player], [data-cycle-player]").forEach(button => {
+    const open = () => {
+      if (document.querySelector("#player-history-dialog")) return;
+      const kind = button.dataset.cyclePlayer ? "cycles" : "race";
+      const history = playerHistoryContent(state, kind, button.dataset.cyclePlayer ?? button.dataset.racePlayer!);
+      const dialog = document.createElement("dialog");
+      dialog.id = "player-history-dialog";
+      dialog.className = "overlay-preview-dialog player-history-dialog";
+      dialog.innerHTML = `<header><h2 id="player-history-title">${escapeHtml(history.title)}</h2><button type="button" class="compact-button modal-close" aria-label="Close">${icons.close}</button></header>${history.content}`;
+      dialog.setAttribute("aria-labelledby", "player-history-title");
+      dialog.querySelector("button")!.addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => dialog.remove(), { once: true });
+      document.body.append(dialog);
+      showAnimatedDialog(dialog);
+    };
+    button.addEventListener("click", open);
+    if (button.tagName !== "BUTTON") button.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); }
+    });
   });
   const search = document.querySelector<HTMLInputElement>("#cycle-search");
   if (search) {
@@ -428,7 +476,7 @@ function renderMainWindow(): void {
     document
       .querySelector("#clear-history")
       ?.addEventListener("click", async () => {
-        if (!await confirmClear("Clear race history?", "Delete all saved Race and Battle Royale history and clear the latest displayed result. Stats totals and cycle progress will remain.", "Clear history")) return;
+        if (!await confirmClear("Clear race history?", "Delete all saved Race and Battle Royale history. Current results, stats totals, and Cycles history will remain.", "Clear history")) return;
         try {
           state = await invoke<Snapshot>("clear_history");
         } catch (error) {
@@ -462,12 +510,10 @@ function renderMainWindow(): void {
     document
       .querySelector("#clear-race-cycles")
       ?.addEventListener("click", async () => {
-        if (
-          !await confirmClear("Clear RaceCycles results?", "Reset all tracked players, placements, completed cycles, and tracked race counts. Saved cycle history will remain.", "Clear results")
-        )
-          return;
+        const decision = await confirmClearWithBackup("Clear RaceCycles results?", "Reset current players, placements, cycles, and race counts. Persistent Cycles history will remain.");
+        if (!decision.confirmed) return;
         try {
-          state = await invoke<Snapshot>("clear_race_cycles");
+          state = await invoke<Snapshot>("clear_race_cycles", { backup: decision.backup });
         } catch (error) {
           alert(String(error));
         } finally {
@@ -478,6 +524,7 @@ function renderMainWindow(): void {
 }
 
 function render(): void {
+  if (selectedRaceId && (selectedRaceId === state.latestResult?.id || !state.recentResults.some(game => game.id === selectedRaceId))) selectedRaceId = "";
   const samePage = renderedPage === currentPage;
   const scrollSelector = ".content, .table-scroll, .cycle-table-wrap, .twitch-message-preview";
   const scrollPositions = samePage
@@ -591,7 +638,8 @@ function readSettingsForm(): Config {
     twitch: {
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
       promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? true,
-      promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),      worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
+      promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),
+      worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
       postCycleResults: document.querySelector<HTMLInputElement>("#twitch-post-cycles")?.checked ?? state.config.twitch.postCycleResults,
 
       postResults:
@@ -832,14 +880,16 @@ async function initialize(): Promise<void> {
 
   await Promise.all([appStateListener, logListener]);
 
-  if (state.twitchStatus !== "Disconnected") {
-    invoke<Snapshot>("validate_twitch_session")
-      .then((snapshot) => {
-        state = snapshot;
-        render();
-      })
-      .catch(() => undefined);
-  }
+  let twitchValidationPending = false;
+  const maintainTwitchLogin = async () => {
+    if (twitchValidationPending || !["Saved", "Connected", "Unavailable"].includes(state.twitchStatus)) return;
+    twitchValidationPending = true;
+    try { state = await invoke<Snapshot>("validate_twitch_session"); render(); }
+    catch { /* Preserve the saved login through temporary backend/network failures. */ }
+    finally { twitchValidationPending = false; }
+  };
+  void maintainTwitchLogin();
+  window.setInterval(() => { void maintainTwitchLogin(); }, 30 * 60 * 1000);
 
   for (const [kind, enabled] of [["stats", state.config.csv.autoStartWatcher], ["cycles", state.config.csv.autoStartCycles]] as const) {
     if (!enabled) continue;

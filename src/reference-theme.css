@@ -5294,3 +5294,83 @@ dialog[open].dialog-closing::backdrop {
 @media (max-width: 760px) {
   .integration-page-layout .feature-content:has(.race-message-templates) > .twitch-message-preview { grid-column: 1; grid-row: 4; }
 }
+
+/* RaceStats additions retain the existing controls, result card, and dialog theme. */
+.integration-page-layout .integration-connection-controls > .button-feedback-error {
+  flex: 1 0 100%;
+  width: 100%;
+  contain: none;
+}
+.results-header .results-name { flex: 1 1 auto; min-width: 100px; }
+.results-header .results-name h2 { font-size: 18px; min-width: 0; }
+.results-header .results-actions { gap: 10px; }
+.results-header .results-actions-group { gap: 8px; }
+.results-panel .race-context .track-item { gap: 8px; }
+.results-panel .race-context .track-item+.track-item { padding-left: 10px; }
+.results-panel .race-context .track-item:nth-child(2) { min-width: 140px; max-width: 45%; }
+.results-panel .race-context .track-item > i { width: 24px; height: 24px; }
+.results-panel .race-context .track-item small { white-space: nowrap; font-size: 11px; }
+.results-panel .race-context .track-item b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.overlay-preview-dialog.player-history-dialog { width: min(1200px, 94vw); max-width: 94vw; }
+.player-history-dialog .table-frame { margin-top: 16px; }
+.player-history-dialog .player-history-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+  min-height: 0;
+  padding: 8px 10px;
+  margin-top: 12px;
+  overflow-x: auto;
+}
+.player-history-profile { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 auto; }
+.player-history-emblem { display: flex; flex: none; width: 28px; height: 28px; color: var(--reference-teal); }
+.player-history-emblem svg { width: 100%; height: 100%; }
+.player-history-identity { min-width: 70px; max-width: 180px; }
+.player-history-identity strong { display: block; }
+.player-history-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.player-history-identity small { color: var(--reference-secondary); font-size: 11px; }
+.player-history-totals { display: flex; flex: none; gap: 12px; margin-left: 4px; }
+.player-history-totals > span { display: flex; align-items: baseline; gap: 6px; }
+.player-history-totals small { color: var(--reference-secondary); font-size: 11px; }
+.player-history-totals b { color: var(--reference-teal); font-size: 16px; font-variant-numeric: tabular-nums; }
+.player-history-placements {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  margin-left: auto;
+}
+.player-history-placement {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  text-align: center;
+  background: var(--reference-control);
+  border: 1px solid var(--reference-control-border);
+  border-radius: 4px;
+}
+.player-history-placement > span { display: grid; gap: 2px; min-width: 20px; }
+.player-history-medal { display: flex; width: 20px; height: 26px; color: #e9c56d; }
+.player-history-medal svg { width: 100%; height: 100%; }
+.player-history-placement:nth-child(2) .player-history-medal { color: #c4d1e2; }
+.player-history-placement:nth-child(3) .player-history-medal { color: #cc9369; }
+.player-history-podium .player-history-placement { padding: 5px 10px; gap: 8px; }
+.player-history-podium .player-history-placement b { font-size: 18px; }
+.previous-results-control select {
+  height: 30px;
+  min-width: 180px;
+  padding: 4px 30px 4px 10px;
+  font-size: 12px;
+  color: var(--reference-ink);
+  background-color: var(--dropdown-background);
+  border: 1px solid var(--reference-control-border);
+  border-radius: var(--reference-radius-control);
+}
+.previous-results-control select:focus-visible { outline: 2px solid #536dab; outline-offset: 1px; }
+.previous-results-control option { color: var(--reference-ink); background: var(--dropdown-background, #10172d); }
+.player-history-placement small { color: var(--reference-secondary); font-size: 10px; line-height: 12px; }
+.player-history-placement b { color: var(--reference-ink); font-size: 15px; line-height: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.player-history-placement:nth-child(-n+3) { border-color: color-mix(in srgb, var(--reference-teal) 35%, var(--reference-control-border)); }
+.player-history-dialog .history-achievement td { background: color-mix(in srgb, var(--reference-teal) 16%, transparent); }
+:is(.player-history-dialog, .history-view) table :is(th, td) { font-size: 12px; line-height: 17px; padding: 6px 8px; }

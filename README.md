@@ -32,6 +32,16 @@ Content and control icons use native Phosphor Regular SVGs, bundled locally with
 
 Starting the app or a watcher does not process existing files. **Reprocess latest file** reads the most recently modified supported results file manually. Duplicate snapshots do not count twice; manual reprocessing can refresh results and correct points.
 
+Cycles counts **Race only**. Every placement from 1st through 10th adds one point to that position's accumulated count. Completed cycles are the minimum of those ten counts: three 1sts and one each of 2nd-10th means one completed cycle, with the two extra 1sts still filled for future cycles. Counts never reset on completion.
+
+RaceStats keeps every processed Race/BR's full standings in local `history.json`. Cycles independently saves point-earning races, complete results, cycle standings and per-player placement/point/achievement details in `race-state.json`; races without a top-ten point do not create Cycles history entries. Neither history has a 250-entry cutoff. Click a player in either table to open that feature's separate history dialog. Cycles highlights completed cycles; RaceStats highlights world records. RaceStats includes matching player search, participant count and a **Latest / previous results** selector labelled by date/time and track.
+
+Cycles player history shows summary cards for saved points, cycles earned and placements 1-10 above the per-track results. Existing older Cycles records display matching saved race standings when available; fields that were never saved remain unavailable, without migrating data. New Cycles entries contain their own complete standings and do not depend on RaceStats history. RaceStats player history shows Race and BR results separately, with Kills/Damage only for BR.
+
+Both histories use compact player cards and smaller tables. RaceStats cards show saved 1st/2nd/3rd counts, total points from retained history, and event points from counted results since the last **Clear Results**; event membership survives restart and is independent of session counters. RaceStats keeps **Export session** beside search and Clear Results. Its result-info strip stays side by side with natural widths and the last item filling the remaining space.
+
+Both **Clear Results** dialogs offer a backup before clearing. Backups are timestamped JSON files in the writable app-data `backups` folder; a failed backup prevents clearing. Clearing current results preserves both independent histories. No data migrations run.
+
 Session stats reset when the app opens. Season totals and cycle progress persist until their **Clear Results** action is confirmed. Clearing history is a separate action. The dashboard restores the latest saved result on restart without recounting it.
 
 ## OBS overlays
@@ -59,6 +69,8 @@ Open **Variables** on an event card for its fields and examples. **Copy for Stre
 ## Twitch
 
 Connect your account from the **Twitch** page and enable the messages you want. Toggles save immediately; save template edits with **Save settings**. Race results, cycle completions, and world records have separate templates and test controls. Messages are sent to the connected account's own channel.
+
+The app validates the saved Twitch login on startup, every 30 minutes while open, and before posting. Access tokens nearing expiry are refreshed automatically and rotated credentials remain in Windows Credential Manager. Temporary network/service failures keep the saved login and show **Unavailable**, rather than incorrectly reporting **Expired**. Twitch can still invalidate authorization, and Public-client refresh tokens expire after 30 days; a rejected refresh requires reconnecting. Sign-in is not permanent. See [Twitch's refresh-token documentation](https://dev.twitch.tv/docs/authentication/refresh-tokens/).
 
 Race results let you customize the overall message, each placement, the separator, and individual 1st/2nd/3rd wording. Use `{placements}` in the overall message and `{player}`, `{placement}`, `{place}`, `{points}`, or `{time}` in entries. Blank templates keep the defaults. The preview and Test button use these settings; long lists split into messages of up to 500 characters with the overall wording repeated.
 
@@ -140,6 +152,7 @@ If pushing fails, retry the exact command printed by the release script instead 
 Runtime stats and editable live overlays are stored in the writable application-data directory, outside the repository. Dependencies, builds, local credentials, and temporary files are excluded by `.gitignore`.
 
 ## Current limitations
+
 
 - WR detection requires changed `LastCustomRaceMapPlayed.csv` metadata matching the latest completed match's map and winner. It uses `RecordHolderName`, `RecordTime`, and `DateSet`; `StreamerRecordHolder` is ignored. Race times must match within 0.001 seconds, and CSV writes must be within two minutes. Blank rows, existing records on startup, and repeated records do not trigger alerts. Late WR writes do not recount the match.
 - Race and Battle Royale are supported; Tilt is not implemented.

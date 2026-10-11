@@ -85,7 +85,8 @@ export interface Config {
 }
 
 export interface Snapshot {
-  cycleHistory: { timestamp: string; playerName: string; cycleNumber: number; mapName?: string; gameId: string; winnerName?: string; winningTime?: number; playerCount?: number; completions?: { playerName: string; cycleNumber: number }[] }[];
+  eventResultIds?: string[];
+  cycleHistory: { timestamp: string; playerName: string; cycleNumber: number; mapName?: string; gameId: string; winnerName?: string; winningTime?: number; playerCount?: number; standings?: RaceCyclePlayer[]; game?: GameResult; earnings?: { playerKey: string; playerName: string; placement: number; pointsEarned: number; cyclesEarned: number; cycleNumber: number; placementCounts: number[] }[]; completions?: { playerName: string; cycleNumber: number }[] }[];
   totalCycleRaceCount: number;
   totalRaceCount: number;
   totalBattleRoyaleCount: number;

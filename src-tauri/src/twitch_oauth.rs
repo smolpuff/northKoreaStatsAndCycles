@@ -124,7 +124,7 @@ pub fn authorize(on_ready: impl FnOnce(&str)) -> Result<StoredTwitchCredential, 
 }
 
 pub(crate) fn refresh(client: &Client, refresh_token: &str) -> Result<OAuthTokens, String> {
-    client
+    let response = client
         .post("https://id.twitch.tv/oauth2/token")
         .form(&[
             ("client_id", CLIENT_ID),
@@ -132,9 +132,13 @@ pub(crate) fn refresh(client: &Client, refresh_token: &str) -> Result<OAuthToken
             ("refresh_token", refresh_token),
         ])
         .send()
-        .map_err(|_| "Unable to refresh Twitch login; try again")?
-        .error_for_status()
-        .map_err(|_| "Twitch login expired; click Connect Twitch again")?
+        .map_err(|_| "Unable to reach Twitch to refresh login; the saved login was kept")?;
+    match response.status().as_u16() {
+        400 | 401 => return Err("Twitch authorization is no longer valid; click Connect Twitch again".into()),
+        200..=299 => {},
+        status => return Err(format!("Twitch login refresh is temporarily unavailable (HTTP {status}); the saved login was kept")),
+    }
+    response
         .json::<OAuthTokens>()
         .map_err(|_| "Twitch returned an invalid login refresh".into())
 }

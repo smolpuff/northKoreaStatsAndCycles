@@ -139,7 +139,8 @@ impl Default for TwitchConfig {
     fn default() -> Self {
         Self {
             promote_mission_app: default_promotion_enabled(),
-            promotion_interval_minutes: default_promotion_interval(),            post_world_records: false,
+            promotion_interval_minutes: default_promotion_interval(),
+            post_world_records: false,
             world_record_message_template: default_world_record_message(),
             post_results: true,
             post_cycle_results: false,
@@ -249,14 +250,15 @@ pub struct RaceCyclePlayer {
 }
 
 impl RaceCyclePlayer {
+    pub fn completed_cycles(&self) -> u64 {
+        (0..10).map(|index| self.placement_counts.get(index).copied().unwrap_or(0)).min().unwrap_or(0)
+    }
+
     pub fn current_positions(&self) -> Vec<u8> {
-        self.current_cycle_positions.clone().unwrap_or_else(|| {
-            // Historical totals cannot reconstruct the order of placements in a new set.
-            if self.cycles > 0 { return Vec::new(); }
-            self.placement_counts.iter().take(10).enumerate()
-                .filter(|(_, count)| **count > 0)
-                .map(|(index, _)| (index + 1) as u8).collect()
-        })
+        let completed = self.completed_cycles();
+        self.placement_counts.iter().take(10).enumerate()
+            .filter(|(_, count)| **count > completed)
+            .map(|(index, _)| (index + 1) as u8).collect()
     }
 
     pub fn cycle_progress(&self) -> usize {
@@ -265,7 +267,7 @@ impl RaceCyclePlayer {
 }
 
 pub fn compare_cycle_players(left: &RaceCyclePlayer, right: &RaceCyclePlayer) -> std::cmp::Ordering {
-    right.cycles.cmp(&left.cycles)
+    right.completed_cycles().cmp(&left.completed_cycles())
         .then_with(|| right.cycle_progress().cmp(&left.cycle_progress()))
         .then_with(|| left.player_name.to_lowercase().cmp(&right.player_name.to_lowercase()))
         .then_with(|| left.player_key.cmp(&right.player_key))
@@ -288,6 +290,7 @@ pub struct LogEntry {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSnapshot {
+    pub event_result_ids: Vec<String>,
     pub cycle_history: Vec<CycleHistoryEntry>,
     pub total_cycle_race_count: u64,
     pub total_race_count: u64,
@@ -325,6 +328,10 @@ pub struct SeasonConfig {
 #[serde(rename_all = "camelCase")]
 pub struct RaceState {
     #[serde(default)]
+    pub stats_results_cleared: bool,
+    #[serde(default)]
+    pub current_result: Option<GameResult>,
+    #[serde(default)]
     pub cycle_history: Vec<CycleHistoryEntry>,
     pub total_race_count: u64,
     #[serde(default)]
@@ -347,6 +354,12 @@ pub struct RaceState {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CycleHistoryEntry {
+    #[serde(default)]
+    pub standings: Vec<RaceCyclePlayer>,
+    #[serde(default)]
+    pub game: Option<GameResult>,
+    #[serde(default)]
+    pub earnings: Vec<CycleHistoryEarning>,
     pub timestamp: String,
     #[serde(default)]
     pub player_name: String,
@@ -369,4 +382,16 @@ pub struct CycleHistoryEntry {
 pub struct CycleHistoryCompletion {
     pub player_name: String,
     pub cycle_number: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CycleHistoryEarning {
+    pub player_key: String,
+    pub player_name: String,
+    pub placement: u32,
+    pub points_earned: u64,
+    pub cycles_earned: u64,
+    pub cycle_number: u64,
+    pub placement_counts: Vec<u64>,
 }

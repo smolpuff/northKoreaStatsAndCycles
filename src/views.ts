@@ -1,3 +1,4 @@
+import { formatTimestamp, formatTime } from "./dates";
 import { iconInput } from "./input-field";
 import { renderGuideHeader, renderGuideStep } from "./guide-illustrations";
 import { icons } from "./icons";
@@ -6,14 +7,8 @@ import { overlaysPage } from "./overlay-view";
 import type { Config, GameResult, Snapshot } from "./types";
 
 function cyclePositions(player: Snapshot["raceCycles"][number]): number[] {
-  return (
-    player.currentCyclePositions ??
-    (player.cycles > 0
-      ? []
-      : player.placementCounts
-          .slice(0, 10)
-          .flatMap((count, index) => (count > 0 ? [index + 1] : [])))
-  );
+  const completed = Math.min(...Array.from({ length: 10 }, (_, index) => player.placementCounts[index] ?? 0));
+  return player.placementCounts.slice(0, 10).flatMap((count, index) => count > completed ? [index + 1] : []);
 }
 
 function cycleProgress(player: Snapshot["raceCycles"][number]): number {
@@ -129,7 +124,7 @@ export function escapeHtml(value: unknown): string {
 }
 
 function formatDate(value?: string): string {
-  return value ? new Date(value).toLocaleString() : "Never";
+  return formatTimestamp(value);
 }
 
 function formatRaceTime(value?: number): string {
@@ -452,7 +447,7 @@ function resultRow(
       <td>
         <div class="player">
           <span>
-            <b title="${escapeHtml(result.playerName)}" style="--player-color:#${playerColor}">${escapeHtml(result.playerName)}</b>
+            <b class="player-history-link" tabindex="0" role="button" data-race-player="${escapeHtml(playerKey(result))}" title="${escapeHtml(result.playerName)}" style="--player-color:#${playerColor}">${escapeHtml(result.playerName)}</b>
           </span>
         </div>
       </td>
@@ -477,7 +472,7 @@ function resultsTable(
     `;
   }
 
-  const winner = game.results[0];
+  const winner = game.results.find(result => result.placement === 1);
   const battleRoyale = game.gameType === "battleRoyale";
   const sort: ResultsSort =
     (!battleRoyale && ["kills", "damage"].includes(requestedSort.key)) ||
@@ -495,6 +490,7 @@ function resultsTable(
       <span class="track-item"><i>${battleRoyale ? icons.battleRoyale : icons.raceFlag}</i><span><small>Game Type</small><b>${formatLabel(game.gameType)}</b></span></span>
       <span class="track-item"><i>${icons.track}</i><span><small>Track</small><b>${escapeHtml(game.mapName ?? "Unknown track")}</b></span></span>
       <span class="track-item"><i>${icons.stopwatch}</i><span><small>${game.gameType === "battleRoyale" ? "Survival time" : "Winning time"}</small><b class="mono">${formatRaceTime(winner?.finishTime)}</b></span></span>
+      <span class="track-item"><i>${icons.racers}</i><span><small>Participants</small><b>${game.playerCount}</b></span></span>
     </div>
     <div class="table-frame"><div class="table-scroll">
       <table class="${battleRoyale ? "battle-royale-results" : "race-results"}">
@@ -532,7 +528,9 @@ function overviewPage(
   busy: boolean,
   editingName: boolean,
   resultsSort: ResultsSort,
+  selectedRaceId: string,
 ): string {
+  const displayedGame = selectedRaceId ? state.recentResults.find(game => game.id === selectedRaceId) : state.latestResult;
   const fileName =
     state.config.csv.path.split(/[\\/]/).pop() || "LastSeasonRace.csv";
 
@@ -552,7 +550,7 @@ function overviewPage(
         ${stat(
           "Last update",
           state.lastUpdate
-            ? new Date(state.lastUpdate).toLocaleTimeString()
+            ? formatTime(state.lastUpdate)
             : "Never",
         )}
       </div>
@@ -560,21 +558,23 @@ function overviewPage(
         <div class="head-actions tracking-controls">
           ${watcherControls(state, busy, "stats")}
           ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}
+          <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest</option>${[...state.recentResults].reverse().filter(game => game.id !== state.latestResult?.id).map(game => `<option value="${escapeHtml(game.id)}" ${selectedRaceId === game.id ? "selected" : ""}>${escapeHtml(formatDate(game.timestamp))} &middot; ${escapeHtml(game.mapName ?? "Unknown track")}</option>`).join("")}</select></div>
         </div>
       </div>
 
       <section class="panel results-panel">
         <header class="results-header">
           ${resultsName(state.config.seasons.raceName || fileName, editingName)}
-          <div class="results-actions-group">
-            <div class="results-actions">
-              <button data-export="race" class="compact-button" type="button" ${state.latestResult ? "" : "disabled"}>Export race</button>
+          <div class="results-actions">
+            ${iconInput(icons.search, `<input id="race-search" class="cycle-search" type="search" placeholder="Search players" aria-label="Search players" />`)}
+            <span id="race-filter-count" aria-live="polite"></span>
+            <div class="results-actions-group">
               <button data-export="session" class="compact-button" type="button">Export session</button>
+              <button id="clear-race-results" class="compact-button btn-error" type="button" ${state.latestResult || state.sessionResults.length || state.totalRaceCount || state.totalBattleRoyaleCount || state.seasonPointsEarned ? "" : "disabled"}>Clear Results</button>
             </div>
-            <button id="clear-race-results" class="compact-button btn-error" type="button" ${state.latestResult || state.sessionResults.length || state.totalRaceCount || state.totalBattleRoyaleCount || state.seasonPointsEarned ? "" : "disabled"}>Clear Results</button>
           </div>
         </header>
-        <div class="panel-body">${resultsTable(state.latestResult, resultsSort)}</div>
+        <div class="panel-body">${resultsTable(displayedGame, resultsSort)}</div>
       </section>
     </div>
   `;
@@ -599,7 +599,7 @@ function historyPage(state: Snapshot): string {
           return `<tr><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? "Unknown track")}</td><td>${escapeHtml(entry.winnerName ?? "—")}</td><td class="race-time">${formatRaceTime(entry.winningTime)}</td><td>${entry.playerCount ?? "—"}</td><td>${completions.length ? completions.map((completion) => `${escapeHtml(completion.playerName)}: cycle #${completion.cycleNumber}`).join(" | ") : "—"}</td><td class="mono">${escapeHtml(entry.gameId.slice(0, 12))}</td></tr>`;
         })
         .join("")}</tbody></table></div></div>`
-    : '<div class="empty-state">No races processed by Cycles yet.</div>';
+    : '<div class="empty-state">No cycle points earned yet.</div>';
 
   const content = games.length
     ? `
@@ -646,7 +646,7 @@ function historyPage(state: Snapshot): string {
 
     <div class="history-panels">
     ${panel("Processed races", "Recent first", content, "history-panel", `<button id="clear-history" class="compact-button btn-error" type="button" ${games.length ? "" : "disabled"}>Clear history</button>`)}
-    ${panel("Processed cycle races", "Recent first", cycleContent, "history-panel", `<button id="clear-cycle-history" class="compact-button btn-error" type="button" ${cycles.length ? "" : "disabled"}>Clear history</button>`)}
+    ${panel("Cycle points and achievements", "Recent first", cycleContent, "history-panel", `<button id="clear-cycle-history" class="compact-button btn-error" type="button" ${cycles.length ? "" : "disabled"}>Clear history</button>`)}
     </div>
     </div>
   `;
@@ -1057,7 +1057,7 @@ function raceCyclesPage(
         <tr>
           <td class="cycle-rank"><b class="place">${ranks.get(player.playerKey)}</b></td>
           <td class="cycle-player">
-            ${escapeHtml(player.playerName)}
+            <button type="button" class="player-history-link" data-cycle-player="${escapeHtml(player.playerKey)}">${escapeHtml(player.playerName)}</button>
           </td>
           <td class="cycle-total">${player.cycles}</td>
           ${Array.from({ length: 10 }, (_, index) => {
@@ -1075,12 +1075,12 @@ function raceCyclesPage(
       <div class="race-heading">
         <i class="race-heading-icon">${sidebarArtwork("racecycles", "header-racecycles")}</i>
         <div><h1>RaceCycles</h1>
-        <p>Collect finishing positions 1–10, then start a new set.</p></div>
+        <p>Placements 1-10 accumulate and carry forward into every cycle.</p></div>
       </div>
     <div class="summary-row">
       ${stat("Tracked racers", players.length)}
       ${stat("Completed cycles", totalCycles)}
-      ${stat("Last updated", state.cycleLastUpdate ? new Date(state.cycleLastUpdate).toLocaleTimeString() : "Never")}
+      ${stat("Last updated", state.cycleLastUpdate ? formatTime(state.cycleLastUpdate) : "Never")}
     </div>
 
       <div class="tracking-controls">${watcherControls(state, busy, "cycles")}
@@ -1149,7 +1149,7 @@ function homePage(state: Snapshot, busy: boolean): string {
   const summary = (label: string, value: number, icon: string) =>
     `<span><i class="home-stat-icon" aria-hidden="true">${icons[icon]}</i><span class="home-stat-copy"><small>${escapeHtml(label)}</small><b>${value}</b></span></span>`;
   const lastUpdated = (timestamp?: string | null) =>
-    `<p class="home-table-updated"><i aria-hidden="true">${icons.clock}</i><span>Last updated: ${timestamp ? `<time datetime="${escapeHtml(timestamp)}" title="${escapeHtml(new Date(timestamp).toLocaleString())}">${escapeHtml(new Date(timestamp).toLocaleTimeString())}</time>` : "Never"}</span></p>`;
+    `<p class="home-table-updated"><i aria-hidden="true">${icons.clock}</i><span>Last updated: ${timestamp ? `<time datetime="${escapeHtml(timestamp)}" title="${escapeHtml(formatDate(timestamp))}">${escapeHtml(formatTime(timestamp))}</time>` : "Never"}</span></p>`;
   const watcherCard = (
     kind: "stats" | "cycles",
     title: string,
@@ -1280,12 +1280,13 @@ export function renderApplication(
   editingName = false,
   resultsSort: ResultsSort = { key: "placement", direction: "asc" },
   overlayDirectory = "",
+  selectedRaceId = "",
 ): string {
   const content =
     currentPage === "home"
       ? homePage(state, busy)
       : currentPage === "overview"
-        ? overviewPage(state, busy, editingName, resultsSort)
+        ? overviewPage(state, busy, editingName, resultsSort, selectedRaceId)
         : currentPage === "racecycles"
           ? raceCyclesPage(state, raceCycleSort, editingName, busy)
           : currentPage === "history"
@@ -1342,7 +1343,7 @@ function logsPage(state: Snapshot, selectedFilter: string): string {
                 .map(
                   (entry) => `
                     <div class="log-row ${escapeHtml(entry.level)}">
-                      <time>${new Date(entry.timestamp).toLocaleTimeString()}</time>
+                      <time>${formatTime(entry.timestamp)}</time>
                       <b>${escapeHtml(formatLabel(entry.level))}</b>
                       <span>${escapeHtml(entry.message)}</span>
                     </div>
@@ -1354,4 +1355,111 @@ function logsPage(state: Snapshot, selectedFilter: string): string {
       </div>
     </section>
   `;
+}
+
+export function playerKey(result: GameResult["results"][number]): string {
+  return `${result.platform.trim().toLowerCase()}:${(result.username.trim() || result.playerName.trim()).toLowerCase()}`;
+}
+
+function playerHistorySummary(name: string, subtitle: string, totals: [string, number][], counts: number[]): string {
+  const ordinal = (place: number) => `${place}${place === 1 ? "st" : place === 2 ? "nd" : place === 3 ? "rd" : "th"}`;
+  const medal = `<svg viewBox="0 0 24 30" fill="none" aria-hidden="true"><path d="m6 18-2 10 8-4 8 4-2-10" fill="currentColor" opacity=".45"/><circle cx="12" cy="11" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="11" r="6" fill="currentColor" opacity=".25"/><path d="m12 6 1.6 3.2 3.5.5-2.5 2.5.6 3.5-3.2-1.7-3.2 1.7.6-3.5L7 9.7l3.4-.5L12 6Z" fill="currentColor"/></svg>`;
+  return `<section class="summary-item player-history-summary ${counts.length === 3 ? "player-history-podium" : "player-history-cycle-card"}" aria-label="${escapeHtml(subtitle)}">
+    <div class="player-history-profile">
+      <i class="player-history-emblem" aria-hidden="true">${icons.racers}</i>
+      <div class="player-history-identity"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong></div>
+      <div class="player-history-totals">${totals.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${value}</b></span>`).join("")}</div>
+    </div>
+    <div class="player-history-placements" aria-label="Placement totals">${counts.map((count, index) => `<span class="player-history-placement" aria-label="${ordinal(index + 1)} places: ${count}">${index < 3 ? `<i class="player-history-medal">${medal}</i>` : ""}<span><small>${ordinal(index + 1)}</small><b>${count}</b></span></span>`).join("")}</div>
+  </section>`;
+}
+
+export function playerHistoryContent(
+  state: Snapshot,
+  kind: "race" | "cycles",
+  key: string,
+): { title: string; content: string } {
+  const player = state.raceCycles.find(player => player.playerKey === key);
+  let name = player?.playerName ?? key;
+  const table = (headers: string[], rows: string[]): string =>
+    `<div class="table-frame"><div class="table-scroll"><table><thead><tr>${headers.map(header => `<th>${header}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div></div>`;
+  if (kind === "cycles") {
+    const rows: string[] = [];
+    const counts = Array<number>(10).fill(0);
+    let cyclesEarned = 0;
+    const seenGames = new Set<string>();
+    for (const entry of [...state.cycleHistory].reverse()) {
+      if (seenGames.has(entry.gameId)) continue;
+      seenGames.add(entry.gameId);
+      // Older saved entries have the race fingerprint but no per-player earnings.
+      // Display only actual saved matching standings; never migrate or fabricate them.
+      const savedGame = entry.game ?? state.recentResults.find(game => game.id === entry.gameId);
+      const savedResult = savedGame?.gameType === "race"
+        ? savedGame.results.find(result => playerKey(result) === key)
+        : undefined;
+      let earned = entry.earnings?.find(earned => earned.playerKey === key);
+      if (!entry.earnings?.length && savedResult && savedResult.placement >= 1 && savedResult.placement <= 10) {
+        const completion = entry.completions?.find(completion =>
+          [savedResult.playerName, savedResult.displayName, savedResult.username].some(name =>
+            name.trim().toLowerCase() === completion.playerName.trim().toLowerCase()));
+        earned = {
+          playerKey: key, playerName: savedResult.playerName,
+          placement: savedResult.placement, pointsEarned: 1,
+          cyclesEarned: completion ? 1 : 0,
+          cycleNumber: completion?.cycleNumber ?? 0,
+          placementCounts: [],
+        };
+      }
+      if (!earned && !entry.earnings?.length) {
+        const knownNames = [player?.playerName, key.split(":").slice(1).join(":")].filter(Boolean);
+        const completions = entry.completions?.length ? entry.completions
+          : entry.cycleNumber > 0 ? [{ playerName: entry.playerName, cycleNumber: entry.cycleNumber }] : [];
+        const completion = completions.find(completion => knownNames.some(name =>
+          name!.trim().toLowerCase() === completion.playerName.trim().toLowerCase()));
+        if (completion) {
+          name = completion.playerName;
+          cyclesEarned += 1;
+          rows.push(`<tr class="history-achievement"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? "Unknown track")}</td><td>—</td><td>—</td><td>Cycle #${completion.cycleNumber} completed</td><td>—</td><td>${entry.playerCount ?? "—"}</td></tr>`);
+        }
+      }
+      if (!earned) continue;
+      name = earned.playerName;
+      if (earned.placement >= 1 && earned.placement <= 10) counts[earned.placement - 1] += earned.pointsEarned;
+      cyclesEarned += earned.cyclesEarned;
+      rows.push(`<tr class="${earned.cyclesEarned ? "history-achievement" : ""}"><td>${formatDate(entry.timestamp)}</td><td>${escapeHtml(entry.mapName ?? savedGame?.mapName ?? "Unknown track")}</td><td>${earned.placement}</td><td>${earned.pointsEarned}</td><td>${earned.cyclesEarned ? `Cycle #${earned.cycleNumber} completed` : "\u2014"}</td><td>${earned.placementCounts.length ? earned.placementCounts.join(" / ") : "\u2014"}</td><td>${entry.playerCount ?? savedGame?.playerCount ?? "\u2014"}</td></tr>`);
+    }
+    const summary = playerHistorySummary(name, "Cycles · saved history", [["Points", counts.reduce((sum, count) => sum + count, 0)], ["Cycles", cyclesEarned]], counts);
+    return {
+      title: `${name} \u2014 Cycles history`,
+      content: summary + (rows.length
+        ? table(["Date/time", "Track", "Placement", "Points earned", "Cycles earned", "Placements 1-10", "Participants"], rows)
+        : '<div class="empty-state">No saved point-earning races for this player.</div>'),
+    };
+  }
+  const raceRows: string[] = [];
+  const brRows: string[] = [];
+  const podiumCounts = [0, 0, 0];
+  let earnedPoints = 0;
+  let eventPoints = 0;
+  const eventIds = new Set(state.eventResultIds ?? state.sessionResults.map(game => game.id));
+  for (const game of [...state.recentResults].reverse()) {
+    for (const result of game.results.filter(result => playerKey(result) === key)) {
+      name = result.playerName;
+      if (result.placement >= 1 && result.placement <= 3) podiumCounts[result.placement - 1]++;
+      earnedPoints += result.seasonPointsEarned;
+      if (eventIds.has(game.id)) eventPoints += result.seasonPointsEarned;
+      const br = game.gameType === "battleRoyale";
+      const worldRecord = game.hasWorldRecord && [result.playerName, result.username, result.displayName].some(name => name.trim().toLowerCase() === game.worldRecordPlayer?.trim().toLowerCase());
+      const row = `<tr class="${worldRecord ? "history-achievement" : ""}"><td>${formatDate(game.timestamp)}</td><td>${escapeHtml(game.mapName ?? "Unknown track")}</td><td>${result.placement}</td><td class="race-time">${formatRaceTime(result.finishTime)}</td><td>${result.seasonPointsEarned}</td><td>${result.seasonPointsTotal ?? "\u2014"}</td><td>${game.playerCount}</td><td>${result.eliminated == null ? "\u2014" : result.eliminated ? "Yes" : "No"}</td>${br ? `<td>${escapeHtml(result.rawData?.MatchKills ?? "\u2014")}</td><td>${escapeHtml(result.rawData?.MatchDamageDealt ?? "\u2014")}</td>` : ""}<td>${worldRecord ? "World record" : "\u2014"}</td></tr>`;
+      (br ? brRows : raceRows).push(row);
+    }
+  }
+  const headers = ["Date/time", "Track", "Placement", "Time", "Points earned", "Season total", "Participants", "Eliminated"];
+  const summary = playerHistorySummary(name, "RaceStats · player results", [["Total points", earnedPoints], ["Event points", eventPoints]], podiumCounts);
+  return {
+    title: `${name} \u2014 Detailed race results`,
+    content: summary + ((raceRows.length ? `<h3>Race results</h3>${table([...headers, "Record"], raceRows)}` : "")
+      + (brRows.length ? `<h3>Battle Royale results</h3>${table([...headers, "Kills", "Damage", "Record"], brRows)}` : "")
+      || '<div class="empty-state">No saved races for this player.</div>'),
+  };
 }

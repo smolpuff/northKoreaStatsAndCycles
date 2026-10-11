@@ -1264,7 +1264,7 @@ th,
   font-size: 12px;
 }
 
-#cycle-filter-count {
+#cycle-filter-count, #race-filter-count {
   color: var(--muted);
   font-size: 11px;
 }
@@ -1309,3 +1309,17 @@ th,
 .compact-button.btn-error:hover {
   background: #dc2626;
 }
+
+.previous-results-control { margin-left: auto; display: flex; justify-content: flex-end; min-width: 0; }
+.previous-results-control select { max-width: 330px; width: 100%; }
+.results-panel .race-context { display: flex; flex-wrap: nowrap; gap: 10px; padding: 8px 12px; overflow-x: auto; }
+.results-panel .race-context .track-item { flex: 0 1 auto; min-width: 90px; }
+.results-panel .race-context .track-item:last-child { flex: 1 0 90px; }
+.player-history-link { cursor: pointer; color: inherit; font: inherit; background: none; border: 0; padding: 0; text-align: left; }
+.player-history-link:hover { text-decoration: underline; }
+.player-history-dialog { width: min(1200px, 94vw); max-width: 94vw; max-height: 86vh; }
+.player-history-dialog .table-scroll { max-height: 65vh; overflow: auto; }
+.history-achievement td { background: color-mix(in srgb, var(--accent, #f5bc43) 14%, transparent); }
+.history-achievement td:last-child { font-weight: 700; }
+.backup-choice { display: flex; align-items: center; gap: 8px; margin: 14px 0; }
+.backup-choice input { width: auto; }

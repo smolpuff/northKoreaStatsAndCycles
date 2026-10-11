@@ -59,70 +59,22 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         .read::<AppConfig>("config.json")
         .unwrap_or_else(|_| AppConfig::default_for(default_csv_path()));
     config.csv.game_type = GameType::Auto;
-    let twitch_defaults = TwitchConfig::default();    if config.twitch.message_prefix.is_empty() {
+    let twitch_defaults = TwitchConfig::default();
+    if config.twitch.message_prefix.is_empty() {
         config.twitch.message_prefix = twitch_defaults.message_prefix;
         config.twitch.post_results = true;
     }
     if config.twitch.cycle_message_template.is_empty() {
         config.twitch.cycle_message_template = twitch_defaults.cycle_message_template;
     }
-    let recent_results = storage
-        .read::<Vec<GameResult>>("history.json")
-        .unwrap_or_default();
-    let race_cycles = match storage.read::<Vec<RaceCyclePlayer>>("race-cycles.json") {
-        Ok(players) => players,
-        Err(_) => match storage.read::<Vec<RaceCyclePlayer>>("rate-cycles.json") {
-            Ok(players) => {
-                let _ = storage.write("race-cycles.json", &players);
-                let _ = storage.remove("rate-cycles.json");
-                players
-            }
-            Err(_) => Vec::new(),
-        },
-    };
-    let mut race_state = if storage.path("race-state.json").exists() {
+    let recent_results = if storage.path("history.json").exists() {
+        storage.read::<Vec<GameResult>>("history.json")?
+    } else { Vec::new() };
+    // Read current data as saved. Do not migrate or reconstruct totals from history.
+    let race_state = if storage.path("race-state.json").exists() {
         storage.read::<RaceState>("race-state.json")?
-    } else {
-        RaceState {
-            cycle_history: vec![],
-            total_race_count: recent_results.iter().filter(|game| game.game_type == GameType::Race).count() as u64,
-            total_battle_royale_count: recent_results.iter().filter(|game| game.game_type == GameType::BattleRoyale).count() as u64,
-            season_points_earned: recent_results.iter().map(game_points_earned).sum(),
-            processed_ids: recent_results.iter().flat_map(game_keys).collect(),
-            game_points: recent_results.iter().map(|game| (game_points_key(game), Some(game_points_earned(game)))).collect(),
-            total_cycle_race_count: recent_results.len() as u64,
-            cycle_processed_ids: recent_results.iter().flat_map(game_keys).collect(),
-            cycle_last_update: None,
-            race_cycles,
-        }
-    };
-    // Existing versions counted both pipelines together; migrate their cycle fingerprints.
-    let stored_state = storage.read::<serde_json::Value>("race-state.json").ok();
-    if stored_state.as_ref().is_some_and(|value| value.get("seasonPointsEarned").is_none()) {
-        race_state.season_points_earned = recent_results.iter().map(game_points_earned).sum();
-    }
-    if stored_state.as_ref().is_some_and(|value| value.get("gamePoints").is_none()) {
-        let points_were_reset = race_state.season_points_earned == 0
-            && recent_results.iter().map(game_points_earned).sum::<i64>() != 0;
-        race_state.game_points = recent_results.iter().map(|game| (
-            game_points_key(game),
-            (!points_were_reset).then(|| game_points_earned(game)),
-        )).collect();
-    }
-    if stored_state.as_ref().is_some_and(|value| value.get("totalBattleRoyaleCount").is_none()) {
-        migrate_game_totals(&mut race_state, &recent_results);
-    }
-    if stored_state.as_ref().and_then(|value| value.get("cycleProcessedIds")).is_none() {
-        race_state.cycle_processed_ids = race_state.processed_ids.clone();
-    }
-    if stored_state.as_ref().is_some_and(|value| value.get("totalCycleRaceCount").is_none()) {
-        race_state.total_cycle_race_count = race_state.cycle_processed_ids.iter()
-            .filter(|key| !key.starts_with("source:")).count() as u64;
-    }
-    migrate_cycle_history(&mut race_state.cycle_history, &recent_results);
-    merge_duplicate_cycle_players(&mut race_state.race_cycles);
-    storage.write("race-state.json", &race_state)?;
-    let race_cycles = race_state.race_cycles.clone();
+    } else { RaceState::default() };
+    let race_cycles = cycle_players_for_display(&race_state.race_cycles);
     let streamer_bot_status = if config.streamer_bot.has_enabled_events() {
         "Not checked"
     } else {
@@ -137,7 +89,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         None => ("Disconnected".to_string(), None, None),
     };
     // Restore saved display data only; startup never enters the processing pipeline.
-    let latest_result = recent_results.last().cloned();
+    let latest_result = restored_current_result(&race_state, &recent_results);
     let record_metadata = parser::parse_map_metadata(&PathBuf::from(&config.csv.path)
         .with_file_name("LastCustomRaceMapPlayed.csv")).ok();
     let record_tracker = records::Tracker::new(record_metadata.as_ref());
@@ -146,6 +98,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         overlay_writer: overlays::Writer::new(app_data_dir.join("overlays")),
         race_state: race_state.clone(),
         snapshot: AppSnapshot {
+            event_result_ids: current_event_result_ids(&race_state, &recent_results),
             cycle_history: race_state.cycle_history.clone(),
             total_race_count: race_state.total_race_count,
             total_battle_royale_count: race_state.total_battle_royale_count,
@@ -158,7 +111,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             cycles_tracking_enabled: false,
             watcher_message: None,
             detected_game_type: latest_result.as_ref().map(|game| game.game_type.clone()),
-            last_update: None,
+            last_update: latest_result.as_ref().map(|game| game.timestamp.clone()),
             cycle_last_update: race_state.cycle_last_update.clone(),
             latest_result,
             streamer_bot_status: streamer_bot_status.into(),
@@ -248,6 +201,12 @@ fn game_points_key(game: &GameResult) -> String {
     game_keys(game).last().cloned().unwrap_or_else(|| game.id.clone())
 }
 
+fn current_event_result_ids(state: &RaceState, history: &[GameResult]) -> Vec<String> {
+    history.iter().filter(|game| state.game_points.get(&game_points_key(game))
+        .is_some_and(|points| points.is_some()))
+        .map(|game| game.id.clone()).collect()
+}
+
 fn refresh_counted_result(games: &mut [GameResult], game: &GameResult) {
     let key = game_points_key(game);
     if let Some(previous) = games.iter_mut().find(|previous| game_points_key(previous) == key) {
@@ -262,12 +221,17 @@ fn refresh_latest_result(snapshot: &mut AppSnapshot, game: &GameResult) {
     snapshot.detected_game_type = Some(game.game_type.clone());
 }
 
+fn restored_current_result(state: &RaceState, history: &[GameResult]) -> Option<GameResult> {
+    if state.stats_results_cleared { return None; }
+    state.current_result.clone().or_else(|| history.last().cloned())
+}
+
 fn persist_history(runtime: &SharedRuntime) -> Result<(), String> {
     let rt = runtime
         .lock()
         .map_err(|_| "Application state unavailable".to_string())?;
-    rt.storage
-        .write("history.json", &rt.snapshot.recent_results)
+    rt.storage.write("history.json", &rt.snapshot.recent_results)?;
+    rt.storage.write("race-state.json", &rt.race_state)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -298,33 +262,12 @@ fn same_cycle_player(player: &RaceCyclePlayer, key: &str, name: &str) -> bool {
             && player.player_name.trim().to_lowercase() == name.trim().to_lowercase())
 }
 
-fn merge_duplicate_cycle_players(players: &mut Vec<RaceCyclePlayer>) {
-    let mut unique: Vec<RaceCyclePlayer> = Vec::new();
-    for mut player in players.drain(..) {
-        player.player_key = player.player_key.trim().to_lowercase();
-        player.player_name = player.player_name.trim().to_owned();
-        if let Some(existing) = unique.iter_mut().find(|existing| same_cycle_player(existing, &player.player_key, &player.player_name)) {
-            existing.placement_counts.resize(10, 0);
-            for (index, count) in player.placement_counts.iter().take(10).enumerate() {
-                existing.placement_counts[index] += count;
-            }
-            existing.cycles = existing.cycles.max(player.cycles);
-            existing.current_cycle_positions = None;
-            // Duplicate legacy rows have no reliable shared ordering for elapsed races.
-            existing.cycle_race_counts = vec![None];
-        } else {
-            unique.push(player);
-        }
-    }
-    *players = unique;
-}
-
 fn update_race_cycles(
     players: &mut Vec<RaceCyclePlayer>,
     game: &GameResult,
 ) -> Vec<CycleCompletion> {
     let mut completions = Vec::new();
-    merge_duplicate_cycle_players(players);
+    if game.game_type != GameType::Race { return completions; }
     let mut seen_players = std::collections::HashSet::new();
 
     for result in &game.results {
@@ -345,47 +288,45 @@ fn update_race_cycles(
             });
         if !seen_players.insert(player_index) { continue; }
         let player = &mut players[player_index];
-        let mut current_positions = player.current_positions();
-        // Show the completed ten-slot set until this player's next match, then start fresh.
-        let start_new_set = current_positions.len() == 10
-            || (player.current_cycle_positions.is_none() && player.cycles > 0);
-        if start_new_set {
-            current_positions.clear();
-            player.cycle_race_counts = vec![Some(0)];
-        }
-        if (1..=10).contains(&result.placement) {
-            let position = result.placement as u8;
-            if !current_positions.contains(&position) {
-                current_positions.push(position);
-                current_positions.sort_unstable();
-            }
-        }
-        player.current_cycle_positions = Some(current_positions);
         player.player_name = if result.display_name.trim().is_empty() {
             result.player_name.clone()
         } else {
             result.display_name.clone()
         };
         player.placement_counts.resize(10, 0);
-        // One elapsed-match count belongs to this distinct-position set. Legacy
-        // overlapping counters cannot reconstruct its start, so leave that duration unknown.
-        if player.cycle_race_counts.len() > 1 { player.cycle_race_counts = vec![None]; }
-        if player.cycle_race_counts.is_empty() { player.cycle_race_counts.push(None); }
+        // Counts are lifetime placements for these current results. Each full layer
+        // of positions 1-10 earns a cycle; surplus slots carry into later layers.
+        let before = player.placement_counts.iter().copied().min().unwrap_or(0);
+        let pending = player.placement_counts.iter().copied().max().unwrap_or(0)
+            .saturating_sub(before) as usize;
+        player.cycle_race_counts.resize(pending.max(1), None);
         for count in player.cycle_race_counts.iter_mut().flatten() { *count += 1; }
         if !(1..=10).contains(&result.placement) { continue; }
         player.placement_counts[result.placement as usize - 1] += 1;
-        if player.cycle_progress() == 10 {
-            player.cycles += 1;
+        player.cycles = player.placement_counts.iter().copied().min().unwrap_or(0);
+        player.current_cycle_positions = Some(player.current_positions());
+        if player.cycles > before {
+            let races = player.cycle_race_counts.remove(0);
             completions.push(CycleCompletion {
-                player_name: player.player_name.clone(),
-                cycle_number: player.cycles,
-                races: player.cycle_race_counts[0],
+                player_name: player.player_name.clone(), cycle_number: player.cycles, races,
             });
         }
+        let remaining = player.placement_counts.iter().copied().max().unwrap_or(0)
+            .saturating_sub(player.cycles) as usize;
+        if remaining == 0 { player.cycle_race_counts = vec![Some(0)]; }
+        else { player.cycle_race_counts.resize(remaining, Some(1)); }
     }
 
     players.sort_by(models::compare_cycle_players);
     completions
+}
+
+fn cycle_players_for_display(players: &[RaceCyclePlayer]) -> Vec<RaceCyclePlayer> {
+    players.iter().cloned().map(|mut player| {
+        player.cycles = player.completed_cycles();
+        player.current_cycle_positions = Some(player.current_positions());
+        player
+    }).collect()
 }
 
 fn same_watch_target(event_path: &Path, target: &Path) -> bool {
@@ -733,6 +674,7 @@ fn check_world_record(runtime: &SharedRuntime, app: &tauri::AppHandle, race_path
         refresh_latest_result(&mut rt.snapshot, &game);
         refresh_counted_result(&mut rt.snapshot.recent_results, &game);
         refresh_counted_result(&mut rt.snapshot.session_results, &game);
+        rt.race_state.current_result = Some(game.clone());
         let snapshot = rt.snapshot.clone();
         if let Err(error) = rt.overlay_writer.alerts(&snapshot, &game, serde_json::json!([]), true) {
             drop(rt);
@@ -783,47 +725,13 @@ fn tracked_cycle_races(state: &RaceState) -> u64 {
     state.total_cycle_race_count
 }
 
-fn migrate_game_totals(state: &mut RaceState, history: &[GameResult]) {
-    // Older versions included BRs in the Race total. Source IDs remain after history is cleared.
-    let source_count = state.processed_ids.iter().filter(|key| key.starts_with("source:royale:")).count() as u64;
-    let history_count = history.iter().filter(|game| game.game_type == GameType::BattleRoyale).count() as u64;
-    state.total_battle_royale_count = source_count.max(history_count).min(state.total_race_count);
-    state.total_race_count = state.total_race_count.saturating_sub(state.total_battle_royale_count);
-}
-
-// Preserve old completion records, combining those from the same race. Only
-// enrich them with metadata from actual saved results; do not invent past reads.
-fn migrate_cycle_history(history: &mut Vec<CycleHistoryEntry>, games: &[GameResult]) {
-    if !history.iter().any(|entry| entry.cycle_number > 0) { return; }
-    let mut migrated: Vec<CycleHistoryEntry> = Vec::new();
-    for mut entry in std::mem::take(history) {
-        if entry.cycle_number > 0 {
-            entry.completions.push(CycleHistoryCompletion {
-                player_name: entry.player_name.clone(), cycle_number: entry.cycle_number,
-            });
-            entry.player_name.clear();
-            entry.cycle_number = 0;
-        }
-        if let Some(game) = games.iter().find(|game| game.id == entry.game_id) {
-            let winner = game.results.iter().find(|result| result.placement == 1);
-            entry.winner_name = winner.map(|result| result.player_name.clone());
-            entry.winning_time = winner.and_then(|result| result.finish_time);
-            entry.player_count = Some(game.player_count);
-        }
-        if let Some(previous) = migrated.iter_mut().find(|previous| previous.game_id == entry.game_id) {
-            previous.completions.extend(entry.completions);
-        } else { migrated.push(entry); }
-    }
-    *history = migrated;
-}
-
 fn prepare_race_commit(
     current: &RaceState, game: &GameResult, stats_enabled: bool, cycles_enabled: bool, timestamp: &str, reason: ReadReason,
 ) -> Option<(RaceState, bool, Vec<CycleCompletion>)> {
     let stats_enabled = stats_enabled && !is_cycle_test_snapshot(game);
     let keys = game_keys(game);
     let stats_new = stats_enabled && !keys.iter().any(|key| current.processed_ids.contains(key));
-    let cycles_new = cycles_enabled && !keys.iter().any(|key| current.cycle_processed_ids.contains(key));
+    let cycles_new = cycles_enabled && game.game_type == GameType::Race && !keys.iter().any(|key| current.cycle_processed_ids.contains(key));
     let points_key = game_points_key(game);
     let points = game_points_earned(game);
     let previous_points = current.game_points.get(&points_key).copied().flatten();
@@ -848,21 +756,44 @@ fn prepare_race_commit(
         update_race_cycles(&mut next.race_cycles, game)
     } else { vec![] };
     if cycles_new {
-        let winner = game.results.iter().find(|result| result.placement == 1);
-        next.cycle_history.push(CycleHistoryEntry {
-            timestamp: timestamp.into(), player_name: String::new(), cycle_number: 0,
-            map_name: game.map_name.clone(), game_id: game.id.clone(),
-            winner_name: winner.map(|result| result.player_name.clone()),
-            winning_time: winner.and_then(|result| result.finish_time),
-            player_count: Some(game.player_count),
-            completions: cycle_completions.iter().map(|completion| CycleHistoryCompletion {
-                player_name: completion.player_name.clone(), cycle_number: completion.cycle_number,
-            }).collect(),
-        });
+        let mut earnings = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for result in &game.results {
+            let key = race_cycle_player_key(result);
+            if let Some(player) = next.race_cycles.iter().find(|player| same_cycle_player(player, &key, &result.player_name)) {
+                if !seen.insert(player.player_key.clone()) || !(1..=10).contains(&result.placement) { continue; }
+                let previous_cycles = current.race_cycles.iter()
+                    .find(|previous| same_cycle_player(previous, &key, &result.player_name))
+                    .map(|previous| (0..10).map(|index| previous.placement_counts.get(index).copied().unwrap_or(0)).min().unwrap_or(0))
+                    .unwrap_or(0);
+                earnings.push(CycleHistoryEarning {
+                    player_key: player.player_key.clone(), player_name: player.player_name.clone(),
+                    placement: result.placement, points_earned: 1,
+                    cycles_earned: player.cycles.saturating_sub(previous_cycles),
+                    cycle_number: player.cycles, placement_counts: player.placement_counts.clone(),
+                });
+            }
+        }
+        if !earnings.is_empty() && !next.cycle_history.iter().any(|entry|
+            entry.game_id == game.id || entry.game.as_ref().is_some_and(|previous|
+                game_keys(previous).iter().any(|key| game_keys(game).contains(key)))) {
+            let winner = game.results.iter().find(|result| result.placement == 1);
+            next.cycle_history.push(CycleHistoryEntry {
+                standings: cycle_players_for_display(&next.race_cycles), game: Some(game.clone()), earnings,
+                timestamp: game.timestamp.clone(), player_name: String::new(), cycle_number: 0,
+                map_name: game.map_name.clone(), game_id: game.id.clone(),
+                winner_name: winner.map(|result| result.player_name.clone()),
+                winning_time: winner.and_then(|result| result.finish_time),
+                player_count: Some(game.player_count),
+                completions: cycle_completions.iter().map(|completion| CycleHistoryCompletion {
+                    player_name: completion.player_name.clone(), cycle_number: completion.cycle_number,
+                }).collect(),
+            });
+        }
     }
-    if next.cycle_history.len() > 250 {
-        let excess = next.cycle_history.len() - 250;
-        next.cycle_history.drain(..excess);
+    if stats_enabled {
+        next.current_result = Some(game.clone());
+        next.stats_results_cleared = false;
     }
     Some((next, stats_new, cycle_completions))
 }
@@ -976,7 +907,17 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                 let cycles_enabled = rt.snapshot.cycles_tracking_enabled;
                 let timestamp = Utc::now().to_rfc3339();
                 if let Some((next, stats_new, cycle_completions)) = prepare_race_commit(&rt.race_state, &game, stats_enabled, cycles_enabled, &timestamp, reason) {
-                    if let Err(error) = rt.storage.write("race-state.json", &next) {
+                    let mut history = rt.snapshot.recent_results.clone();
+                    if stats_new {
+                        if history.iter().any(|previous| game_points_key(previous) == game_points_key(&game)) {
+                            refresh_counted_result(&mut history, &game);
+                        } else { history.push(game.clone()); }
+                    } else if stats_enabled && reason == ReadReason::Manual {
+                        refresh_counted_result(&mut history, &game);
+                    }
+                    let commit = rt.storage.write("history.json", &history)
+                        .and_then(|_| rt.storage.write("race-state.json", &next));
+                    if let Err(error) = commit {
                         rt.cached_file = None;
                         rt.snapshot.watcher_status = "Error".into();
                         rt.snapshot.watcher_message = Some(error.clone());
@@ -991,7 +932,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     rt.snapshot.total_battle_royale_count = next.total_battle_royale_count;
                     rt.snapshot.season_points_earned = next.season_points_earned;
                     rt.snapshot.total_cycle_race_count = tracked_cycle_races(&next);
-                    rt.snapshot.race_cycles = next.race_cycles.clone();
+                    rt.snapshot.race_cycles = cycle_players_for_display(&next.race_cycles);
                     rt.snapshot.cycle_last_update = next.cycle_last_update.clone();
                     rt.race_state = next;
                     if stats_new {
@@ -1002,12 +943,12 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                         } else {
                             rt.snapshot.recent_results.push(game.clone());
                         }
-                        if rt.snapshot.recent_results.len() > 250 { rt.snapshot.recent_results.remove(0); }
                         rt.snapshot.last_update = Some(timestamp);
                     } else if reason == ReadReason::Manual && !is_cycle_test_snapshot(&game) {
                         refresh_counted_result(&mut rt.snapshot.session_results, &game);
                         refresh_counted_result(&mut rt.snapshot.recent_results, &game);
                     }
+                    rt.snapshot.event_result_ids = current_event_result_ids(&rt.race_state, &rt.snapshot.recent_results);
                     rt.snapshot.watcher_status = if rt.watcher.is_some() { "Watching" } else { "Stopped" }.into();
                     rt.snapshot.watcher_message = Some("New game read from file".into());
                     Some((game.player_count, game.id.chars().take(8).collect::<String>(), game.clone(), cycle_completions, stats_new))
@@ -1288,7 +1229,7 @@ async fn validate_twitch_session(
             Some("Ready to spam.".into()),
             Some(credential.login),
         ),
-        Err(error) => set_twitch_status(&shared, "Expired", Some(error), None),
+        Err(error) => set_twitch_status(&shared, twitch::login_error_status(&error), Some(error), None),
     }
     emit_snapshot(&shared, &app);
     let snapshot = shared
@@ -1642,10 +1583,7 @@ fn clear_history(
             .map_err(|_| "Application state unavailable")?;
         rt.storage.remove("history.json")?;
         rt.snapshot.recent_results.clear();
-        rt.snapshot.latest_result = None;
-        rt.snapshot.last_update = None;
-        rt.snapshot.detected_game_type = None;
-
+        rt.snapshot.event_result_ids.clear();
     }
 
     log(&runtime, &app, "info", "[History] Race history cleared");
@@ -1677,6 +1615,8 @@ fn clear_session_results(snapshot: &mut AppSnapshot) {
 }
 
 fn reset_stats_totals(state: &mut RaceState) {
+    state.stats_results_cleared = true;
+    state.current_result = None;
     state.total_race_count = 0;
     state.total_battle_royale_count = 0;
     state.season_points_earned = 0;
@@ -1691,17 +1631,30 @@ fn reset_cycle_totals(state: &mut RaceState) {
     state.cycle_processed_ids.clear();
 }
 
+fn backup_current_results(rt: &Runtime, kind: &str) -> Result<(), String> {
+    let name = format!("backups/{}-{}.json", kind, Utc::now().format("%Y%m%d-%H%M%S-%f"));
+    std::fs::create_dir_all(rt.storage.path("backups"))
+        .map_err(|error| format!("Unable to create backup directory: {error}"))?;
+    rt.storage.write(&name, &serde_json::json!({
+        "timestamp": Utc::now().to_rfc3339(), "kind": kind,
+        "state": rt.race_state, "sessionResults": rt.snapshot.session_results,
+        "latestResult": rt.snapshot.latest_result
+    }))
+}
+
 #[tauri::command]
-fn clear_race_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
+fn clear_race_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, backup: bool) -> Result<AppSnapshot, String> {
     {
         let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
         let mut next = rt.race_state.clone();
+        if backup { backup_current_results(&rt, "race-stats")?; }
         reset_stats_totals(&mut next);
         rt.storage.write("race-state.json", &next)?;
         rt.race_state = next;
         rt.snapshot.season_points_earned = 0;
         rt.snapshot.total_race_count = 0;
         rt.snapshot.total_battle_royale_count = 0;
+        rt.snapshot.event_result_ids.clear();
         clear_session_results(&mut rt.snapshot);
         rt.overlay_writer.invalidate();
     }
@@ -1715,12 +1668,14 @@ fn clear_race_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>) 
 fn clear_race_cycles(
     app: tauri::AppHandle,
     runtime: State<'_, SharedRuntime>,
+    backup: bool,
 ) -> Result<AppSnapshot, String> {
     {
         let mut rt = runtime
             .lock()
             .map_err(|_| "Application state unavailable")?;
         let mut next = rt.race_state.clone();
+        if backup { backup_current_results(&rt, "cycles")?; }
         reset_cycle_totals(&mut next);
         rt.storage.write("race-state.json", &next)?;
         rt.race_state = next;
@@ -1733,7 +1688,7 @@ fn clear_race_cycles(
         &runtime,
         &app,
         "info",
-        "[RaceCycles] Placement history reset for a new season",
+        "[RaceCycles] Current results cleared; saved history retained",
     );
     emit_snapshot(&runtime, &app);
     get_app_snapshot(runtime)
@@ -1999,6 +1954,7 @@ mod pipeline_tests {
     fn test_snapshot() -> AppSnapshot {
         let config = AppConfig::default_for("race.csv".into());
         AppSnapshot {
+            event_result_ids: vec![],
             cycle_history: vec![],
             total_race_count: 0,
             total_battle_royale_count: 0,
@@ -2163,7 +2119,7 @@ mod pipeline_tests {
         assert_eq!(completions.len(), 1);
         assert_eq!(next.cycle_history.len(), 1);
         assert_eq!(next.cycle_history[0].completions[0].cycle_number, 1);
-        assert_eq!(next.cycle_history[0].timestamp, "completed-at");
+        assert_eq!(next.cycle_history[0].timestamp, game.timestamp);
         assert_eq!(next.cycle_history[0].game_id, game.id);
         let restored: RaceState = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
         assert_eq!(restored.cycle_history[0].completions[0].player_name, game.results[0].player_name);
@@ -2171,82 +2127,72 @@ mod pipeline_tests {
     }
 
     #[test]
-    fn race_cycles_collect_distinct_positions_and_restart() {
-        let game_for = |placement| GameResult {
-            id: format!("race-{placement}"),
-            source_snapshot_id: None,
-            timestamp: "2026-01-01T00:00:00Z".into(),
-            game_type: GameType::Race,
-            player_count: 1,
-            results: vec![result("CycleRacer", placement, 0)],
-            has_world_record: false,
-            world_record_player: None,
-            world_record_time: None,
-            map_name: None,
-        };
-        let mut players = Vec::new();
-        let mut stale_totals = vec![RaceCyclePlayer {
-            player_key: race_cycle_player_key(&game_for(10).results[0]),
-            player_name: "CycleRacer".into(), placement_counts: vec![4,4,4,4,4,4,4,4,4,3],
-            cycles: 3, current_cycle_positions: Some(vec![1,2,3,4,6,7,8,9,10]),
-            cycle_race_counts: vec![Some(12)],
-        }];
-        assert!(update_race_cycles(&mut stale_totals, &game_for(10)).is_empty());
-        assert_eq!(stale_totals[0].cycles, 3);
-        assert_eq!(stale_totals[0].cycle_progress(), 9);
-        stale_totals = serde_json::from_str(&serde_json::to_string(&stale_totals).unwrap()).unwrap();
-        assert_eq!(update_race_cycles(&mut stale_totals, &game_for(5)), vec![CycleCompletion {
-            player_name: "CycleRacer".into(), cycle_number: 4, races: Some(14),
-        }]);
-        assert_eq!(stale_totals[0].cycle_progress(), 10);
-        assert!(update_race_cycles(&mut stale_totals, &game_for(10)).is_empty());
-        assert_eq!(stale_totals[0].current_positions(), vec![10]);
-        assert_eq!(stale_totals[0].cycles, 4);
-        // Participation outside the top ten still contributes to the cycle duration.
-        assert!(update_race_cycles(&mut players, &game_for(11)).is_empty());
-
-        for placement in 1..=9 {
-            assert!(update_race_cycles(&mut players, &game_for(placement)).is_empty());
-        }
-        assert_eq!(
-            update_race_cycles(&mut players, &game_for(10)),
-            vec![CycleCompletion {
-                player_name: "CycleRacer".into(),
-                cycle_number: 1,
-                races: Some(11),
-            }]
-        );
-
-        assert_eq!(players[0].cycle_progress(), 10);
-        let mut outside_top_ten = players.clone();
-        update_race_cycles(&mut outside_top_ten, &game_for(11));
-        assert_eq!(outside_top_ten[0].cycle_progress(), 0);
-        assert_eq!(outside_top_ten[0].placement_counts, players[0].placement_counts);
-        update_race_cycles(&mut outside_top_ten, &game_for(3));
-        assert_eq!(outside_top_ten[0].current_positions(), vec![3]);
-        update_race_cycles(&mut players, &game_for(2));
-        assert_eq!(players[0].current_positions(), vec![2]);
-        update_race_cycles(&mut players, &game_for(2));
-        assert_eq!(players[0].cycle_progress(), 1);
-        for placement in [1, 3, 4, 5, 6, 7, 8, 9] {
-            assert!(update_race_cycles(&mut players, &game_for(placement)).is_empty());
-        }
-        assert_eq!(
-            update_race_cycles(&mut players, &game_for(10)),
-            vec![CycleCompletion {
-                player_name: "CycleRacer".into(),
-                cycle_number: 2,
-                races: Some(11),
-            }]
-        );
-        assert_eq!(players[0].cycles, 2);
-        assert_eq!(players[0].placement_counts[1], 3);
-        assert_eq!(players[0].cycle_progress(), 10);
-        let restored: Vec<RaceCyclePlayer> = serde_json::from_str(&serde_json::to_string(&players).unwrap()).unwrap();
-        assert_eq!(restored[0].cycle_progress(), 10);
-        update_race_cycles(&mut players, &game_for(1));
-        assert_eq!(players[0].current_positions(), vec![1]);
+    fn player_event_results_survive_restart_and_reset_independently_of_history() {
+        let mut first = streamer_bot::sample_game();
+        first.id = "first-event-race".into();
+        first.source_snapshot_id = Some("first-event-source".into());
+        let mut second = first.clone();
+        second.id = "second-event-race".into();
+        second.source_snapshot_id = Some("second-event-source".into());
+        let history = vec![first.clone(), second.clone()];
+        let mut state = prepare_race_commit(&RaceState::default(), &first, true, false, "first", ReadReason::Manual).unwrap().0;
+        assert_eq!(current_event_result_ids(&state, &history), vec![first.id.clone()]);
+        let restored: RaceState = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(current_event_result_ids(&restored, &history), vec![first.id.clone()]);
+        reset_stats_totals(&mut state);
+        assert!(current_event_result_ids(&state, &history).is_empty());
+        state = prepare_race_commit(&state, &second, true, false, "second", ReadReason::Manual).unwrap().0;
+        assert_eq!(current_event_result_ids(&state, &history), vec![second.id]);
+        assert_eq!(history.len(), 2);
     }
+
+    #[test]
+    fn startup_restores_saved_latest_without_recounting_and_respects_clearing() {
+        let game = streamer_bot::sample_game();
+        let history = vec![game.clone()];
+        let mut state = RaceState::default();
+        assert_eq!(restored_current_result(&state, &history).unwrap().id, game.id);
+        assert_eq!(state.total_race_count, 0);
+        assert!(state.processed_ids.is_empty());
+        state = prepare_race_commit(&state, &game, true, true, "now", ReadReason::Manual).unwrap().0;
+        let restored: RaceState = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(restored_current_result(&restored, &history).unwrap().results.len(), game.results.len());
+        assert!(prepare_race_commit(&restored, &game, true, true, "restart", ReadReason::Manual).is_none());
+        reset_stats_totals(&mut state);
+        let restored: RaceState = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert!(restored_current_result(&restored, &history).is_none());
+        assert_eq!(history.len(), 1);
+        assert!(!restored.cycle_history.is_empty());
+    }
+
+    #[test]
+    fn placements_carry_forward_through_a_hundred_cycles_and_restart() {
+        let mut game = streamer_bot::sample_game();
+        game.results = vec![result("Player", 10, 0)];
+        let mut players = Vec::new();
+        for _ in 0..100 { assert!(update_race_cycles(&mut players, &game).is_empty()); }
+        assert_eq!(players[0].placement_counts[9], 100);
+        assert_eq!(players[0].cycles, 0);
+        players = serde_json::from_str(&serde_json::to_string(&players).unwrap()).unwrap();
+        for placement in 1..=9 {
+            game.results[0].placement = placement;
+            for _ in 0..100 { update_race_cycles(&mut players, &game); }
+            assert_eq!(players[0].placement_counts[9], 100);
+        }
+        assert_eq!(players[0].placement_counts, vec![100; 10]);
+        assert_eq!(players[0].cycles, 100);
+        game.results[0].placement = 1;
+        update_race_cycles(&mut players, &game);
+        assert_eq!(players[0].placement_counts[0], 101);
+        assert_eq!(players[0].placement_counts[9], 100);
+        assert_eq!(players[0].cycles, 100);
+        assert_eq!(players[0].current_positions(), vec![1]);
+        game.game_type = GameType::BattleRoyale;
+        let before = serde_json::to_string(&players).unwrap();
+        assert!(update_race_cycles(&mut players, &game).is_empty());
+        assert_eq!(serde_json::to_string(&players).unwrap(), before);
+    }
+
     #[test]
     fn routes_only_confirmed_source_pairs_without_losing_either_mode() {
         let race = PathBuf::from("savegames/LastSeasonRace.csv");
@@ -2301,11 +2247,6 @@ mod pipeline_tests {
         assert_eq!(next.total_battle_royale_count, 1);
         let restored: RaceState = serde_json::from_str(&serde_json::to_string(&next).unwrap()).unwrap();
         assert!(prepare_race_commit(&restored, &game, true, false, "later", ReadReason::Manual).is_none());
-        let mut legacy = RaceState { total_race_count: 7, processed_ids: vec![
-            "source:royale:first".into(), "source:royale:second".into()], ..RaceState::default() };
-        migrate_game_totals(&mut legacy, &[]);
-        assert_eq!(legacy.total_race_count, 5);
-        assert_eq!(legacy.total_battle_royale_count, 2);
         let mut snapshot = test_snapshot();
         snapshot.total_battle_royale_count = 2;
         snapshot.session_results.push(game);
@@ -2316,41 +2257,53 @@ mod pipeline_tests {
     }
 
     #[test]
-    fn repeated_positions_count_as_matches_not_extra_cycle_slots() {
-        let mut game = GameResult {
-            id: "overlapping".into(), source_snapshot_id: None,
-            timestamp: "2026-10-05T20:00:00Z".into(), game_type: GameType::Race,
-            player_count: 1, results: vec![result("Player", 1, 0)],
-            has_world_record: false, world_record_player: None, world_record_time: None, map_name: None,
-        };
+    fn three_first_places_are_preserved_for_three_completed_cycles() {
+        let mut game = streamer_bot::sample_game();
+        game.results = vec![result("Player", 1, 0)];
         let mut players = Vec::new();
-        for _ in 0..3 { assert!(update_race_cycles(&mut players, &game).is_empty()); }
-        assert_eq!(players[0].cycle_race_counts, vec![Some(3)]);
-        assert_eq!(players[0].cycle_progress(), 1);
-        for (cycle, expected) in [(1, 12), (2, 10), (3, 10)] {
-            if cycle > 1 {
-                game.results[0].placement = 1;
-                assert!(update_race_cycles(&mut players, &game).is_empty());
-                assert_eq!(players[0].cycle_progress(), 1);
-            }
+        for _ in 0..3 { update_race_cycles(&mut players, &game); }
+        assert_eq!(players[0].cycle_race_counts, vec![Some(3), Some(2), Some(1)]);
+        for cycle in 1..=3 {
             for placement in 2..=10 {
                 game.results[0].placement = placement;
                 let completed = update_race_cycles(&mut players, &game);
-                if placement == 10 {
-                    assert_eq!(completed, vec![CycleCompletion {
-                        player_name: "Player".into(), cycle_number: cycle, races: Some(expected),
-                    }]);
-                } else { assert!(completed.is_empty()); }
+                if placement == 10 { assert_eq!(completed[0].cycle_number, cycle); }
+                else { assert!(completed.is_empty()); }
             }
+            assert_eq!(players[0].placement_counts[0], 3);
             assert_eq!(players[0].cycles, cycle);
-            assert_eq!(players[0].cycle_progress(), 10);
-            // Restart preserves the completed set until this player's next match.
+            assert_eq!(players[0].current_positions(), if cycle < 3 { vec![1] } else { vec![] });
             players = serde_json::from_str(&serde_json::to_string(&players).unwrap()).unwrap();
         }
-        assert_eq!(players[0].cycle_race_counts, vec![Some(10)]);
+    }
+
+    #[test]
+    fn histories_keep_full_results_and_survive_independent_resets_without_a_limit() {
+        let mut game = streamer_bot::sample_game();
+        game.results = vec![result("Player", 1, 0)];
+        let mut state = RaceState::default();
+        for number in 0..260 {
+            game.id = format!("race-{number}");
+            game.source_snapshot_id = Some(format!("source-{number}"));
+            state = prepare_race_commit(&state, &game, true, true, "now", ReadReason::Manual).unwrap().0;
+        }
+        assert_eq!(state.cycle_history.len(), 260);
+        assert_eq!(state.cycle_history[0].earnings[0].points_earned, 1);
+        assert_eq!(state.cycle_history[0].game.as_ref().unwrap().results.len(), 1);
+        assert_eq!(state.cycle_history[259].standings[0].placement_counts[0], 260);
+        reset_stats_totals(&mut state);
+        reset_cycle_totals(&mut state);
+        let restored: RaceState = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();
+        assert_eq!(restored.cycle_history.len(), 260);
+        assert!(restored.current_result.is_none());
+        assert!(restored.race_cycles.is_empty());
+        game.id = "outside-top-ten".into();
+        game.source_snapshot_id = None;
         game.results[0].placement = 11;
-        assert!(update_race_cycles(&mut players, &game).is_empty());
-        assert_eq!(players[0].cycle_race_counts, vec![Some(1)]);
+        let next = prepare_race_commit(&restored, &game, false, true, "now", ReadReason::Manual).unwrap().0;
+        assert_eq!(next.cycle_history.len(), 260);
+        game.game_type = GameType::BattleRoyale;
+        assert!(prepare_race_commit(&next, &game, false, true, "now", ReadReason::Manual).is_none());
     }
 
     #[test]
@@ -2448,7 +2401,7 @@ mod pipeline_tests {
     }
 
     #[test]
-    fn cycles_track_unique_players_across_rows_matches_and_saved_duplicates() {
+    fn cycles_track_unique_players_across_rows_and_matches() {
         let mut game = streamer_bot::sample_game();
         game.results = vec![result("Player", 1, 0), result("PLAYER", 2, 0)];
         let mut players = Vec::new();
@@ -2461,13 +2414,6 @@ mod pipeline_tests {
         assert_eq!(players.len(), 1);
         assert_eq!(players[0].placement_counts[0], 1);
         assert_eq!(players[0].placement_counts[1], 1);
-        let mut duplicate = players[0].clone();
-        duplicate.player_key = " Twitch:PLAYER ".into();
-        duplicate.player_name = " PLAYER ".into();
-        players.push(duplicate);
-        merge_duplicate_cycle_players(&mut players);
-        assert_eq!(players.len(), 1);
-        assert_eq!(players[0].placement_counts[0], 2);
         game.results[0].player_name = "Other".into();
         game.results[0].display_name = "Other".into();
         game.results[0].username = "other".into();

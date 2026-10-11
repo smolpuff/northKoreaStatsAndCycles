@@ -1,9 +1,17 @@
 import { icons } from "./icons";
 import { showAnimatedDialog } from "./dialog-motion";
 
-export function confirmClear(title: string, description: string, action: string): Promise<boolean> {
+export async function confirmClear(title: string, description: string, action: string): Promise<boolean> {
+  return (await clearDialog(title, description, action, false)).confirmed;
+}
+
+export function confirmClearWithBackup(title: string, description: string): Promise<{ confirmed: boolean; backup: boolean }> {
+  return clearDialog(title, description, "Clear results", true);
+}
+
+function clearDialog(title: string, description: string, action: string, offerBackup: boolean): Promise<{ confirmed: boolean; backup: boolean }> {
   // A second click must not create another pending destructive action.
-  if (document.querySelector("#clear-confirmation-dialog")) return Promise.resolve(false);
+  if (document.querySelector("#clear-confirmation-dialog")) return Promise.resolve({ confirmed: false, backup: false });
 
   const dialog = document.createElement("dialog");
   dialog.id = "clear-confirmation-dialog";
@@ -12,6 +20,7 @@ export function confirmClear(title: string, description: string, action: string)
   dialog.setAttribute("aria-describedby", "clear-confirmation-description");
   dialog.innerHTML = `<header><h2 id="clear-confirmation-title"></h2><button type="button" class="compact-button modal-close" aria-label="Close" title="Close" data-close>${icons.close}</button></header>
     <p id="clear-confirmation-description"></p>
+    ${offerBackup ? `<label class="backup-choice"><input type="checkbox" data-backup /> Back up current results before clearing</label>` : ""}
     <footer class="confirmation-actions"><button type="button" class="compact-button" data-cancel autofocus>Cancel</button><button type="button" class="compact-button btn-error" data-confirm></button></footer>`;
   dialog.querySelector("h2")!.textContent = title;
   dialog.querySelector("p")!.textContent = description;
@@ -24,7 +33,7 @@ export function confirmClear(title: string, description: string, action: string)
     // Escape and every other dismissal cancel; only the explicit action approves.
     dialog.addEventListener("close", () => {
       dialog.remove();
-      resolve(dialog.returnValue === "confirmed");
+      resolve({ confirmed: dialog.returnValue === "confirmed", backup: dialog.querySelector<HTMLInputElement>("[data-backup]")?.checked ?? false });
     }, { once: true });
     document.body.append(dialog);
     showAnimatedDialog(dialog);

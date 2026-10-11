@@ -1,3 +1,4 @@
+import { formatTimestamp } from "./dates";
 import { invoke } from "@tauri-apps/api/core";
 import { showAnimatedDialog } from "./dialog-motion";
 import { listen } from "@tauri-apps/api/event";
@@ -39,7 +40,7 @@ function refreshSettings(): void {
   const version = document.querySelector<HTMLElement>("[data-app-version]");
   if (version) version.textContent = currentVersion ? `v${currentVersion}` : "";
   const checked = document.querySelector<HTMLElement>("[data-update-last-checked]");
-  if (checked) checked.textContent = `Last checked: ${lastChecked ? new Date(lastChecked).toLocaleString() : "Never"}`;
+  if (checked) checked.textContent = `Last checked: ${lastChecked ? formatTimestamp(lastChecked) : "Never"}`;
   const status = document.querySelector<HTMLElement>("[data-update-message]");
   if (status) status.textContent = message;
   const button = document.querySelector<HTMLButtonElement>("[data-check-updates]");

@@ -25,6 +25,8 @@ struct TokenValidation {
     login: String,
     user_id: String,
     scopes: Vec<String>,
+    #[serde(default)]
+    expires_in: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,6 +120,13 @@ pub fn validate_saved() -> Result<StoredTwitchCredential, String> {
     let client = http_client()?;
     let response = validation_response(&client, &credential.access_token)?;
     let validation = if response.status().as_u16() == 401 {
+        None
+    } else {
+        let validation = parse_validation(response)?;
+        verify_authorization(&validation, &credential.client_id)?;
+        if should_refresh(validation.expires_in) { None } else { Some(validation) }
+    };
+    let validation = if let Some(validation) = validation { validation } else {
         if credential.refresh_token.is_empty() {
             return Err("Twitch login expired; click Connect Twitch again".into());
         }
@@ -134,12 +143,22 @@ pub fn validate_saved() -> Result<StoredTwitchCredential, String> {
         let validation = validate_access_token(&client, &credential.access_token)?;
         verify_authorization(&validation, &credential.client_id)?;
         validation
-    } else { parse_validation(response)? };
+    };
     verify_authorization(&validation, &credential.client_id)?;
     credential.user_id = validation.user_id;
     credential.login = validation.login;
     save_credential(&credential)?;
     Ok(credential)
+}
+
+fn should_refresh(expires_in: Option<u64>) -> bool {
+    expires_in.is_some_and(|seconds| seconds <= 3600)
+}
+
+pub(crate) fn login_error_status(error: &str) -> &'static str {
+    if error == "No Twitch account is connected" { "Disconnected" }
+    else if error.contains("click Connect Twitch again") { "Expired" }
+    else { "Unavailable" }
 }
 
 pub fn disconnect() -> Result<(), String> {
@@ -346,11 +365,14 @@ fn validation_response(client: &Client, access_token: &str) -> Result<reqwest::b
 }
 
 fn parse_validation(response: reqwest::blocking::Response) -> Result<TokenValidation, String> {
+    match response.status().as_u16() {
+        401 => return Err("Twitch authorization is no longer valid; click Connect Twitch again".into()),
+        200..=299 => {},
+        status => return Err(format!("Twitch login validation is temporarily unavailable (HTTP {status}); the saved login was kept")),
+    }
     response
-        .error_for_status()
-        .map_err(|_| "Saved Twitch login has expired".to_string())?
         .json::<TokenValidation>()
-        .map_err(|error| format!("Invalid Twitch validation response: {error}"))
+        .map_err(|_| "Twitch returned an invalid login validation response; try again".into())
 }
 
 fn verify_authorization(validation: &TokenValidation, client_id: &str) -> Result<(), String> {
@@ -477,6 +499,18 @@ fn delete_credential() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn login_maintenance_refreshes_before_expiry_and_preserves_temporary_failures() {
+        assert!(super::should_refresh(Some(0)));
+        assert!(super::should_refresh(Some(3600)));
+        assert!(!super::should_refresh(Some(3601)));
+        assert!(!super::should_refresh(None));
+        assert_eq!(super::login_error_status("Unable to reach Twitch to validate login"), "Unavailable");
+        assert_eq!(super::login_error_status("Twitch login refresh is temporarily unavailable (HTTP 503); the saved login was kept"), "Unavailable");
+        assert_eq!(super::login_error_status("Twitch authorization is no longer valid; click Connect Twitch again"), "Expired");
+        assert_eq!(super::login_error_status("No Twitch account is connected"), "Disconnected");
+    }
 
     #[test]
     fn custom_race_templates_format_entries_and_podium_without_replacing_names() {
