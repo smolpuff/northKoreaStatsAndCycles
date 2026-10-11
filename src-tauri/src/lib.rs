@@ -95,6 +95,22 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         .with_file_name("LastCustomRaceMapPlayed.csv")).ok();
     let record_tracker = records::Tracker::new(record_metadata.as_ref());
     let announced_records = storage.read::<Vec<String>>("world-records.json").unwrap_or_default();
+    let data_file_logs = ["config.json", "history.json", "race-state.json", "world-records.json"]
+        .iter()
+        .filter_map(|name| {
+            let bytes = std::fs::metadata(storage.path(name)).ok()?.len();
+            let size = if bytes >= 1024 * 1024 {
+                format!("{:.2} MiB", bytes as f64 / (1024.0 * 1024.0))
+            } else {
+                format!("{:.2} KiB", bytes as f64 / 1024.0)
+            };
+            Some(LogEntry {
+                timestamp: Utc::now().to_rfc3339(),
+                level: "info".into(),
+                message: format!("[Storage] Data file {name}: {size} ({bytes} bytes)"),
+            })
+        })
+        .collect();
     Ok(Runtime {
         overlay_writer: overlays::Writer::new(app_data_dir.join("overlays")),
         race_state: race_state.clone(),
@@ -123,7 +139,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             session: SessionSummary::default(),
             recent_results,
             race_cycles,
-            logs: vec![],
+            logs: data_file_logs,
         },
         storage,
         watcher: None,
