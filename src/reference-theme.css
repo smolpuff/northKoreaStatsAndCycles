@@ -638,11 +638,15 @@ table {
 }
 
 .earned-column {
-  width: 22.5%;
+  width: 17.5%;
 }
 
 .total-column {
-  width: 14.5%;
+  width: 11.5%;
+}
+
+.wins-column {
+  width: 8%;
 }
 
 .eliminated-column {
@@ -680,7 +684,7 @@ table {
 }
 
 .battle-royale-results .player-column {
-  width: 28%;
+  width: 25%;
 }
 
 .battle-royale-results .kills-column {
@@ -692,11 +696,11 @@ table {
 }
 
 .battle-royale-results .earned-column {
-  width: 19%;
+  width: 16%;
 }
 
 .battle-royale-results .total-column {
-  width: 14%;
+  width: 12%;
 }
 
 .battle-royale-results .eliminated-column {
@@ -853,7 +857,7 @@ tbody tr:is(.p1, .p2, .p3) td:last-child {
   border-radius: 0 3px 3px 0;
 }
 
-tbody tr.p1 td:nth-last-child(2) {
+tbody tr.p1 td.points {
   color: #ffe100;
 }
 

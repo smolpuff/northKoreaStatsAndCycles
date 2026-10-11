@@ -30,6 +30,21 @@ const state = {
   watcherStatus: 'Stopped', streamerBotStatus: 'Disabled', twitchStatus: 'Disconnected', session: { gamesPlayed: 0 }, logs: [],
 };
 const render = (page, id = '') => views.renderApplication(state, page, false, 'all', { key: 'cycles', direction: 'desc' }, false, { key: 'placement', direction: 'asc' }, '', id);
+// Season wins come from saved CSV totals, including zero and unavailable data.
+for (const wins of [0, 7, undefined]) {
+  result.seasonWinsTotal = wins;
+  const value = wins ?? '\u2014';
+  assert(render('overview').includes('data-results-sort="wins"'));
+  assert(render('overview').includes(`<td>${value}</td>`));
+  assert(render('home').includes('<th>Wins</th>'));
+  assert(render('home').includes(`<td>${value}</td>`));
+  assert(views.playerHistoryContent(state, 'race', 'twitch:racer').content.includes('<th>Wins</th>'));
+}
+const lowWins = { ...result, playerName: 'Low wins', seasonWinsTotal: 2, placement: 2 };
+const highWins = { ...result, playerName: 'High wins', seasonWinsTotal: 9, placement: 3 };
+const sortedWins = views.renderApplication({ ...state, latestResult: { ...game, results: [lowWins, result, highWins] } }, 'overview', false, 'all', { key: 'cycles', direction: 'desc' }, false, { key: 'wins', direction: 'desc' }, '', '');
+assert(sortedWins.indexOf('title="High wins"') < sortedWins.indexOf('title="Low wins"'));
+assert(sortedWins.indexOf('title="Low wins"') < sortedWins.indexOf('title="Racer &lt;one&gt;"'));
 let html = render('overview', 'previous');
 assert(html.includes('Participants</small><b>27</b>'));
 assert(html.includes('Previous Track'));

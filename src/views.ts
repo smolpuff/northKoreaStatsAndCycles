@@ -63,6 +63,7 @@ export interface ResultsSort {
     | "damage"
     | "points"
     | "total"
+    | "wins"
     | "eliminated";
   direction: "asc" | "desc";
 }
@@ -97,6 +98,8 @@ function sortResults(
           : player.seasonPointsEarned;
       case "total":
         return player.seasonPointsTotal;
+      case "wins":
+        return player.seasonWinsTotal;
       case "eliminated":
         return player.eliminated == null
           ? undefined
@@ -477,7 +480,9 @@ function resultRow(
       ${battleRoyale ? "" : `<td class="mono">${formatRaceTime(result.finishTime)}</td>`}
       ${battleRoyale ? `<td>${royaleValue("MatchKills")}</td><td>${royaleValue("MatchDamageDealt")}</td>` : ""}
       <td class="points">${battleRoyale && result.rawData ? royaleValue("SeasonPointsEarned") : result.seasonPointsEarned}</td>
-      ${compact ? "" : `<td>${result.seasonPointsTotal ?? "—"}</td><td>${eliminated}</td>`}
+      ${compact ? "" : `<td>${result.seasonPointsTotal ?? "—"}</td>`}
+      <td>${result.seasonWinsTotal ?? "—"}</td>
+      ${compact ? "" : `<td>${eliminated}</td>`}
     </tr>
   `;
 }
@@ -524,6 +529,7 @@ function resultsTable(
           ${battleRoyale ? '<col class="kills-column" /><col class="damage-column" />' : ""}
           <col class="earned-column" />
           <col class="total-column" />
+          <col class="wins-column" />
           <col class="eliminated-column" />
         </colgroup>
         <thead>
@@ -533,6 +539,7 @@ function resultsTable(
             ${battleRoyale ? sortableHeader("kills", "Kills") + sortableHeader("damage", "Damage") : sortableHeader("time", "Race time")}
             ${sortableHeader("points", battleRoyale ? "Points earned" : "Season points earned")}
             ${sortableHeader("total", "Season total")}
+            ${sortableHeader("wins", "Wins")}
             ${sortableHeader("eliminated", "Eliminated")}
           </tr>
         </thead>
@@ -1210,7 +1217,7 @@ function homePage(state: Snapshot, busy: boolean): string {
         ${lastUpdated(game ? (state.lastUpdate ?? game.timestamp) : null)}
         ${
           game
-            ? `<div class="table-frame home-table-frame"><div class="table-scroll"><table class="home-summary-table ${battleRoyale ? "battle-royale-results" : "race-results"}"><thead><tr><th>#</th><th>Player</th>${battleRoyale ? "<th>Kills</th><th>Damage</th>" : ""}<th>Points</th>${battleRoyale ? "" : "<th>Season total</th>"}</tr></thead><tbody>${
+            ? `<div class="table-frame home-table-frame"><div class="table-scroll"><table class="home-summary-table ${battleRoyale ? "battle-royale-results" : "race-results"}"><thead><tr><th>#</th><th>Player</th>${battleRoyale ? "<th>Kills</th><th>Damage</th>" : ""}<th>Points</th>${battleRoyale ? "" : "<th>Season total</th>"}<th>Wins</th></tr></thead><tbody>${
                 battleRoyale
                   ? podium
                       .filter(
@@ -1222,7 +1229,7 @@ function homePage(state: Snapshot, busy: boolean): string {
                   : podium
                       .map(
                         (player, index) =>
-                          `<tr class="p${index + 1}"><td><b class="place p${index + 1}">${index + 1}</b></td><td title="${escapeHtml(player?.playerName ?? "")}" >${escapeHtml(player?.playerName ?? "—")}</td><td class="points">${escapeHtml(player?.seasonPointsEarned ?? "—")}</td><td>${escapeHtml(player?.seasonPointsTotal ?? "—")}</td></tr>`,
+                          `<tr class="p${index + 1}"><td><b class="place p${index + 1}">${index + 1}</b></td><td title="${escapeHtml(player?.playerName ?? "")}" >${escapeHtml(player?.playerName ?? "—")}</td><td class="points">${escapeHtml(player?.seasonPointsEarned ?? "—")}</td><td>${escapeHtml(player?.seasonPointsTotal ?? "—")}</td><td>${escapeHtml(player?.seasonWinsTotal ?? "—")}</td></tr>`,
                       )
                       .join("")
               }</tbody></table></div></div>`
@@ -1584,7 +1591,7 @@ export function playerHistoryContent(
             name.trim().toLowerCase() ===
             game.worldRecordPlayer?.trim().toLowerCase(),
         );
-      const row = `<tr class="${worldRecord ? "history-achievement" : ""}"><td>${formatDate(game.timestamp)}</td><td>${escapeHtml(game.mapName ?? "Unknown track")}</td><td>${result.placement}</td><td class="race-time">${formatRaceTime(result.finishTime)}</td><td>${result.seasonPointsEarned}</td><td>${result.seasonPointsTotal ?? "\u2014"}</td><td>${game.playerCount}</td><td>${result.eliminated == null ? "\u2014" : result.eliminated ? "Yes" : "No"}</td>${br ? `<td>${escapeHtml(result.rawData?.MatchKills ?? "\u2014")}</td><td>${escapeHtml(result.rawData?.MatchDamageDealt ?? "\u2014")}</td>` : ""}<td>${worldRecord ? "World record" : "\u2014"}</td></tr>`;
+      const row = `<tr class="${worldRecord ? "history-achievement" : ""}"><td>${formatDate(game.timestamp)}</td><td>${escapeHtml(game.mapName ?? "Unknown track")}</td><td>${result.placement}</td><td class="race-time">${formatRaceTime(result.finishTime)}</td><td>${result.seasonPointsEarned}</td><td>${result.seasonPointsTotal ?? "\u2014"}</td><td>${result.seasonWinsTotal ?? "\u2014"}</td><td>${game.playerCount}</td><td>${result.eliminated == null ? "\u2014" : result.eliminated ? "Yes" : "No"}</td>${br ? `<td>${escapeHtml(result.rawData?.MatchKills ?? "\u2014")}</td><td>${escapeHtml(result.rawData?.MatchDamageDealt ?? "\u2014")}</td>` : ""}<td>${worldRecord ? "World record" : "\u2014"}</td></tr>`;
       (br ? brRows : raceRows).push(row);
     }
   }
@@ -1595,6 +1602,7 @@ export function playerHistoryContent(
     "Time",
     "Points earned",
     "Season total",
+    "Wins",
     "Participants",
     "Eliminated",
   ];

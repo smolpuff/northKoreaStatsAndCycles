@@ -122,9 +122,13 @@ select optgroup {
 :root.theme-plain th { color: var(--reference-secondary); }
 :root.theme-plain :is(td, .player b, .mono, .empty-state b, .connection-card b) { color: var(--reference-ink); }
 :root.theme-plain :is(.player small, .empty-state, .field > span) { color: var(--reference-secondary); }
-:root.theme-plain tbody tr { background: transparent; }
-:root.theme-plain tbody tr:nth-child(even) { background: var(--theme-alternate); }
-:root.theme-plain tbody tr:hover { background: color-mix(in srgb, var(--theme-hover) 20%, transparent); }
+:root.theme-plain tbody tr:not(:is(.p1, .p2, .p3)) { background: transparent; }
+:root.theme-plain tbody tr:not(:is(.p1, .p2, .p3)):nth-child(even) { background: var(--theme-alternate); }
+:root.theme-plain tbody tr:not(:is(.p1, .p2, .p3)):hover { background: color-mix(in srgb, var(--theme-hover) 20%, transparent); }
+
+:root[data-theme="minimal"] table tbody tr.p1 { background: #fff2c5; --podium-border: #b89432; }
+:root[data-theme="minimal"] table tbody tr.p2 { background: #e7eaf0; --podium-border: #b8c1ce; }
+:root[data-theme="minimal"] table tbody tr.p3 { background: #f5ded2; --podium-border: #bd876b; }
 
 :root.theme-plain :is(.compact-button, .test-actions button, .log-actions button,
   .field input, .field select, .field textarea, .log-actions select, .icon-input,
@@ -180,7 +184,6 @@ select optgroup {
   border-color: var(--reference-control-border);
 }
 :root[data-theme="minimal"] :is(.results-panel, .home-page) .battle-royale-results .royale-dead :is(td, .player b) { color: var(--bad); }
-:root[data-theme="minimal"] .results-panel tbody tr.p2 { background: #e7eaf0; --podium-border: #b8c1ce; }
 :root[data-theme="minimal"] :is(.royale-dead td, .royale-dead .player b, .dead-placement) { color: var(--bad); }
 
 :root.theme-plain :is(.content, .table-scroll, .cycle-table-wrap, .help-scroll, .log-list, dialog) {
