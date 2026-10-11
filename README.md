@@ -174,4 +174,4 @@ The Streamer.bot page also offers a separate Mission app promotion hook (off by 
 
 Historical race/state JSON uses compact encoding with the same data and atomic replacement. Complete historical standings remain on disk; UI snapshots omit unused standings and repeated race payloads. Watcher start/stop and initial snapshot preparation run off the window thread.
 
-Reprocess on RaceStats reads the newest Race/BR file and updates RaceStats only. Reprocess on Cycles reads the configured Race CSV and updates Cycles only. These manual actions work with the selected watcher stopped and retain duplicate protection. The dashboard has no Reprocess button.
+Reprocess on RaceStats reads the newest Race/BR file and updates RaceStats only. Reprocess on Cycles rereads the latest result and updates Cycles data only using the existing Cycles eligibility rules. These manual actions work with the selected watcher stopped and retain duplicate protection. The dashboard has no Reprocess button.

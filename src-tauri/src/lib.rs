@@ -884,7 +884,7 @@ fn prepare_race_commit(
 fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Path, reason: ReadReason, manual_target: Option<bool>) {
     let processing = match runtime.lock() { Ok(rt) => rt.processing.clone(), Err(_) => return };
     let _processing_guard = match processing.lock() { Ok(guard) => guard, Err(_) => return };
-    let selected_path = if reason == ReadReason::Manual && manual_target == Some(true) { latest_result_path(path) } else { path.to_path_buf() };
+    let selected_path = if reason == ReadReason::Manual { latest_result_path(path) } else { path.to_path_buf() };
     let path = selected_path.as_path();
     let companion = path.with_file_name(if same_watch_target(path, &path.with_file_name("LastSeasonRoyale.csv")) {
         "LastSeasonRoyaleSummary.csv"

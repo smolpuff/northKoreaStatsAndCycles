@@ -1127,7 +1127,7 @@ function raceCyclesPage(
     </div>
 
       <div class="tracking-controls">${watcherControls(state, busy, "cycles")}
-        ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="cycles" title="Reprocess the configured Race CSV for Cycles only"', "cycles")}
+          ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="cycles" title="Reprocess the latest file for Cycles data only"', "cycles")}
         ${feedbackButton("import-marble-cycle", "Import from MarblesCycles", "data-import-marble-cycle", "download")}
       </div>
     </div>
