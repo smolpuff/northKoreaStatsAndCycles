@@ -22,7 +22,7 @@ import "./themes.css";
 import { applyTheme, normalizeTheme } from "./theme";
 import { icons } from "./icons";
 import { showAnimatedDialog } from "./dialog-motion";
-import { confirmClear, confirmClearWithBackup } from "./confirm-dialog";
+import { confirmClear, confirmClearWithBackup, chooseExportFormat } from "./confirm-dialog";
 import { initializeUpdates, bindUpdateSettings } from "./updates";
 import { installIntegrationHelp } from "./integration-help";
 import { openOverlayVariables } from "./overlay-help";
@@ -402,7 +402,8 @@ function renderMainWindow(): void {
       document.querySelectorAll<HTMLButtonElement>("[data-export]").forEach(exportButton => exportButton.disabled = true);
       try {
         if (document.querySelector("#season-name")) await saveSeason();
-        await invoke<string | null>("export_data", { kind: button.dataset.export });
+        const format = await chooseExportFormat();
+        if (format) await invoke<string | null>("export_data", { kind: button.dataset.export, format });
       } catch (error) { alert(String(error)); }
       finally { exportIsRunning = false; render(); }
     });

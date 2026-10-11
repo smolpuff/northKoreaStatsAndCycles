@@ -1207,17 +1207,65 @@ fn prepare_export(snapshot: &AppSnapshot, kind: &str) -> Result<(String, serde_j
     Ok((filename, value))
 }
 
+fn prepare_csv_export(snapshot: &AppSnapshot, kind: &str) -> Result<Vec<u8>, String> {
+    let mut writer = csv::WriterBuilder::new().terminator(csv::Terminator::CRLF).from_writer(Vec::new());
+    if kind == "cycles" {
+        let mut headers: Vec<String> = ["Season", "Rank", "Player", "Player key", "Cycles", "Races", "Race count complete", "Points", "Progress", "Last updated"].iter().map(|s| s.to_string()).collect();
+        headers.extend((1..=10).map(|place| format!("{place} place")));
+        writer.write_record(headers).map_err(|e| e.to_string())?;
+        let mut players = snapshot.race_cycles.clone();
+        players.sort_by(models::compare_cycle_players);
+        for (index, player) in players.iter().enumerate() {
+            let points: u64 = player.placement_counts.iter().sum();
+            let races = if player.total_races_complete { player.total_races } else { player.total_races.max(points) };
+            let mut row = vec![snapshot.config.seasons.cycle_name.clone(), (index + 1).to_string(), player.player_name.clone(),
+                player.player_key.clone(), player.completed_cycles().to_string(), races.to_string(), player.total_races_complete.to_string(),
+                points.to_string(), player.cycle_progress().to_string(), snapshot.cycle_last_update.clone().unwrap_or_default()];
+            row.extend((0..10).map(|index| player.placement_counts.get(index).copied().unwrap_or(0).to_string()));
+            writer.write_record(row).map_err(|e| e.to_string())?;
+        }
+    } else {
+        let games = match kind {
+            "session" => snapshot.session_results.iter().collect::<Vec<_>>(),
+            "race" => vec![snapshot.latest_result.as_ref().ok_or("No race results to export")?],
+            _ => return Err("Unknown export type".into()),
+        };
+        writer.write_record(["Season", "Race ID", "Source ID", "Date/time", "Track", "Game type", "Participants", "Placement", "Player", "Username", "Platform", "Points earned", "Season points", "Finish time seconds", "Eliminated", "World record", "BR kills", "BR damage", "Raw result JSON"]).map_err(|e| e.to_string())?;
+        for game in games {
+            for player in &game.results {
+                let br = game.game_type == GameType::BattleRoyale;
+                let record = game.has_world_record && game.world_record_player.as_ref().is_some_and(|name|
+                    [&player.player_name, &player.username, &player.display_name].iter().any(|candidate| name.eq_ignore_ascii_case(candidate)));
+                writer.write_record(vec![snapshot.config.seasons.race_name.clone(), game.id.clone(), game.source_snapshot_id.clone().unwrap_or_default(),
+                    game.timestamp.clone(), game.map_name.clone().unwrap_or_default(), serde_json::to_string(&game.game_type).map_err(|e| e.to_string())?.trim_matches('"').to_string(),
+                    game.player_count.to_string(), player.placement.to_string(), player.player_name.clone(), player.username.clone(), player.platform.clone(),
+                    player.season_points_earned.to_string(), player.season_points_total.map(|v| v.to_string()).unwrap_or_default(),
+                    player.finish_time.map(|v| v.to_string()).unwrap_or_default(), player.eliminated.map(|v| v.to_string()).unwrap_or_default(), record.to_string(),
+                    if br { player.raw_data.get("MatchKills").cloned().unwrap_or_default() } else { String::new() },
+                    if br { player.raw_data.get("MatchDamageDealt").cloned().unwrap_or_default() } else { String::new() },
+                    serde_json::to_string(&player.raw_data).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    writer.into_inner().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
-async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, kind: String) -> Result<Option<String>, String> {
+async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, kind: String, format: Option<String>) -> Result<Option<String>, String> {
+    let format = format.unwrap_or_else(|| "json".into());
+    if !matches!(format.as_str(), "json" | "csv") { return Err("Choose JSON or CSV".into()); }
     // Capture the complete export, then release the state lock before showing a dialog.
-    let (filename, value) = {
+    let (filename, bytes) = {
         let rt = runtime.lock().map_err(|_| "Application state unavailable")?;
-        prepare_export(&rt.snapshot, &kind)?
+        let (filename, value) = prepare_export(&rt.snapshot, &kind)?;
+        if format == "csv" {
+            (filename.trim_end_matches(".json").to_string() + ".csv", prepare_csv_export(&rt.snapshot, &kind)?)
+        } else { (filename, serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?) }
     };
     tauri::async_runtime::spawn_blocking(move || {
         let mut dialog = app.dialog().file()
             .set_title("Export results")
-            .add_filter("JSON results", &["json"])
+            .add_filter(if format == "csv" { "CSV results" } else { "JSON results" }, &[format.as_str()])
             .set_file_name(filename);
         if let Some(window) = app.get_webview_window("main") {
             dialog = dialog.set_parent(&window);
@@ -1226,7 +1274,7 @@ async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, k
         let path = selected.into_path().map_err(|error| error.to_string())?;
         let parent = path.parent().ok_or("Invalid export location")?;
         let filename = path.file_name().and_then(|name| name.to_str()).ok_or("Invalid export file name")?;
-        Storage::new(parent.to_path_buf())?.write(filename, &value)?;
+        Storage::new(parent.to_path_buf())?.write_bytes(filename, &bytes)?;
         Ok(Some(path.to_string_lossy().into_owned()))
     }).await.map_err(|error| error.to_string())?
 }
@@ -2268,6 +2316,30 @@ mod pipeline_tests {
         assert_eq!(snapshot.recent_results.len(), 1);
         assert!(!snapshot.race_cycles.is_empty());
         assert!(prepare_export(&snapshot, "race").is_err());
+    }
+
+    #[test]
+    fn csv_exports_quote_names_and_keep_complete_rows_and_cycle_counts() {
+        let mut snapshot = test_snapshot();
+        let mut game = streamer_bot::sample_game();
+        game.results[0].player_name = "Name, with \"quotes\"\nand newline".into();
+        snapshot.session_results = vec![game.clone()];
+        let bytes = prepare_csv_export(&snapshot, "session").unwrap();
+        let mut reader = csv::Reader::from_reader(bytes.as_slice());
+        let rows: Vec<_> = reader.records().map(Result::unwrap).collect();
+        assert_eq!(rows.len(), game.results.len());
+        assert_eq!(&rows[0][8], game.results[0].player_name.as_str());
+        assert_eq!(&rows[0][16], ""); // No BR kills in Race rows.
+        assert_eq!(&rows[0][17], "");
+        let (state, _, _) = prepare_race_commit(&RaceState::default(), &game, false, true, "", ReadReason::Manual).unwrap();
+        snapshot.race_cycles = state.race_cycles;
+        let bytes = prepare_csv_export(&snapshot, "cycles").unwrap();
+        let mut reader = csv::Reader::from_reader(bytes.as_slice());
+        assert_eq!(reader.headers().unwrap().len(), 20);
+        let rows: Vec<_> = reader.records().map(Result::unwrap).collect();
+        assert_eq!(rows.len(), snapshot.race_cycles.len());
+        assert_eq!(&rows[0][5], "1");
+        assert!(prepare_csv_export(&snapshot, "unknown").is_err());
     }
 
     #[test]

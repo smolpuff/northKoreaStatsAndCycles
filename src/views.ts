@@ -717,7 +717,7 @@ function settingsPage(
 
   const promotionSettings = `
       <div class="mission-promotion-settings">
-        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's mission App in chat", "Give chat a nudge toward Korea's free Mission Manager.", state.config.twitch.promoteMissionApp ?? true)}
+        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's Mission App in chat", "Give chat a nudge toward Korea's FREE Mission App. Because it's free. you don't have to buy my love.", state.config.twitch.promoteMissionApp ?? true)}
         <details class="promotion-options twitch-message-customization">
           <summary><span class="customize-button">${icons.caretDown} Options</span></summary>
         <div class="mission-promotion-controls">
@@ -1430,7 +1430,15 @@ export function playerHistoryContent(
     const rows: string[] = [];
     const counts = Array<number>(10).fill(0);
     let cyclesEarned = 0;
-    const participated = new Set(state.recentResults.filter(game => game.gameType === "race" && game.results.some(result => playerKey(result) === key)).map(game => game.id));
+    const participated = new Set(
+      state.recentResults
+        .filter(
+          (game) =>
+            game.gameType === "race" &&
+            game.results.some((result) => playerKey(result) === key),
+        )
+        .map((game) => game.id),
+    );
     let participation = participated.size;
     let incompleteParticipation = false;
     const seenGames = new Set<string>();
@@ -1446,7 +1454,10 @@ export function playerHistoryContent(
         savedGame?.gameType === "race"
           ? savedGame.results.find((result) => playerKey(result) === key)
           : undefined;
-      if (savedResult && !participated.has(entry.gameId)) { participation++; participated.add(entry.gameId); }
+      if (savedResult && !participated.has(entry.gameId)) {
+        participation++;
+        participated.add(entry.gameId);
+      }
       if (!savedGame) incompleteParticipation = true;
       let earned = entry.earnings?.find((earned) => earned.playerKey === key);
       if (
@@ -1557,7 +1568,11 @@ export function playerHistoryContent(
       (result) => playerKey(result) === key,
     )) {
       name = result.playerName;
-      if ((game.gameType === "battleRoyale" || result.eliminated !== true) && result.placement >= 1 && result.placement <= 3)
+      if (
+        (game.gameType === "battleRoyale" || result.eliminated !== true) &&
+        result.placement >= 1 &&
+        result.placement <= 3
+      )
         podiumCounts[result.placement - 1]++;
       earnedPoints += result.seasonPointsEarned;
       if (eventIds.has(game.id)) eventPoints += result.seasonPointsEarned;

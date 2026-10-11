@@ -39,3 +39,22 @@ function clearDialog(title: string, description: string, action: string, offerBa
     showAnimatedDialog(dialog);
   });
 }
+
+export function chooseExportFormat(): Promise<"json" | "csv" | undefined> {
+  const dialog = document.createElement("dialog");
+  dialog.className = "overlay-preview-dialog confirmation-dialog";
+  dialog.setAttribute("aria-labelledby", "export-format-title");
+  dialog.innerHTML = `<header><h2 id="export-format-title">Export format</h2><button type="button" class="compact-button modal-close" aria-label="Close">${icons.close}</button></header>
+    <p>Choose a format, then choose where to save the file.</p>
+    <footer class="confirmation-actions"><button type="button" class="compact-button" data-format="cancel">Cancel</button><button type="button" class="compact-button" data-format="json">JSON</button><button type="button" class="compact-button" data-format="csv">CSV</button></footer>`;
+  return new Promise(resolve => {
+    dialog.querySelector(".modal-close")!.addEventListener("click", () => dialog.close());
+    dialog.querySelectorAll<HTMLButtonElement>("[data-format]").forEach(button => button.addEventListener("click", () => dialog.close(button.dataset.format)));
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      resolve(dialog.returnValue === "json" || dialog.returnValue === "csv" ? dialog.returnValue : undefined);
+    }, { once: true });
+    document.body.append(dialog);
+    showAnimatedDialog(dialog);
+  });
+}

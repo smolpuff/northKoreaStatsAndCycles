@@ -25,12 +25,16 @@ impl Storage {
         serde_json::from_str(&text).map_err(|e| format!("Invalid {}: {e}", path.display()))
     }
     pub fn write<T: Serialize>(&self, name: &str, value: &T) -> Result<(), String> {
-        let path = self.path(name);
-        let temp = path.with_extension("json.tmp");
         let bytes = if name == "race-state.json" || name == "history.json" {
             serde_json::to_vec(value)
         } else { serde_json::to_vec_pretty(value) }
             .map_err(|e| format!("Unable to serialize {name}: {e}"))?;
+        self.write_bytes(name, &bytes)
+    }
+
+    pub fn write_bytes(&self, name: &str, bytes: &[u8]) -> Result<(), String> {
+        let path = self.path(name);
+        let temp = path.with_extension("tmp");
         fs::write(&temp, bytes).map_err(|e| format!("Unable to write {}: {e}", temp.display()))?;
         replace_file(&temp, &path).map_err(|e| format!("Unable to replace {}: {e}", path.display()))
     }
