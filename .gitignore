@@ -58,6 +58,8 @@ Desktop.ini
 /screenshots/
 /public/*-review.html
 /scripts/Test-*.ps1
+/scripts/test-*.cjs
+/scripts/test-*.mjs
 /*-temp.mjs
 /edrwsfaserfgaszexdcfrgv
 /styles.css
