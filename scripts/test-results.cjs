@@ -36,9 +36,8 @@ for (const wins of [0, 7, undefined]) {
   const value = wins ?? '\u2014';
   assert(render('overview').includes('data-results-sort="wins"'));
   assert(render('overview').includes(`<td>${value}</td>`));
-  assert(render('home').includes('<th>Wins</th>'));
-  assert(render('home').includes(`<td>${value}</td>`));
-  assert(views.playerHistoryContent(state, 'race', 'twitch:racer').content.includes('<th>Wins</th>'));
+  assert(!render('home').includes('<th>Wins</th>'));
+  assert(!views.playerHistoryContent(state, 'race', 'twitch:racer').content.includes('<th>Wins</th>'));
 }
 const lowWins = { ...result, playerName: 'Low wins', seasonWinsTotal: 2, placement: 2 };
 const highWins = { ...result, playerName: 'High wins', seasonWinsTotal: 9, placement: 3 };
