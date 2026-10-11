@@ -20,7 +20,7 @@ If you are using 0.2.0 or earlier, download the new EXE once and replace your ol
 
 Settings also offers **Default** (colorful gradients), **Dark** (Windows-style charcoal), and **I hate my retinas mode** (plain light gray). Theme changes apply and save automatically across restarts. Icon colors stay the same.
 
-The window opens at 1000 × 760 and cannot be narrower than 1000 pixels. The sidebar expands and collapses with animation; collapsed navigation and status icons have hover tooltips. Settings toggles save immediately; **Save settings** remains available for other changes.
+The window opens at 1000 × 760 and cannot be narrower than 1000 pixels. The sidebar expands and collapses with animation; navigation and status icons have tooltips only when collapsed, with no tooltips while expanded. Settings toggles save immediately; **Save settings** remains available for other changes.
 
 Content and control icons use native Phosphor Regular SVGs, bundled locally without an icon runtime dependency. Their MIT license is included in `src/assets/Phosphor-LICENSE.txt`. Colored navigation artwork retains its existing design.
 

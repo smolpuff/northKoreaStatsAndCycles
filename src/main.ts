@@ -240,7 +240,7 @@ function renderMainWindow(): void {
   const sidebarToggle = root.querySelector<HTMLButtonElement>("[data-collapse-sidebar]");
   if (sidebarToggle) {
     const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
-    sidebarToggle.title = label;
+    sidebarToggle.dataset.sidebarTooltip = label;
     sidebarToggle.setAttribute("aria-label", label);
     sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
     sidebarToggle.addEventListener("click", () => {
@@ -249,7 +249,7 @@ function renderMainWindow(): void {
       localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
       root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
       const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
-      sidebarToggle.title = label;
+      sidebarToggle.dataset.sidebarTooltip = label;
       sidebarToggle.setAttribute("aria-label", label);
       sidebarToggle.setAttribute("aria-expanded", String(!sidebarCollapsed));
     });

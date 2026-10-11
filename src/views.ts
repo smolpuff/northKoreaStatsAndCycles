@@ -1031,7 +1031,7 @@ function navItem(page: string, currentPage: string, title: string): string {
   return `
     <button
       data-page="${page}"
-      title="${title}" aria-label="${title}"
+      data-sidebar-tooltip="${title}" aria-label="${title}"
       class="nav-item ${currentPage === page ? "active" : ""}"
     >
       ${gradientIcon}
@@ -1267,7 +1267,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
     <aside class="sidebar">
 
       <nav>
-        <div class="sidebar-heading"><span>Merbz</span><button type="button" class="sidebar-collapse-button" data-collapse-sidebar aria-label="Collapse sidebar" title="Collapse sidebar" aria-expanded="true">${icons.sidebar}</button></div>
+        <div class="sidebar-heading"><span>Merbz</span><button type="button" class="sidebar-collapse-button" data-collapse-sidebar aria-label="Collapse sidebar" data-sidebar-tooltip="Collapse sidebar" aria-expanded="true">${icons.sidebar}</button></div>
         ${navItem("home", currentPage, "Home")}
         ${navItem("overview", currentPage, "RaceStats")}
         ${navItem("racecycles", currentPage, "RaceCycles")}
@@ -1284,7 +1284,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
 
       <div class="sidebar-foot">
         <div class="watcher-statuses connection-statuses">
-        <div class="sidebar-watcher" title="Twitch: ${escapeHtml(state.twitchUsername ?? state.twitchStatus)} — ${escapeHtml(state.twitchStatus)}">
+        <div class="sidebar-watcher" data-sidebar-tooltip="Twitch: ${escapeHtml(state.twitchUsername ?? state.twitchStatus)} — ${escapeHtml(state.twitchStatus)}">
           <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-twitch")}</i>
           <small>Twitch</small>
           <div class="watch-state ${twitchTone(state)}"><i></i><span>${escapeHtml(
@@ -1294,7 +1294,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
           )}</span></div>
         </div>
        
-        <div class="sidebar-watcher" title="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
+        <div class="sidebar-watcher" data-sidebar-tooltip="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
           <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-streamer")}</i>
           <small>Streamer.bot</small>
           <div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div>
@@ -1306,7 +1306,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
               const running =
                 trackingIsActive(state, kind) && watcherIsActive(state);
               const label = kind === "stats" ? "Stats" : "Cycles";
-              return `<div class="sidebar-watcher" title="${label}: ${running ? "Watching" : "Stopped"}"><i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon(`status-${kind}`)}</i><small>${label}</small><div class="watch-state ${running ? "good" : "bad"}"><i></i><span>${running ? "Watching" : "Stopped"}</span></div></div>`;
+              return `<div class="sidebar-watcher" data-sidebar-tooltip="${label}: ${running ? "Watching" : "Stopped"}"><i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon(`status-${kind}`)}</i><small>${label}</small><div class="watch-state ${running ? "good" : "bad"}"><i></i><span>${running ? "Watching" : "Stopped"}</span></div></div>`;
             })
             .join("")}
         </div>

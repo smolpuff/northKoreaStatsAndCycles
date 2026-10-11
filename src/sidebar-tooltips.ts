@@ -1,9 +1,7 @@
 let tooltip: HTMLElement | undefined;
 let owner: HTMLElement | undefined;
-let originalTitle = "";
 
 export function hideSidebarTooltip(): void {
-  if (owner && originalTitle) owner.title = originalTitle;
   tooltip?.remove();
   tooltip = undefined;
   owner = undefined;
@@ -14,11 +12,9 @@ export function installSidebarTooltips(isCollapsed: () => boolean): void {
     const target = (event.target as Element).closest<HTMLElement>(".sidebar .nav-item, .sidebar .sidebar-watcher, .sidebar .sidebar-collapse-button");
     if (!isCollapsed() || !target || owner === target) return;
     hideSidebarTooltip();
-    const label = target.title || target.getAttribute("aria-label");
+    const label = target.dataset.sidebarTooltip || target.getAttribute("aria-label");
     if (!label) return;
     owner = target;
-    originalTitle = target.title;
-    target.removeAttribute("title");
     tooltip = document.createElement("div");
     tooltip.className = "sidebar-tooltip";
     tooltip.setAttribute("role", "tooltip");
