@@ -7,6 +7,7 @@
     "Simplified player history cards by showing the name once with its icon in the heading.",
     "Show sidebar tooltips only when collapsed.",
     "Turn off Mission Manager chat promotion by default while preserving saved choices.",
-    "Use muted text for the Cycles overlay Left count so completed cycles stand out."
+    "Use muted text for the Cycles overlay Left count so completed cycles stand out.",
+    "Make Reprocess independent for RaceStats and Cycles and remove it from the dashboard."
   ]
 }

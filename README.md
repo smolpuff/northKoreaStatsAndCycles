@@ -173,3 +173,5 @@ Runtime stats and editable live overlays are stored in the writable application-
 The Streamer.bot page also offers a separate Mission app promotion hook (off by default), using the same Settings interval without requiring Twitch. Its default action is `Marbles - Mission Promotion`. Arguments are `promotionMessage`, `downloadUrl`, `intervalMinutes`, `eventType` (`missionPromotion`), and `isTest`. Enabling both routes posts through Twitch and triggers the action independently.
 
 Historical race/state JSON uses compact encoding with the same data and atomic replacement. Complete historical standings remain on disk; UI snapshots omit unused standings and repeated race payloads. Watcher start/stop and initial snapshot preparation run off the window thread.
+
+Reprocess on RaceStats reads the newest Race/BR file and updates RaceStats only. Reprocess on Cycles reads the configured Race CSV and updates Cycles only. These manual actions work with the selected watcher stopped and retain duplicate protection. The dashboard has no Reprocess button.

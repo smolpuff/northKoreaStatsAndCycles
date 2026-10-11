@@ -343,9 +343,10 @@ function renderMainWindow(): void {
     play(card.matches(":hover, :focus-within"));
   });
 
-  document.querySelector("[data-reprocess-latest]")?.addEventListener("click", () => {
+  const reprocessButton = document.querySelector<HTMLButtonElement>("[data-reprocess-latest]");
+  reprocessButton?.addEventListener("click", () => {
     void runButtonAction("reprocess-latest", async () => {
-      state = await invoke<Snapshot>("reread_last_file");
+      state = await invoke<Snapshot>("reread_last_file", { kind: reprocessButton.dataset.reprocessLatest });
       if (state.watcherStatus === "Error" || state.watcherStatus === "File Missing") {
         throw new Error(state.watcherMessage ?? "Unable to reprocess the latest file");
       }

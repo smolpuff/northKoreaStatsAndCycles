@@ -694,7 +694,7 @@ fn latest_result_path(race: &Path) -> PathBuf {
 }
 
 fn process_file(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Path) {
-    process_file_inner(runtime, app, path, ReadReason::FileChanged);
+    process_file_inner(runtime, app, path, ReadReason::FileChanged, None);
 }
 
 // Record writes are independent of result writes: enrich the saved match and send
@@ -881,10 +881,10 @@ fn prepare_race_commit(
     Some((next, stats_new, cycle_completions))
 }
 
-fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Path, reason: ReadReason) {
+fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Path, reason: ReadReason, manual_target: Option<bool>) {
     let processing = match runtime.lock() { Ok(rt) => rt.processing.clone(), Err(_) => return };
     let _processing_guard = match processing.lock() { Ok(guard) => guard, Err(_) => return };
-    let selected_path = if reason != ReadReason::FileChanged { latest_result_path(path) } else { path.to_path_buf() };
+    let selected_path = if reason == ReadReason::Manual && manual_target == Some(true) { latest_result_path(path) } else { path.to_path_buf() };
     let path = selected_path.as_path();
     let companion = path.with_file_name(if same_watch_target(path, &path.with_file_name("LastSeasonRoyale.csv")) {
         "LastSeasonRoyaleSummary.csv"
@@ -986,8 +986,8 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     Ok(rt) => rt,
                     Err(_) => return,
                 };
-                let stats_enabled = rt.snapshot.stats_tracking_enabled;
-                let cycles_enabled = rt.snapshot.cycles_tracking_enabled;
+                let stats_enabled = manual_target.map_or(rt.snapshot.stats_tracking_enabled, |stats| stats);
+                let cycles_enabled = manual_target.map_or(rt.snapshot.cycles_tracking_enabled, |stats| !stats);
                 let timestamp = Utc::now().to_rfc3339();
                 let mut retained_history = std::mem::take(&mut rt.race_state.cycle_history);
                 let prepared = prepare_race_commit(&rt.race_state, &game, stats_enabled, cycles_enabled, &timestamp, reason);
@@ -1018,7 +1018,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                         emit_snapshot(runtime, app);
                         return;
                     }
-                    if !is_cycle_test_snapshot(&game) { refresh_latest_result(&mut rt.snapshot, &game); }
+                    if stats_enabled && !is_cycle_test_snapshot(&game) { refresh_latest_result(&mut rt.snapshot, &game); }
                     rt.snapshot.cycle_history = cycle_history_for_ui(&next.cycle_history);
                     rt.snapshot.total_race_count = next.total_race_count;
                     rt.snapshot.total_battle_royale_count = next.total_battle_royale_count;
@@ -1036,7 +1036,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                             rt.snapshot.recent_results.push(game.clone());
                         }
                         rt.snapshot.last_update = Some(timestamp);
-                    } else if reason == ReadReason::Manual && !is_cycle_test_snapshot(&game) {
+                    } else if stats_enabled && reason == ReadReason::Manual && !is_cycle_test_snapshot(&game) {
                         refresh_counted_result(&mut rt.snapshot.session_results, &game);
                         refresh_counted_result(&mut rt.snapshot.recent_results, &game);
                     }
@@ -1045,7 +1045,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     rt.snapshot.watcher_message = Some("New game read from file".into());
                     Some((game.player_count, game.id.chars().take(8).collect::<String>(), game.clone(), cycle_completions, stats_new))
                 } else {
-                    if reason == ReadReason::Manual && !is_cycle_test_snapshot(&game) {
+                    if stats_enabled && reason == ReadReason::Manual && !is_cycle_test_snapshot(&game) {
                         refresh_latest_result(&mut rt.snapshot, &game);
                     }
                     rt.snapshot.watcher_status = if rt.watcher.is_some() { "Watching" } else { "Stopped" }.into();
@@ -1296,13 +1296,18 @@ async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, k
 }
 
 #[tauri::command]
-async fn reread_last_file(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
+async fn reread_last_file(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, kind: String) -> Result<AppSnapshot, String> {
+    let stats = match kind.as_str() {
+        "stats" => true,
+        "cycles" => false,
+        _ => return Err("Choose RaceStats or Cycles to reprocess".into()),
+    };
     let shared = runtime.inner().clone();
     let path = shared.lock().map_err(|_| "Application state unavailable")?.snapshot.config.csv.path.clone();
     let worker = shared.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        process_file_inner(&worker, &app, Path::new(&path), ReadReason::Manual);
-        check_world_record(&worker, &app, Path::new(&path));
+        process_file_inner(&worker, &app, Path::new(&path), ReadReason::Manual, Some(stats));
+        if stats { check_world_record(&worker, &app, Path::new(&path)); }
     })
         .await.map_err(|error| error.to_string())?;
     let snapshot = snapshot_for_ui(&shared.lock().map_err(|_| "Application state unavailable")?.snapshot);

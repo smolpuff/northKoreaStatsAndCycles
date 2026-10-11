@@ -587,7 +587,7 @@ function overviewPage(
 
         <div class="head-actions tracking-controls">
           ${watcherControls(state, busy, "stats")}
-          ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}
+          ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="stats" title="Reprocess the latest Race or Battle Royale file for RaceStats only"', "cycles")}
           <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest Results</option>${[
             ...state.recentResults,
           ]
@@ -1127,7 +1127,7 @@ function raceCyclesPage(
     </div>
 
       <div class="tracking-controls">${watcherControls(state, busy, "cycles")}
-        ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}
+        ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="cycles" title="Reprocess the configured Race CSV for Cycles only"', "cycles")}
         ${feedbackButton("import-marble-cycle", "Import from MarblesCycles", "data-import-marble-cycle", "download")}
       </div>
     </div>
@@ -1210,7 +1210,7 @@ function homePage(state: Snapshot, busy: boolean): string {
     </section>`;
   };
   return `<div class="home-page">
-    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("home", "header-home")}</i><div><h1>North Korea Stats</h1></div></div>${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest title="Reprocess the most recently modified Race or Battle Royale for stats and cycles"', "cycles")}</header>
+    <header class="page-head"><div class="race-heading"><i class="race-heading-icon">${sidebarArtwork("home", "header-home")}</i><div><h1>North Korea Stats</h1></div></div></header>
     <div class="home-watchers">${watcherCard("stats", "RaceStats", "raceFlag", state.config.seasons.raceName)}${watcherCard("cycles", "RaceCycles", "repeatOnce", state.config.seasons.cycleName)}</div>
     <div class="home-results">
       <section class="panel"><header><div class="home-card-heading"><i>${icons.crown}</i><h2>${battleRoyale ? "Latest Battle Royale" : "Latest Race podium"}</h2></div><button class="action home-view-button" data-page="overview">View results</button></header><div class="panel-body">
