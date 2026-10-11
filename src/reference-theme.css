@@ -5377,5 +5377,7 @@ dialog[open].dialog-closing::backdrop {
 
 #marble-cycle-import-dialog [data-success] h3 { display: flex; align-items: center; gap: 8px; color: var(--reference-teal); }
 #marble-cycle-import-dialog [data-success] h3 svg { width: 24px; height: 24px; flex: 0 0 auto; }
+#marble-cycle-import-dialog > p,
+#marble-cycle-import-dialog [data-summary] { font-size: 11px; line-height: 16px; margin: 0; }
 
 #marble-cycle-import-dialog [data-import]:disabled { background: transparent; border-color: var(--reference-control-border); color: var(--reference-secondary); opacity: .45; cursor: not-allowed; }

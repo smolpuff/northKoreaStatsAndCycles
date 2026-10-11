@@ -16,13 +16,13 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
     <p data-target></p>
     <label class="field">Session URL<input type="url" placeholder="https://marblecycle.com/session/…" aria-label="Marble Cycle session URL" /></label>
     <label class="backup-choice" data-br-option><input type="checkbox" data-br-wins /> Count BR wins as Cycles 1st places</label>
-    <p class="muted" data-br-note>MarbleCycles includes BR results in its Cycles totals. Enable this to count BR wins as 1st places here; other BR placements stay excluded.</p>
+    <p class="muted" data-br-note>MarblesCycles counts BR results. This option adds BR wins as 1st places.</p>
     <p data-status role="status" aria-live="polite">Enter a session URL to import all its historical results.</p>
     <div class="app-update-progress-track" data-import-progress hidden><progress max="100" value="0" aria-label="Import progress"></progress><span data-update-progress-fill aria-hidden="true" style="width:0%"></span></div>
-    <p class="muted">The public session supplies race IDs, race numbers, full placements, points, eliminations and winner times. It does not supply original dates or tracks; these remain unavailable. Results follow source race order before existing dated results. This imports Cycles only; normal RaceStats results are not created. Existing Cycles placements carry forward. BR wins earn a 1st-place slot only when the option above is enabled.</p>
+    <p class="muted">Cycles only. All pages included; original dates and tracks unavailable. Existing placements carry forward.</p>
     <section data-success hidden role="status"><h3>${icons.check} Import complete</h3><p data-summary></p></section>
     <footer class="confirmation-actions"><button type="button" class="compact-button" data-done>Cancel</button><button type="button" class="compact-button app-update-primary" data-import disabled>${icons.download} Import</button></footer>`;
-  dialog.querySelector("[data-target]")!.textContent = `Current results: ${seasons.cycleName || "Cycle progress"} · ${seasons.raceName || "RaceStats"}. No new season will be created.`;
+  dialog.querySelector("[data-target]")!.textContent = `Import into: ${seasons.cycleName || "Cycle progress"}`;
   const done = dialog.querySelector<HTMLButtonElement>("[data-done]")!;
   done.addEventListener("click", () => dialog.close());
   const input = dialog.querySelector<HTMLInputElement>("input[type=url]")!;
@@ -76,7 +76,7 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
       });
       const report = await invoke<{ snapshot: Snapshot; added: number; cycleRaces: number; skipped: number }>("import_marble_cycle_results", { url: loadedUrl, games: page.games, seasons, includeBrWins: brWins.checked });
       update(report.snapshot);
-      const summary = `Added ${report.cycleRaces} races to current Cycles. Totals: ${report.snapshot.totalCycleRaceCount} races, ${report.snapshot.raceCycles.length} players, ${report.snapshot.raceCycles.reduce((sum, player) => sum + player.cycles, 0)} completed cycles. RaceStats is not imported. Missing original dates/tracks remain unavailable.`;
+      const summary = `Added ${report.cycleRaces} races. Total: ${report.snapshot.totalCycleRaceCount} races · ${report.snapshot.raceCycles.length} players · ${report.snapshot.raceCycles.reduce((sum, player) => sum + player.cycles, 0)} cycles.`;
       status.hidden = true;
       dialog.querySelector<HTMLElement>("[data-success]")!.hidden = false;
       dialog.querySelector<HTMLElement>("[data-summary]")!.textContent = summary;
