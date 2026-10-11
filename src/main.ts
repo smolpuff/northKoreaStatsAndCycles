@@ -408,7 +408,7 @@ function renderMainWindow(): void {
     });
   });
   document.querySelector("#clear-race-results")?.addEventListener("click", async () => {
-    const decision = await confirmClearWithBackup("Clear RaceStats results?", "Reset total races, total BRs, session stats, season points, and latest results. Persistent race history will remain.");
+    const decision = await confirmClearWithBackup("Clear RaceStats results?", "Reset total races, total BRs, session stats, season points, and latest results. Delete race history and clear cached/processed result IDs too.");
     if (!decision.confirmed) return;
     try { state = await invoke<Snapshot>("clear_race_results", { backup: decision.backup }); selectedRaceId = ""; }
     catch (error) { alert(String(error)); }
@@ -514,7 +514,7 @@ function renderMainWindow(): void {
     document
       .querySelector("#clear-race-cycles")
       ?.addEventListener("click", async () => {
-        const decision = await confirmClearWithBackup("Clear RaceCycles results?", "Reset current players, placements, cycles, and race counts. Persistent Cycles history will remain.");
+        const decision = await confirmClearWithBackup("Clear RaceCycles results?", "Reset current players, placements, cycles, and race counts. Delete Cycles history and clear cached/processed result IDs too.");
         if (!decision.confirmed) return;
         try {
           state = await invoke<Snapshot>("clear_race_cycles", { backup: decision.backup });

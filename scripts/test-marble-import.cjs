@@ -47,4 +47,29 @@ assert(page.games.every(game => game.timestamp === '' && game.mapName === undefi
 assert(page.games.every((game, index) => !index || Number(page.games[index - 1].results[0].rawData.MarbleCycleRaceNumber) <= Number(game.results[0].rawData.MarbleCycleRaceNumber)));
 assert.throws(() => parse('<table id="marbleRaceResults"></table>', url));
 assert.throws(() => parse(html.replace(/(id="62769836-0900-48b0-b287-39046ca532d2" class="race-summary">[\s\S]*?<td>474<\/td>[\s\S]*?<td>[^<]+<\/td>[\s\S]*?<td>)42/, '$199999'), url));
+if (process.argv[4]) {
+  const current = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
+  const actual = new Map(current.raceCycles.map(player => [player.playerKey.replace(/^twitch:/, ''), player]));
+  const enabledBrIds = new Set(current.cycleHistory.filter(entry => entry.game?.gameType === 'battleRoyale'
+    && entry.game.results[0]?.rawData?.MarbleCycleBrWinsAsFirst === 'true').map(entry => entry.gameId));
+  const brFirsts = new Map();
+  for (const game of page.games) if (enabledBrIds.has(game.id)) {
+    const winner = game.results.find(player => player.placement === 1);
+    brFirsts.set(winner.username.toLowerCase(), (brFirsts.get(winner.username.toLowerCase()) ?? 0) + 1);
+  }
+  assert.equal(current.totalCycleRaceCount, 517);
+  assert.equal(current.raceCycles.length, 625);
+  assert.equal(current.raceCycles.reduce((sum, player) => sum + player.cycles, 0), 120);
+  for (const [name, expected] of players) {
+    const player = actual.get(name);
+    assert(player, name);
+    assert.equal(player.totalRaces, expected.total - expected.br, name + ' saved Race count');
+    const counts = [...expected.counts];
+    counts[0] += brFirsts.get(name) ?? 0;
+    assert.deepEqual(player.placementCounts, counts, name + ' all ten saved placement counts');
+    assert.equal(player.cycles, Math.min(...counts), name + ' saved completed cycles');
+  }
+  console.log('Read-only live-state comparison passed for every one of 625 players: Race participation, all ten placement counts and completed cycles, including ' + enabledBrIds.size + ' retained optional BR wins.');
+}
+console.log('Expected Race-only import: 517 races, ' + [...players.values()].filter(player => player.total > player.br).length + ' players, ' + [...players.values()].reduce((sum, player) => sum + Math.min(...player.counts), 0) + ' completed cycles.');
 console.log('Verified all 519 source results, 625 Cycle table rows, 22,533 participant rows, Race/BR/DNF classification, all 625 participation totals, 624 matching Race-only cycle totals (source counts one BR 10th), source order and absent dates/tracks.');

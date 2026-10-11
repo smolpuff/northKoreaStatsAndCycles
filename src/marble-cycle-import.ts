@@ -19,7 +19,7 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
     <p class="muted" data-br-note>MarbleCycles includes BR results in its Cycles totals. Enable this to count BR wins as 1st places here; other BR placements stay excluded.</p>
     <p data-status role="status" aria-live="polite">Enter a session URL to import all its historical results.</p>
     <div class="app-update-progress-track" data-import-progress hidden><progress max="100" value="0" aria-label="Import progress"></progress><span data-update-progress-fill aria-hidden="true" style="width:0%"></span></div>
-    <p class="muted">The public session supplies race IDs, race numbers, full placements, points, eliminations and winner times. It does not supply original dates or tracks; these remain unavailable. Results follow source race order before existing dated results. Existing results stay intact. BR wins earn a 1st-place slot only when the option above is enabled.</p>
+    <p class="muted">The public session supplies race IDs, race numbers, full placements, points, eliminations and winner times. It does not supply original dates or tracks; these remain unavailable. Results follow source race order before existing dated results. This imports Cycles only; normal RaceStats results are not created. Existing Cycles placements carry forward. BR wins earn a 1st-place slot only when the option above is enabled.</p>
     <section data-success hidden role="status"><h3>${icons.check} Import complete</h3><p data-summary></p></section>
     <footer class="confirmation-actions"><button type="button" class="compact-button" data-done>Cancel</button><button type="button" class="compact-button app-update-primary" data-import disabled>${icons.download} Import</button></footer>`;
   dialog.querySelector("[data-target]")!.textContent = `Current results: ${seasons.cycleName || "Cycle progress"} · ${seasons.raceName || "RaceStats"}. No new season will be created.`;
@@ -61,22 +61,22 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
     const loadedUrl = sessionUrl();
     if (!loadedUrl || busy) return;
     setBusy(true);
-    commit.textContent = "Importing?";
+    commit.textContent = "Importing...";
     showProgress();
-    status.textContent = "Retrieving every historical result?";
+    status.textContent = "Retrieving every historical result...";
     let unlisten: UnlistenFn | undefined;
     try {
       const html = await invoke<string>("fetch_marble_cycle_session", { url: loadedUrl });
       const page = parseMarbleCyclePage(html, loadedUrl);
       showProgress(0);
-      status.textContent = `Importing all ${page.resultEntries} result entries?`;
+      status.textContent = `Importing all ${page.resultEntries} result entries...`;
       unlisten = await listen<{ phase: string; current: number; total: number; percent: number }>("marble-cycle-import-progress", event => {
         showProgress(event.payload.percent);
         status.textContent = `${event.payload.phase}: ${event.payload.current} / ${event.payload.total} (${event.payload.percent}%)`;
       });
       const report = await invoke<{ snapshot: Snapshot; added: number; cycleRaces: number; skipped: number }>("import_marble_cycle_results", { url: loadedUrl, games: page.games, seasons, includeBrWins: brWins.checked });
       update(report.snapshot);
-      const summary = `Imported ${report.added} new results; backfilled ${report.cycleRaces} races into Cycles; skipped ${report.skipped} existing or duplicate result entries. Missing original dates/tracks remain unavailable.`;
+      const summary = `Added ${report.cycleRaces} races to current Cycles. Totals: ${report.snapshot.totalCycleRaceCount} races, ${report.snapshot.raceCycles.length} players, ${report.snapshot.raceCycles.reduce((sum, player) => sum + player.cycles, 0)} completed cycles. RaceStats is not imported. Missing original dates/tracks remain unavailable.`;
       status.hidden = true;
       dialog.querySelector<HTMLElement>("[data-success]")!.hidden = false;
       dialog.querySelector<HTMLElement>("[data-summary]")!.textContent = summary;

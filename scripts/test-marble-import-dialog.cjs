@@ -23,7 +23,7 @@ function load(file) {
       request = args;
       progressListener({ payload: { phase: 'Calculating Cycles', current: 1, total: 1, percent: 95 } });
       assert.equal(document.querySelector('progress').value, 95);
-      return { snapshot: { imported: true }, added: 1, cycleRaces: 1, skipped: 0 };
+      return { snapshot: { imported: true, totalCycleRaceCount: 1, raceCycles: [{ cycles: 0 }] }, added: 1, cycleRaces: 1, skipped: 0 };
     } };
     if (name === '@tauri-apps/api/event') return { listen: async (_, callback) => { progressListener = callback; return () => { unlistened = true; }; } };
     if (name === './dialog-motion') return { showAnimatedDialog: dialog => { dialog.close = () => dialog.dispatchEvent(new window.Event('close')); } };

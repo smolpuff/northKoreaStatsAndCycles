@@ -1743,20 +1743,23 @@ async fn import_marble_cycle_results(app: tauri::AppHandle, runtime: State<'_, S
         let _guard = processing.lock().map_err(|_| "Results processing unavailable")?;
         let report = {
             let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
-            if rt.snapshot.config.seasons.race_name != seasons.race_name || rt.snapshot.config.seasons.cycle_name != seasons.cycle_name {
+            if rt.snapshot.config.seasons.cycle_name != seasons.cycle_name {
                 return Err("The selected results names changed. Reopen Import for the current season.".into());
             }
             let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Starting import", "current": 0, "total": games.len(), "percent": 0 }));
-            let prepared = marble_cycle::prepare_with_progress(&rt.race_state, &rt.snapshot.recent_results, &games, |phase, current, total, percent| {
+            let mut prepared = marble_cycle::prepare_with_progress(&rt.race_state, &rt.snapshot.recent_results, &games, |phase, current, total, percent| {
                 let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": phase, "current": current, "total": total, "percent": percent }));
             });
+            marble_cycle::validate(&prepared, &games)?;
+            prepared.state.cycle_last_update = Some(Utc::now().to_rfc3339());
             // Backup the existing writable JSON state before the multi-file merge.
             let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Saving backup and history", "current": games.len(), "total": games.len(), "percent": 95 }));
             backup_current_results(&rt, "marble-cycle-import")?;
             let previous_history = rt.snapshot.recent_results.clone();
-            rt.storage.write("history.json", &prepared.history)?;
+            let history_changed = prepared.history.len() != previous_history.len();
+            if history_changed { rt.storage.write("history.json", &prepared.history)?; }
             if let Err(error) = rt.storage.write("race-state.json", &prepared.state) {
-                let rollback = rt.storage.write("history.json", &previous_history);
+                let rollback = if history_changed { rt.storage.write("history.json", &previous_history) } else { Ok(()) };
                 return Err(format!("Import not committed: {error}{}", rollback.err().map(|e| format!("; history rollback failed: {e}; restore the import backup")).unwrap_or_default()));
             }
             rt.race_state = prepared.state;
@@ -1766,16 +1769,19 @@ async fn import_marble_cycle_results(app: tauri::AppHandle, runtime: State<'_, S
             rt.snapshot.total_race_count = rt.race_state.total_race_count;
             rt.snapshot.total_battle_royale_count = rt.race_state.total_battle_royale_count;
             rt.snapshot.total_cycle_race_count = rt.race_state.total_cycle_race_count;
+            rt.snapshot.cycle_last_update = rt.race_state.cycle_last_update.clone();
             rt.snapshot.season_points_earned = rt.race_state.season_points_earned;
             rt.snapshot.event_result_ids = current_event_result_ids(&rt.race_state, &rt.snapshot.recent_results);
-            if rt.snapshot.latest_result.is_none() && prepared.added > 0 {
+            if rt.snapshot.latest_result.as_ref().is_some_and(|game| game.timestamp.is_empty()
+                && game.results.first().is_some_and(|player| player.raw_data.contains_key("MarbleCycleSessionUrl"))) {
                 rt.snapshot.latest_result = rt.race_state.current_result.clone();
                 rt.snapshot.detected_game_type = rt.snapshot.latest_result.as_ref().map(|game| game.game_type.clone());
+                rt.snapshot.last_update = rt.snapshot.latest_result.as_ref().map(|game| game.timestamp.clone());
             }
             rt.overlay_writer.invalidate();
             MarbleImportReport { snapshot: snapshot_for_ui(&rt.snapshot), added: prepared.added, cycle_races: prepared.cycle_races, skipped: prepared.skipped }
         };
-        log(&runtime, &app, "info", format!("[Import] {} archived results added; {} Race results backfilled into Cycles; {} duplicates skipped", report.added, report.cycle_races, report.skipped));
+        log(&runtime, &app, "info", format!("[Import] {} current Cycle results added; {} Race results backfilled into Cycles; {} duplicates skipped", report.added, report.cycle_races, report.skipped));
         emit_snapshot(&runtime, &app);
         let _ = app.emit("marble-cycle-import-progress", serde_json::json!({ "phase": "Import complete", "current": games.len(), "total": games.len(), "percent": 100 }));
         Ok(report)
@@ -1853,11 +1859,22 @@ async fn clear_results_with_backup(app: tauri::AppHandle, runtime: SharedRuntime
                 Storage::new(parent.to_path_buf())?.write(filename, &current_results_backup(&rt, kind))?;
             }
             let mut next = rt.race_state.clone();
-            if kind == "cycles" { reset_cycle_totals(&mut next); } else { reset_stats_totals(&mut next); }
-            rt.storage.write("race-state.json", &next)?;
+            if kind == "cycles" {
+                reset_cycle_totals(&mut next);
+                next.cycle_history.clear();
+            } else {
+                reset_stats_totals(&mut next);
+                rt.storage.write("history.json", &Vec::<GameResult>::new())?;
+            }
+            if let Err(error) = rt.storage.write("race-state.json", &next) {
+                if kind != "cycles" { rt.storage.write("history.json", &rt.snapshot.recent_results)?; }
+                return Err(error);
+            }
+            rt.cached_file = None;
             rt.race_state = next;
             if kind == "cycles" {
                 rt.snapshot.race_cycles.clear();
+                rt.snapshot.cycle_history.clear();
                 rt.snapshot.total_cycle_race_count = 0;
                 rt.snapshot.cycle_last_update = None;
             } else {
@@ -1865,11 +1882,12 @@ async fn clear_results_with_backup(app: tauri::AppHandle, runtime: SharedRuntime
                 rt.snapshot.total_race_count = 0;
                 rt.snapshot.total_battle_royale_count = 0;
                 rt.snapshot.event_result_ids.clear();
+                rt.snapshot.recent_results.clear();
                 clear_session_results(&mut rt.snapshot);
             }
             rt.overlay_writer.invalidate();
         }
-        log(&runtime, &app, "info", format!("[{}] Current results cleared; persistent histories retained", kind));
+        log(&runtime, &app, "info", format!("[{}] Results, history and cached/processed IDs cleared", kind));
         emit_snapshot(&runtime, &app);
         let snapshot = snapshot_for_ui(&runtime.lock().map_err(|_| "Application state unavailable")?.snapshot);
         Ok(snapshot)

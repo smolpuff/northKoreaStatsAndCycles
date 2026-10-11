@@ -36,14 +36,15 @@ pub fn prepare_with_progress(current: &RaceState, saved: &[GameResult], games: &
     // Historical standings are large. Keep them outside per-game state clones
     // while using the same commit/scoring function as live recording.
     let retained_cycle_history = std::mem::take(&mut next.cycle_history);
-    let mut added = 0;
-    let mut skipped = 0;
     let mut cycle_additions: Vec<GameResult> = Vec::new();
-    let mut corrected = false;
+    let mut corrected = games.iter().any(|game| current.cycle_history.iter()
+        .filter_map(|entry| entry.game.as_ref()).filter(|old| same_race(old, game))
+        .any(|old| old.results.iter().any(|player| game.results.iter().any(|source|
+            crate::race_cycle_player_key(player) == crate::race_cycle_player_key(source)
+                && player.eliminated != source.eliminated))));
     for (index, game) in games.iter().enumerate() {
         let found = history.iter().position(|previous| same_race(previous, game));
         let canonical = if let Some(index) = found {
-            skipped += 1;
             // Re-import also corrects the old importer's missing DNF flags.
             for result in &mut history[index].results {
                 if let Some(source) = game.results.iter().find(|source| crate::race_cycle_player_key(source) == crate::race_cycle_player_key(result)) {
@@ -71,16 +72,10 @@ pub fn prepare_with_progress(current: &RaceState, saved: &[GameResult], games: &
             }
             history[index].clone()
         } else {
-            if let Some((updated, _, _)) = crate::prepare_race_commit(&next, game, true, false, &game.timestamp, crate::ReadReason::Manual) {
-                next = updated;
-            }
             history.push(game.clone());
-            added += 1;
             game.clone()
         };
-        let previously_earned = current.cycle_history.iter().any(|entry| entry.game_id == canonical.id
-            || entry.game.as_ref().is_some_and(|saved| same_race(saved, &canonical)));
-        if crate::earns_cycle_placements(&canonical) && !previously_earned
+        if crate::earns_cycle_placements(&canonical)
             && !crate::game_keys(&canonical).iter().any(|key| current.cycle_processed_ids.contains(key))
             && !cycle_additions.iter().any(|saved| same_race(saved, &canonical)) {
             cycle_additions.push(canonical);
@@ -89,6 +84,8 @@ pub fn prepare_with_progress(current: &RaceState, saved: &[GameResult], games: &
             progress("Reading standings", index + 1, games.len(), ((index + 1) * 40 / games.len()) as u8);
         }
     }
+    let added = cycle_additions.len();
+    let skipped = games.len().saturating_sub(added);
     let cycle_races = cycle_additions.iter().filter(|game| game.game_type == GameType::Race).count();
     next.cycle_history = retained_cycle_history;
     if !cycle_additions.is_empty() || corrected {
@@ -126,6 +123,9 @@ pub fn prepare_with_progress(current: &RaceState, saved: &[GameResult], games: &
             if let Some(corrected) = history.iter().find(|saved| same_race(saved, game)) { *game = corrected.clone(); }
         }
         replay.extend(cycle_additions);
+        // Archived history is not current-season membership. Replace replayed
+        // entries once, including races restored after a current-results reset.
+        next.cycle_history.retain(|entry| !replay.iter().any(|game| entry.game_id == game.id));
         replay.sort_by(source_order);
         let mut point_history = std::mem::take(&mut next.cycle_history);
         let replay_total = replay.len();
@@ -145,12 +145,61 @@ pub fn prepare_with_progress(current: &RaceState, saved: &[GameResult], games: &
                 raw.and_then(|data| data.get("MarbleCycleRaceNumber")).and_then(|value| value.parse::<u64>().ok()).unwrap_or(0), entry.game_id.clone())
         });
     }
-    // An import changes standings/history, never replaces the displayed live game.
-    next.current_result = current.current_result.clone().or_else(|| if added > 0 { games.last().cloned() } else { None });
-    next.stats_results_cleared = current.stats_results_cleared && added == 0;
+    // Cycles-only import: remove records created by older importer versions from
+    // RaceStats, but never alter normally recorded (dated) RaceStats games.
+    let imported = |game: &GameResult| game.timestamp.is_empty()
+        && game.results.first().is_some_and(|player| player.raw_data.contains_key("MarbleCycleSessionUrl"));
+    for game in saved.iter().filter(|game| imported(game)) {
+        let keys = crate::game_keys(game);
+        if keys.iter().any(|key| next.processed_ids.contains(key)) {
+            if game.game_type == GameType::BattleRoyale { next.total_battle_royale_count = next.total_battle_royale_count.saturating_sub(1); }
+            else { next.total_race_count = next.total_race_count.saturating_sub(1); }
+        }
+        if let Some(Some(points)) = next.game_points.remove(&crate::game_points_key(game)) {
+            next.season_points_earned -= points;
+        }
+        next.processed_ids.retain(|key| !keys.contains(key));
+    }
+    history = saved.iter().filter(|game| !imported(game)).cloned().collect();
+    if next.current_result.as_ref().is_some_and(imported) {
+        next.current_result = None;
+        next.stats_results_cleared = true;
+    }
     next.cycle_last_update = current.cycle_last_update.clone();
     history.sort_by(source_order);
     PreparedImport { state: next, history, added, cycle_races, skipped }
+}
+
+// Verify actual prepared standings before they can be persisted. Existing local
+// placements may add to these totals, but no source participation or slot may be missing.
+pub fn validate(prepared: &PreparedImport, games: &[GameResult]) -> Result<(), String> {
+    let mut expected: std::collections::HashMap<String, (u64, Vec<u64>)> = std::collections::HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut race_count = 0;
+    for game in games {
+        if !seen.insert(crate::game_points_key(game)) { continue; }
+        if game.game_type == GameType::Race { race_count += 1; }
+        if !crate::earns_cycle_placements(game) { continue; }
+        if !crate::game_keys(game).iter().any(|key| prepared.state.cycle_processed_ids.contains(key)) {
+            return Err(format!("Import verification failed: race {} missing from current Cycles", game.id));
+        }
+        for player in &game.results {
+            if game.game_type != GameType::Race && crate::cycle_placement(game, player).is_none() { continue; }
+            let entry = expected.entry(crate::race_cycle_player_key(player)).or_insert((0, vec![0; 10]));
+            if game.game_type == GameType::Race { entry.0 += 1; }
+            if let Some(place) = crate::cycle_placement(game, player) { entry.1[place as usize - 1] += 1; }
+        }
+    }
+    if prepared.state.total_cycle_race_count < race_count { return Err("Import verification failed: incomplete Race count".into()); }
+    for (key, (races, placements)) in expected {
+        let player = prepared.state.race_cycles.iter().find(|player| player.player_key == key)
+            .ok_or_else(|| format!("Import verification failed: player {key} missing"))?;
+        if player.total_races < races || player.cycles != player.completed_cycles()
+            || placements.iter().enumerate().any(|(index, count)| player.placement_counts.get(index).copied().unwrap_or(0) < *count) {
+            return Err(format!("Import verification failed: incomplete placements/races for {}", player.player_name));
+        }
+    }
+    Ok(())
 }
 
 pub fn session_url(value: &str) -> Result<String, String> {
@@ -204,12 +253,14 @@ mod tests {
         game.results[0].placement = placement;
         game.results[0].finish_time = None;
         game.results[0].raw_data.insert("MarbleCycleRaceNumber".into(), placement.to_string());
+        game.results[0].raw_data.insert("MarbleCycleSessionUrl".into(), "session".into());
         game
     }
 
     #[test]
-    fn import_stacks_replays_keeps_current_and_is_idempotent_after_reset() {
-        let live = race("live", 10);
+    fn cycles_only_import_stacks_and_can_refill_after_reset() {
+        let mut live = race("live", 10);
+        live.timestamp = "2026-10-10T00:00:00Z".into();
         let (current, _, _) = crate::prepare_race_commit(&RaceState::default(), &live, true, true, "live", crate::ReadReason::Manual).unwrap();
         let imported: Vec<_> = (1..10).map(|position| race(&format!("historical-{position}"), position)).collect();
         let first = prepare(&current, &[live.clone()], &imported);
@@ -228,9 +279,13 @@ mod tests {
         crate::reset_stats_totals(&mut reset);
         crate::reset_cycle_totals(&mut reset);
         let after_reset = prepare(&reset, &first.history, &imported);
-        assert_eq!(after_reset.added, 0);
-        assert_eq!(after_reset.cycle_races, 0);
-        assert!(after_reset.state.race_cycles.is_empty());
+        assert_eq!(after_reset.added, 9);
+        assert_eq!(after_reset.cycle_races, 9);
+        assert_eq!(after_reset.state.race_cycles[0].total_races, 9);
+        assert_eq!(after_reset.state.race_cycles[0].placement_counts[0], 1);
+        assert_eq!(after_reset.state.total_race_count, 0);
+        assert_eq!(after_reset.history.len(), 1); // Only the existing live RaceStats game.
+        assert_eq!(after_reset.state.cycle_history.len(), 10); // No duplicate history entries.
     }
 
     #[test]
@@ -271,7 +326,8 @@ mod tests {
         assert_eq!(result.added, 2);
         assert_eq!(result.skipped, 0);
         assert_eq!(result.state.race_cycles[0].placement_counts[0], 2);
-        let again = prepare(&result.state, &result.history, &result.history);
+        let source: Vec<_> = result.state.cycle_history.iter().filter_map(|entry| entry.game.clone()).collect();
+        let again = prepare(&result.state, &result.history, &source);
         assert_eq!(again.added, 0);
         assert_eq!(again.cycle_races, 0);
     }
@@ -305,11 +361,11 @@ mod tests {
         assert!(initial.state.race_cycles.is_empty());
         br.results[0].raw_data.insert("MarbleCycleBrWinsAsFirst".into(), "true".into());
         let enabled = prepare(&initial.state, &initial.history, &[br.clone()]);
-        assert_eq!(enabled.added, 0);
+        assert_eq!(enabled.added, 1);
         assert_eq!(enabled.state.race_cycles[0].placement_counts[0], 1);
         assert_eq!(enabled.state.race_cycles[0].total_races, 0);
         assert_eq!(enabled.state.total_cycle_race_count, 0);
-        assert_eq!(enabled.state.total_battle_royale_count, 1);
+        assert_eq!(enabled.state.total_battle_royale_count, 0);
         let again = prepare(&enabled.state, &enabled.history, &[br]);
         assert_eq!(again.state.race_cycles[0].placement_counts[0], 1);
     }
@@ -328,6 +384,36 @@ mod tests {
         assert!(fixed.state.cycle_history.is_empty());
         let again = prepare(&fixed.state, &fixed.history, &[old]);
         assert_eq!(again.state.race_cycles[0].total_races, 1);
+    }
+
+    #[test]
+    fn retained_archive_does_not_block_current_backfill_or_create_race_stats() {
+        let source: Vec<_> = (1..=10).map(|place| race(&format!("source-{place}"), place)).collect();
+        let mut polluted = RaceState::default();
+        for game in &source {
+            polluted = crate::prepare_race_commit(&polluted, game, true, true, "", crate::ReadReason::Manual).unwrap().0;
+        }
+        crate::reset_cycle_totals(&mut polluted); // Old clear kept all ten archived races.
+        let fixed = prepare(&polluted, &source, &source);
+        assert_eq!(fixed.cycle_races, 10);
+        assert_eq!(fixed.state.total_cycle_race_count, 10);
+        assert_eq!(fixed.state.race_cycles[0].cycles, 1);
+        assert_eq!(fixed.state.race_cycles[0].total_races, 10);
+        assert_eq!(fixed.state.cycle_history.len(), 10);
+        assert_eq!(fixed.state.total_race_count, 0);
+        assert_eq!(fixed.state.season_points_earned, 0);
+        assert!(fixed.history.is_empty());
+        assert!(fixed.state.current_result.is_none());
+        validate(&fixed, &source).unwrap();
+        let repeated = prepare(&fixed.state, &fixed.history, &source);
+        assert_eq!(repeated.cycle_races, 0);
+        assert_eq!(repeated.state.total_cycle_race_count, 10);
+        assert_eq!(repeated.state.race_cycles[0].placement_counts, vec![1; 10]);
+        assert_eq!(repeated.state.cycle_history.len(), 10);
+        validate(&repeated, &source).unwrap();
+        let mut incomplete = repeated;
+        incomplete.state.race_cycles[0].placement_counts[0] = 0;
+        assert!(validate(&incomplete, &source).is_err());
     }
 
     #[test]
