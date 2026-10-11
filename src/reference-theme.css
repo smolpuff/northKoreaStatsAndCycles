@@ -674,9 +674,27 @@ table {
 }
 
 .results-panel th .cycle-sort {
+  position: relative;
+  justify-content: flex-start;
+  text-align: inherit;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Sort arrows must not shift labels away from the values below them. */
+.results-panel th .cycle-sort > span {
+  position: absolute;
+  right: 0;
+  min-width: 0;
+}
+
+.results-panel th .cycle-sort > span:empty {
+  display: none;
+}
+
+.results-panel th:first-child .cycle-sort {
+  justify-content: center;
 }
 
 .battle-royale-results .rank-column {
