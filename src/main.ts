@@ -443,7 +443,7 @@ function renderMainWindow(): void {
       const dialog = document.createElement("dialog");
       dialog.id = "player-history-dialog";
       dialog.className = "overlay-preview-dialog player-history-dialog";
-      dialog.innerHTML = `<header><h2 id="player-history-title">${escapeHtml(history.title)}</h2><button type="button" class="compact-button modal-close" aria-label="Close">${icons.close}</button></header>${history.content}`;
+      dialog.innerHTML = `<header><h2 id="player-history-title"><i class="player-history-emblem" aria-hidden="true">${icons.racers}</i><span>${escapeHtml(history.title)}</span></h2><button type="button" class="compact-button modal-close" aria-label="Close">${icons.close}</button></header>${history.content}`;
       dialog.setAttribute("aria-labelledby", "player-history-title");
       dialog.querySelector("button")!.addEventListener("click", () => dialog.close());
       dialog.addEventListener("close", () => dialog.remove(), { once: true });

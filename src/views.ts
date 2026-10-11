@@ -1406,7 +1406,6 @@ export function playerKey(result: GameResult["results"][number]): string {
 }
 
 function playerHistorySummary(
-  name: string,
   subtitle: string,
   totals: [string, number | string][],
   counts: number[],
@@ -1416,8 +1415,6 @@ function playerHistorySummary(
   const medal = `<svg viewBox="0 0 24 30" fill="none" aria-hidden="true"><path d="m6 18-2 10 8-4 8 4-2-10" fill="currentColor" opacity=".45"/><circle cx="12" cy="11" r="9" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="11" r="6" fill="currentColor" opacity=".25"/><path d="m12 6 1.6 3.2 3.5.5-2.5 2.5.6 3.5-3.2-1.7-3.2 1.7.6-3.5L7 9.7l3.4-.5L12 6Z" fill="currentColor"/></svg>`;
   return `<section class="summary-item player-history-summary ${counts.length === 3 ? "player-history-podium" : "player-history-cycle-card"}" aria-label="${escapeHtml(subtitle)}">
     <div class="player-history-profile">
-      <i class="player-history-emblem" aria-hidden="true">${icons.racers}</i>
-      <div class="player-history-identity"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong></div>
       <div class="player-history-totals">${totals.map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`).join("")}</div>
     </div>
     <div class="player-history-placements" aria-label="Placement totals">${counts.map((count, index) => `<span class="player-history-placement" aria-label="${ordinal(index + 1)} places: ${count}">${index < 3 ? `<i class="player-history-medal">${medal}</i>` : ""}<span><small>${ordinal(index + 1)}</small><b>${count}</b></span></span>`).join("")}</div>
@@ -1530,7 +1527,6 @@ export function playerHistoryContent(
       );
     }
     const summary = playerHistorySummary(
-      name,
       "Cycles · saved history",
       [
         ["Points", counts.reduce((sum, count) => sum + count, 0)],
@@ -1607,7 +1603,6 @@ export function playerHistoryContent(
     "Eliminated",
   ];
   const summary = playerHistorySummary(
-    name,
     "RaceStats · player results",
     [
       ["Total points", earnedPoints],

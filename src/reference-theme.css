@@ -5337,12 +5337,9 @@ dialog[open].dialog-closing::backdrop {
   overflow-x: auto;
 }
 .player-history-profile { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 auto; }
+#player-history-title { display: flex; align-items: center; gap: 10px; }
 .player-history-emblem { display: flex; flex: none; width: 28px; height: 28px; color: var(--reference-teal); }
 .player-history-emblem svg { width: 100%; height: 100%; }
-.player-history-identity { min-width: 70px; max-width: 180px; }
-.player-history-identity strong { display: block; }
-.player-history-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
-.player-history-identity small { color: var(--reference-secondary); font-size: 11px; }
 .player-history-totals { display: flex; flex: none; gap: 12px; margin-left: 4px; }
 .player-history-totals > span { display: flex; align-items: baseline; gap: 6px; }
 .player-history-totals small { color: var(--reference-secondary); font-size: 11px; }
