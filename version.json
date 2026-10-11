@@ -1,7 +1,8 @@
 {
-  "version": "0.2.3",
+  "version": "0.2.4",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Complete the README and overlay guide for startup update checks, one-EXE downloads, repository metadata, the older-version migration, immediate toggle saves, window sizing, preview animations, Twitch authorization and dev/main release commands. Remove obsolete overlay test-file instructions and outdated WR detection guidance. Keep working and security documentation local."
+    "Added auto update.",
+    "Added MarblesCycles import."
   ]
 }
