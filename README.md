@@ -134,7 +134,7 @@ npm test
 
 ### Release
 
-Develop and commit on `dev`. `npm run build:local` creates a local EXE without changing versions or publishing. `npm run release` increments the patch version, promotes the complete committed project to `main`, synchronizes all six version files, commits release notes, and atomically pushes both branches and a new tag. The checkout stays on `dev`; the command never builds or launches locally.
+Develop and commit code on `dev`; it never publishes packages. `npm run build:local` creates a local EXE without changing versions or publishing. When a release is requested, `npm run release` first promotes the complete committed project to `main`, then creates the version commit and release tag on `main`, synchronizes all six version files, and atomically pushes both branches and the tag. It returns the checkout to `dev`; the command never builds or launches locally. GitHub rejects release tags outside `main`, and manual releases must select `main`.
 
 ```powershell
 npm run release:check

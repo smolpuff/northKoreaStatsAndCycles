@@ -142,6 +142,12 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   if (git("tag", "--list", release.tag)) throw new Error(`${release.tag} already exists.`);
   const changelogPath = path.join(root, "CHANGELOG.md");
   const changelog = fs.existsSync(changelogPath) ? releaseChangelog(fs.readFileSync(changelogPath, "utf8"), release.version, options.notes) : undefined;
+  const localMain = git("rev-parse", "main");
+  if (git("merge-base", "HEAD", localMain) !== localMain) throw new Error("Local main has changes missing from dev. Merge them into dev before releasing.");
+  // Dev contains source only. Promote first, then create the release on main.
+  git("checkout", "main");
+  try {
+  git("merge", "--ff-only", developmentBranch);
   for (const [file, text] of Object.entries(release.changes)) fs.writeFileSync(path.join(root, file), text);
   if (changelog !== undefined) fs.writeFileSync(changelogPath, changelog);
   git("add", "--", ...versionFiles);
@@ -152,13 +158,12 @@ export function runRelease(args, root = projectRoot, gitRunner) {
   try {
     git("push", "--atomic", "origin", `HEAD:refs/heads/${developmentBranch}`, "HEAD:refs/heads/main", `refs/tags/${release.tag}`);
   } catch (error) {
-    throw new Error(`Push failed. The local release commit and ${release.tag} are retained on ${developmentBranch}. Fix the push error, then retry: git push --atomic origin HEAD:refs/heads/${developmentBranch} HEAD:refs/heads/main refs/tags/${release.tag}. Do not run another version bump.`, { cause: error });
+    throw new Error(`Push failed. The release commit and ${release.tag} were created on main and are retained locally. Fix the push error, then retry: git push --atomic origin main:refs/heads/${developmentBranch} main:refs/heads/main refs/tags/${release.tag}. Do not run another version bump.`, { cause: error });
   }
-  const localMain = git("rev-parse", "main");
-  if (git("merge-base", "HEAD", localMain) === localMain) {
-    try { git("branch", "-f", "main", "HEAD"); }
-    catch { console.log("The release push succeeded. Local main could not be moved (it may be checked out in another worktree); the dev checkout remains at the release."); }
-  } else console.log("Remote main was released; local main has separate commits and was left untouched.");
+  } finally {
+    git("checkout", developmentBranch);
+    git("merge", "--ff-only", "main");
+  }
   console.log(`GitHub is building ${release.tag}: https://github.com/${repository}/actions\nDownload after the workflow finishes: https://github.com/${repository}/releases/tag/${release.tag}`);
 }
 
