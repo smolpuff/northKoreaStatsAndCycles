@@ -309,7 +309,7 @@ pub fn format_custom_race_result_messages(game: &GameResult, config: &TwitchConf
     messages
 }
 
-fn send_chat_message(credential: &StoredTwitchCredential, message: &str) -> Result<(), String> {
+pub(crate) fn send_chat_message(credential: &StoredTwitchCredential, message: &str) -> Result<(), String> {
     let client = http_client()?;
     let response = client
         .post("https://api.twitch.tv/helix/chat/messages")
@@ -338,6 +338,28 @@ fn send_chat_message(credential: &StoredTwitchCredential, message: &str) -> Resu
             .drop_reason
             .map(|reason| reason.message)
             .unwrap_or_else(|| "Twitch dropped the chat message".into()));
+    }
+    Ok(())
+}
+
+pub(crate) fn chat_credential() -> Result<StoredTwitchCredential, String> {
+    let credential = validate_saved()?;
+    let validation = validate_access_token(&http_client()?, &credential.access_token)?;
+    if !validation.scopes.iter().any(|scope| scope == "user:read:chat") {
+        return Err("Disconnect and reconnect Twitch with !mycycle enabled to allow reading chat".into());
+    }
+    Ok(credential)
+}
+
+pub(crate) fn subscribe_chat(credential: &StoredTwitchCredential, session: &str) -> Result<(), String> {
+    let response = http_client()?.post("https://api.twitch.tv/helix/eventsub/subscriptions")
+        .bearer_auth(&credential.access_token).header("Client-Id", &credential.client_id)
+        .json(&serde_json::json!({"type":"channel.chat.message", "version":"1",
+            "condition":{"broadcaster_user_id":credential.user_id,"user_id":credential.user_id},
+            "transport":{"method":"websocket","session_id":session}}))
+        .send().map_err(|_| "Unable to subscribe to Twitch chat")?;
+    if !response.status().is_success() {
+        return Err(format!("Twitch rejected the chat subscription ({}); reconnect Twitch if permissions changed", response.status()));
     }
     Ok(())
 }

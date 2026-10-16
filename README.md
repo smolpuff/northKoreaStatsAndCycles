@@ -8,6 +8,7 @@ A lightweight Windows app for tracking **Marbles on Stream** results, points, an
 - RaceCycles progress, completion history, and imports.
 - Compact OBS overlays and full-screen World Record/Cycle celebrations.
 - Optional Twitch chat, Streamer.bot, Lumia Stream, and Discord integration.
+- Viewer `!mycycle` command in your Twitch channel for personal RaceCycles stats.
 - Local JSON storage, CSV exports, and in-app updates.
 
 ## Download
@@ -28,6 +29,8 @@ The app watches Marbles CSV files in:
 ```
 
 Integrations are optional. Stats and overlays work without them. Detailed overlay instructions are in [the overlay guide](public/overlays/README.md); integration setup and message variables are available in the app's **Help & variables**.
+
+For `!mycycle`, enable **Viewer command: !mycycle** under Twitch, then connect Twitch (disconnect/reconnect once if already connected). Keep the app open; viewers can request their saved progress in that account's channel.
 
 ## Development
 

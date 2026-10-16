@@ -4,6 +4,8 @@ Marbles Stats creates these files in the live overlay folder shown in the app. T
 
 ## In-app help
 
+Twitch also supports an optional `!mycycle` viewer command, independently of overlays and automation hooks. Enable it on the Twitch page before connecting (reconnect once for chat reading permission). While the app is open, it listens in that account's own channel and replies with the requester's saved RaceCycles totals, progress and missing placements.
+
 Click **Help & variables** on the Overlays, Streamer.bot, Lumia Stream, Discord or Twitch page. The help dialog has illustrated setup steps, the complete custom HTML shell, a searchable field reference, examples and troubleshooting. Each overlay's **Edit HTML & variables** and each Streamer.bot event's **Variables** popup link to the full guide. Twitch and Discord message cards have **Message help**. Discord includes four matching illustrated setup cards for channel webhooks, event selection, message editing and tests; it needs no shared developer app or bot token.
 
 The variable reference marks which fields are available in normal HTML state, WR/cycle alerts, Streamer.bot event arguments or repeated rows. Settings are listed separately and are not brace variables. The app labels variables with braces; Streamer.bot's native text fields require its own argument delimiter, which **Copy for Streamer.bot** supplies.

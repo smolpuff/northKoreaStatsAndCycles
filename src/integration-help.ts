@@ -26,9 +26,9 @@ const illustratedGuide = (name: string) => {
     step(4, "Test and verify", "Add your OBS sub-actions to the action. Save and Test from the app. Check Action History in Streamer.bot.", "test")
   ] : [
     step(1, "Connect Twitch", "Connect Twitch opens the authorization page in your browser.", "twitch-connect"),
-    step(2, "Approve access", "Sign in and approve the requested chat permission.", "twitch-access"),
+    step(2, "Approve access", "Sign in and approve chat posting. To answer !mycycle, first enable Viewer command: !mycycle, then connect (or disconnect/reconnect) and also approve chat reading.", "twitch-access"),
     step(3, "Customize what to post", "Enable the posting card, open Customize, edit its listed brace variables, then Save.", "twitch-posts"),
-    step(4, "Test in your chat", "Test posts sample text to the connected account's own channel without counting a match.", "twitch-test")
+    step(4, "Test in your chat", "Test posts sample text to the connected account's own channel without counting a match. For !mycycle, wait for Listening, then type !mycycle in that channel. Replies use the sender's saved RaceCycles progress; keep the app open.", "twitch-test")
   ];
   return `<ol class="guide-steps">${content.join("")}</ol>`;
 };

@@ -848,6 +848,20 @@ function settingsPage(
   const twitchMessages = `
   <div class="twitch-layout-heading twitch-message-heading"><i>${icons.webhook}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>
   <div class="twitch-settings-grid">
+    <section class="twitch-settings-section" data-feature-section="twitch-my-cycle-command">
+      <div class="toggle-row twitch-feature-heading">
+        <i>${icons.trophy}</i>
+        <span><b>Viewer command: !mycycle</b><small>Reply with each viewer's saved RaceCycles progress.</small></span>
+        <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycle" ${twitch.myCycleCommand ? "checked" : ""} />
+      </div>
+      <div class="feature-content">
+        <p>Listens in the connected Twitch account's own channel while this app is open. Viewers type <code>!mycycle</code> to see their total races, completed cycles, progress and missing placements. No Streamer.bot or Lumia action is needed.</p>
+        <p>Enable this option before connecting Twitch. If already connected, disconnect and reconnect once to grant chat reading permission. Tracking can be stopped; replies still use saved data.</p>
+        <div class="twitch-message-preview" role="status"><span>Chat listener</span><p>${escapeHtml(twitch.myCycleCommand ? state.twitchChatMessage || "Connecting to Twitch chat…" : "Chat listener disabled")}</p></div>
+        <div class="twitch-message-preview"><span>Example reply</span><p>Cycle data for @viewer - Total Races: 577. Completed Cycles: 10. Current Progress: 8/10. Need: 2, 4</p></div>
+        <small>One reply per viewer every 30 seconds, up to five command replies per 30 seconds. Imported data with incomplete race totals is marked “at least”.</small>
+      </div>
+    </section>
     <section class="twitch-settings-section" data-feature-section="twitch-post-results">
       <div class="toggle-row twitch-feature-heading">
         <i>${icons.raceFlag}</i>

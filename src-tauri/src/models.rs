@@ -162,6 +162,8 @@ impl Default for DiscordConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TwitchConfig {
+    #[serde(default)]
+    pub my_cycle_command: bool,
     #[serde(default = "default_promotion_enabled")]
     pub promote_mission_app: bool,
     #[serde(default = "default_promotion_interval")]
@@ -203,6 +205,7 @@ pub fn default_promotion_message() -> String {
 impl Default for TwitchConfig {
     fn default() -> Self {
         Self {
+            my_cycle_command: false,
             promote_mission_app: default_promotion_enabled(),
             promotion_interval_minutes: default_promotion_interval(),
             post_world_records: false,
@@ -390,6 +393,8 @@ pub struct AppSnapshot {
     pub twitch_status: String,
     pub twitch_message: Option<String>,
     pub twitch_username: Option<String>,
+    #[serde(default)]
+    pub twitch_chat_message: String,
     pub session: SessionSummary,
     pub recent_results: Vec<GameResult>,
     pub race_cycles: Vec<RaceCyclePlayer>,

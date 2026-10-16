@@ -73,6 +73,7 @@ let state: Snapshot = {
       },
     },
     twitch: {
+      myCycleCommand: false,
       promoteMissionApp: false,
       promotionIntervalMinutes: 60,
       postWorldRecords: false,
@@ -663,6 +664,7 @@ function readSettingsForm(): Config {
       },
     },
     twitch: {
+      myCycleCommand: document.querySelector<HTMLInputElement>("#twitch-my-cycle-command")?.checked ?? state.config.twitch.myCycleCommand ?? false,
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
       promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? false,
       promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),

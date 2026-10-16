@@ -125,7 +125,7 @@ mod tests {
         assert!(crate::models::default_promotion_message().contains("Never pay gross upcharges."));
         let disabled: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promoteMissionApp":false}"#).unwrap();
         assert!(!disabled.promote_mission_app);
-        let enabled: TwitchConfig = serde_json::from_str(r#"{"promoteMissionApp":true}"#).unwrap();
+        let enabled: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promoteMissionApp":true}"#).unwrap();
         assert!(enabled.promote_mission_app);
     }
 

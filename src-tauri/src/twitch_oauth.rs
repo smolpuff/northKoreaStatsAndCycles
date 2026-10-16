@@ -8,7 +8,6 @@ use std::{
 };
 
 pub(crate) const CLIENT_ID: &str = "06di08aqgp56hw5nnnzpaki0025rpa";
-const SCOPE: &str = "user:write:chat";
 
 #[derive(Deserialize)]
 struct DeviceAuthorization {
@@ -46,11 +45,12 @@ fn verification_url(address: &str) -> Result<reqwest::Url, String> {
     Ok(url)
 }
 
-pub fn authorize(on_ready: impl FnOnce(&str)) -> Result<StoredTwitchCredential, String> {
+pub fn authorize(read_chat: bool, on_ready: impl FnOnce(&str)) -> Result<StoredTwitchCredential, String> {
+    let scope = if read_chat { "user:write:chat user:read:chat" } else { "user:write:chat" };
     let client = twitch::http_client()?;
     let device = client
         .post("https://id.twitch.tv/oauth2/device")
-        .form(&[("client_id", CLIENT_ID), ("scopes", SCOPE)])
+        .form(&[("client_id", CLIENT_ID), ("scopes", scope)])
         .send()
         .map_err(|_| "Unable to reach Twitch for sign-in")?
         .error_for_status()
@@ -90,7 +90,7 @@ pub fn authorize(on_ready: impl FnOnce(&str)) -> Result<StoredTwitchCredential, 
             .post("https://id.twitch.tv/oauth2/token")
             .form(&[
                 ("client_id", CLIENT_ID),
-                ("scopes", SCOPE),
+                ("scopes", scope),
                 ("device_code", device.device_code.as_str()),
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
             ])

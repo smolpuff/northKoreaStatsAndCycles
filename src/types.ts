@@ -95,6 +95,7 @@ export interface Config {
     };
   };
   twitch: {
+    myCycleCommand?: boolean;
     promoteMissionApp?: boolean;
     promotionIntervalMinutes?: number;
     postWorldRecords: boolean;
@@ -134,6 +135,7 @@ export interface Snapshot {
   streamerBotStatus: string;
   streamerBotMessage?: string;
   twitchStatus: string;
+  twitchChatMessage?: string;
   twitchMessage?: string;
   twitchUsername?: string;
   session: {
