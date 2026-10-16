@@ -37,19 +37,21 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) {
     let app = app.clone();
     thread::spawn(move || {
         let mut schedule = Schedule::default();
+        let mut lumia_schedule = Schedule::default();
         loop {
-            let (config, streamer, login) = match runtime.lock() {
+            let (config, streamer, lumia, login) = match runtime.lock() {
                 Ok(rt) if rt.connection_checks_stopped => return,
                 Ok(rt) => (
                     rt.snapshot.config.twitch.clone(),
                     rt.snapshot.config.streamer_bot.clone(),
+                    rt.snapshot.config.lumia.clone(),
                     if rt.snapshot.twitch_status == "Connected" { rt.snapshot.twitch_username.clone() } else { None },
                 ),
                 Err(_) => return,
             };
             let mut timer_config = config.clone();
-            timer_config.promote_mission_app = config.promote_mission_app || streamer.events.mission_promotion;
-            let identity = if streamer.events.mission_promotion {
+            timer_config.promote_mission_app = config.promote_mission_app || (streamer.enabled && streamer.events.mission_promotion);
+            let identity = if streamer.enabled && streamer.events.mission_promotion {
                 Some(format!("{}:{}:{}:{}", streamer.host, streamer.port, streamer.actions.mission_promotion, login.as_deref().unwrap_or("")))
             } else { login.clone() };
             if schedule.due(Instant::now(), &timer_config, identity.as_deref()) {
@@ -59,13 +61,23 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) {
                         Err(error) => log(&runtime, &app, "warning", format!("[Twitch] Mission app promotion failed: {error}")),
                     }
                 }
-                if streamer.events.mission_promotion {
+                if streamer.enabled && streamer.events.mission_promotion {
                     let args = streamer_bot::promotion_args(config.promotion_interval_minutes, false);
                     match streamer_bot::trigger_action(&streamer, &streamer.actions.mission_promotion, args) {
                         Ok(()) => log(&runtime, &app, "info", "[Streamer.bot] Mission promotion action triggered"),
                         Err(error) => log(&runtime, &app, "warning", format!("[Streamer.bot] Mission promotion action failed: {error}")),
                     }
                 }
+            }
+            let mut lumia_timer = config.clone();
+            lumia_timer.promote_mission_app = lumia.enabled && lumia.events.mission_promotion;
+            let identity = format!("{}:{}", lumia.port, lumia.actions.mission_promotion);
+            if lumia_schedule.due(Instant::now(), &lumia_timer, Some(&identity)) {
+                let args = streamer_bot::promotion_args(config.promotion_interval_minutes, false);
+                if crate::deliver_lumia(&runtime, &app, &lumia, &lumia.actions.mission_promotion, args) {
+                    crate::set_lumia_status(&runtime, "Connected", None);
+                }
+                crate::emit_snapshot(&runtime, &app);
             }
             thread::sleep(Duration::from_secs(1));
         }

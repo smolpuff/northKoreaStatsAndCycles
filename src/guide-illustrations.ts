@@ -2,6 +2,13 @@ import { icons } from "./icons";
 
 export type GuideArt =
   | "server"
+  | "lumia-server"
+  | "lumia-actions"
+  | "lumia-test"
+  | "discord-channel"
+  | "discord-webhook"
+  | "discord-connect"
+  | "discord-test"
   | "actions"
   | "hook"
   | "variables"
@@ -46,6 +53,27 @@ export function renderGuideIllustration(
         ? "{cycleplayer}"
         : "{firstplace}";
   switch (kind) {
+    case "discord-channel":
+      art = `<div class="guide-mini-panel guide-server"><div class="guide-mini-bar">${icon("chain")}Your Discord server</div><div class="guide-server-body"><div class="guide-server-nav"><b>Text Channels</b><span># general</span><b># marbles-results</b></div><div class="guide-server-options"><b>Edit Channel</b>${actionRow("settings", "Integrations")}${actionRow("webhook", "Manage Webhooks")}</div></div></div>`;
+      break;
+    case "discord-webhook":
+      art = `<div class="guide-mini-panel guide-actions"><div class="guide-mini-bar"><b>Integrations · Webhooks</b></div>${miniButton("New Webhook", "webhook", true)}${field("Name", "Marbles Stats")}${field("Channel", "# marbles-results")}${miniButton("Copy Webhook URL", "file")}</div>`;
+      break;
+    case "discord-connect":
+      art = `<div class="guide-mini-panel guide-actions"><div class="guide-mini-bar">${icon("chain")}Set Discord webhook</div>${field("Channel label", "marbles-results")}${field("Webhook URL", "••••••••••••••••")}${miniButton("Save webhook", "file", true)}<div class="guide-action-row">${check}<span>Saved securely</span></div></div>`;
+      break;
+    case "discord-test":
+      art = `<div class="guide-test-art"><div class="guide-test-click">${miniButton("Test message", "test")}${cursor}<span class="guide-click-rays"></span></div><div class="guide-mini-panel guide-action-history"><div class="guide-mini-bar"># marbles-results</div><div>${check}<b>Marbles Stats</b></div><div><span>🏁 Race results:</span></div><div><span>🥇 Test Winner +10pts</span></div><div><span>🥈 Test Second +8pts</span></div></div></div>`;
+      break;
+    case "lumia-server":
+      art = `<div class="guide-mini-panel guide-server"><div class="guide-mini-bar">${icon("chain")}Lumia Stream</div><div class="guide-server-body"><div class="guide-server-nav"><span>Settings</span><b>API &amp; MCP</b></div><div class="guide-server-options"><b>Developers API</b><span class="guide-checkbox">${icons.check}<span>Enabled</span></span>${field("Host", "127.0.0.1")}${field("Port", "39231")}</div></div></div>`;
+      break;
+    case "lumia-actions":
+      art = `<div class="guide-mini-panel guide-actions"><div class="guide-mini-bar"><b>Chat Commands</b>${miniButton("+ Add Command")}</div>${actionRow("statRaceFlag", "marbles-game-complete")}${actionRow("stopwatch", "marbles-world-record")}${actionRow("cycles", "marbles-cycle-complete")}</div>`;
+      break;
+    case "lumia-test":
+      art = `<div class="guide-test-art"><div class="guide-test-click">${miniButton("Test", "statRaceFlag")}${cursor}<span class="guide-click-rays"></span></div><div class="guide-mini-panel guide-action-history"><div class="guide-mini-bar">Lumia Dashboard</div><div>${check}<span>marbles-game-complete</span></div><div>${check}<span>Test Winner</span></div><div>${check}<span>10 points</span></div></div></div>`;
+      break;
     case "server":
       art = `<div class="guide-mini-panel guide-server"><div class="guide-mini-bar">${icon("streamer")}Streamer.bot</div><div class="guide-server-body"><div class="guide-server-nav"><span>General</span><b>Servers/Clients</b><span>WebSocket</span><span>OBS</span></div><div class="guide-server-options"><b>HTTP Server</b><span class="guide-checkbox">${icons.check}<span>Auto Start</span></span>${field("Host", "127.0.0.1")}${field("Port", "7474")}</div></div></div>`;
       break;

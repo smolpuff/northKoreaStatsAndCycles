@@ -3,6 +3,9 @@ import { iconInput } from "./input-field";
 import { renderGuideHeader, renderGuideStep } from "./guide-illustrations";
 import { icons } from "./icons";
 import { sidebarArtwork } from "./sidebar-icons";
+import { discordPage } from "./discord-view";
+import { lumiaPage } from "./lumia-view";
+import { feedbackButton } from "./button-feedback";
 import { overlaysPage } from "./overlay-view";
 import type { Config, GameResult, Snapshot } from "./types";
 
@@ -159,7 +162,7 @@ function formatLabel(value?: string): string {
 export const defaultRaceMessage = "{intro} {placements}";
 export const defaultRaceEntry = "{place} {player} +{points}pts";
 export const defaultPromotionMessage =
-  "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol";
+  "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 https://www.missions.lol";
 
 export function twitchPreviewMessages(
   messagePrefix: string,
@@ -415,16 +418,6 @@ function stat(label: string, value: unknown): string {
   return `<span class="summary-item">${icon ? `<i class="summary-icon ${icon}">${icons[icon]}</i>` : ""}<span class="summary-copy"><span>${escapeHtml(label)}</span><b class="${label === "Streamer.bot" && value === "Connected" ? "connected-value" : ""}">${escapeHtml(value)}</b></span></span>`;
 }
 
-function feedbackButton(
-  key: string,
-  label: string,
-  attributes = "",
-  icon = "play",
-  type = "button",
-): string {
-  return `<span class="inline-action"><button class="compact-button" type="${type}" data-feedback-key="${key}" ${attributes}>${icons[icon]}<span>${escapeHtml(label)}</span></button><span class="button-feedback-error" data-error-for="${key}" role="alert"></span></span>`;
-}
-
 export function trackingIsActive(
   state: Snapshot,
   kind: "stats" | "cycles",
@@ -479,7 +472,7 @@ function resultRow(
       </td>
       ${battleRoyale ? "" : `<td class="mono">${formatRaceTime(result.finishTime)}</td>`}
       ${battleRoyale ? `<td>${royaleValue("MatchKills")}</td><td>${royaleValue("MatchDamageDealt")}</td>` : ""}
-      <td class="points">${battleRoyale && result.rawData ? royaleValue("SeasonPointsEarned") : result.seasonPointsEarned}</td>
+      <td class="points">${result.seasonPointsEarned}</td>
       ${compact ? "" : `<td>${result.seasonPointsTotal ?? "—"}</td>`}
       ${compact ? "" : `<td>${result.seasonWinsTotal ?? "—"}</td>`}
       ${compact ? "" : `<td>${eliminated}</td>`}
@@ -747,9 +740,9 @@ function settingsPage(
 
   const streamerBot = state.config.streamerBot;
   const streamerBotConnection = `
-    <div class="twitch-connection-heading">
+    <div class="twitch-connection-heading automation-connection-heading">
       <div class="twitch-layout-heading"><i>${icons.chain}</i><div><h2 class="connection-title">Streamer.bot Connection${state.streamerBotStatus === "Connected" ? `<span class="connection-check">${icons.check}</span>` : ""}</h2></div></div>
-      <div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div>
+      <div class="connection-heading-controls"><div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div><label class="toggle-row connection-enable-toggle" title="Enable Streamer.bot"><input id="streamer-enabled" type="checkbox" role="switch" aria-label="Enable Streamer.bot" ${(streamerBot.enabled ?? true) ? "checked" : ""} /></label></div>
     </div>
     <div class="fields-grid connection-fields streamer-connection-fields">
       <label class="field"><span>Host</span>${iconInput(icons.server, `<input id="streamer-host" value="${escapeHtml(streamerBot.host)}" />`)}</label>
@@ -987,7 +980,7 @@ function settingsPage(
         "Optional custom actions for your stream, with live event data.",
       content:
         `<section class="panel settings-panel streamer-panel twitch-connection-panel"><div class="panel-body">${streamerBotConnection}</div></section>` +
-        `<section class="panel settings-panel streamer-panel streamer-hooks-panel"><div class="panel-body">${streamerBotEvents}</div></section>` +
+        `<section class="panel settings-panel streamer-panel streamer-hooks-panel"><div class="panel-body"><fieldset class="integration-hook-controls" data-integration-master="streamer-enabled" ${(streamerBot.enabled ?? true) ? "" : "disabled inert"}>${streamerBotEvents}</fieldset></div></section>` +
         `<div class="integration-save">${feedbackButton("save-streamer", "Save settings", "", "file", "submit")}</div>` +
         `<section class="panel settings-panel streamer-panel twitch-guide-panel">${renderGuideHeader("Setup Guide", "Connect Streamer.bot and configure your own actions.", "streamer")}<div class="panel-body">${setupGuide}</div></section>`,
     },
@@ -1263,28 +1256,35 @@ function homePage(state: Snapshot, busy: boolean): string {
 }
 
 function sidebar(state: Snapshot, currentPage: string): string {
+  const automationCount = [state.config.streamerBot.enabled ?? true, state.config.lumia?.enabled, state.config.discord?.enabled].filter(Boolean).length;
   return `
     <aside class="sidebar">
 
       <nav>
-        <div class="sidebar-heading"><span>Merbz</span><button type="button" class="sidebar-collapse-button" data-collapse-sidebar aria-label="Collapse sidebar" data-sidebar-tooltip="Collapse sidebar" aria-expanded="true">${icons.sidebar}</button></div>
+        <div class="sidebar-heading"><button type="button" class="sidebar-group-toggle" data-sidebar-group="merbz" aria-expanded="true" aria-controls="sidebar-group-merbz"><i>${icons.caretDown}</i><span>Merbz</span></button><button type="button" class="sidebar-collapse-button" data-collapse-sidebar aria-label="Collapse sidebar" data-sidebar-tooltip="Collapse sidebar" aria-expanded="true">${icons.sidebar}</button></div>
+        <div class="sidebar-group-content" id="sidebar-group-merbz" data-sidebar-group-content="merbz">
         ${navItem("home", currentPage, "Home")}
         ${navItem("overview", currentPage, "RaceStats")}
         ${navItem("racecycles", currentPage, "RaceCycles")}
         ${navItem("history", currentPage, "History")}
          ${navItem("logs", currentPage, "Live log")}
 
-        <span>Integrations</span>
+        </div>
+        <div class="sidebar-heading sidebar-integrations-heading"><button type="button" class="sidebar-group-toggle" data-sidebar-group="integrations" aria-expanded="true" aria-controls="sidebar-group-integrations"><i>${icons.caretDown}</i><span>Integrations</span></button></div>
+        <div class="sidebar-group-content" id="sidebar-group-integrations" data-sidebar-group-content="integrations">
         ${navItem("twitch", currentPage, "Twitch")}
         ${navItem("streamer", currentPage, "Streamer.bot")}
+        ${navItem("lumia", currentPage, "Lumia Stream")}
+        ${navItem("discord", currentPage, "Discord")}
         ${navItem("overlays", currentPage, "Overlays")}
         ${navItem("settings", currentPage, "Settings")}
+        </div>
        
       </nav>
 
       <div class="sidebar-foot">
-        <div class="watcher-statuses connection-statuses">
-        <div class="sidebar-watcher" data-sidebar-tooltip="Twitch: ${escapeHtml(state.twitchUsername ?? state.twitchStatus)} — ${escapeHtml(state.twitchStatus)}">
+        <div class="watcher-statuses connection-statuses ${automationCount === 2 ? "both-automations-enabled" : ""}">
+        <div class="sidebar-watcher twitch-status" data-sidebar-tooltip="Twitch: ${escapeHtml(state.twitchUsername ?? state.twitchStatus)} — ${escapeHtml(state.twitchStatus)}">
           <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-twitch")}</i>
           <small>Twitch</small>
           <div class="watch-state ${twitchTone(state)}"><i></i><span>${escapeHtml(
@@ -1294,11 +1294,13 @@ function sidebar(state: Snapshot, currentPage: string): string {
           )}</span></div>
         </div>
        
-        <div class="sidebar-watcher" data-sidebar-tooltip="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
+        ${(state.config.streamerBot.enabled ?? true) ? `<div class="sidebar-watcher" data-sidebar-tooltip="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
           <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-streamer")}</i>
           <small>Streamer.bot</small>
           <div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div>
-        </div>
+        </div>` : ""}
+        ${state.config.lumia?.enabled ? `<div class="sidebar-watcher" data-sidebar-tooltip="Lumia Stream: ${escapeHtml(state.lumiaStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Lumia Stream</small><div class="watch-state ${state.lumiaStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.lumiaStatus ?? "Not checked")}</span></div></div>` : ""}
+        ${state.config.discord?.enabled ? `<div class="sidebar-watcher discord-sidebar-status" data-sidebar-tooltip="Discord: ${escapeHtml(state.discordStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Discord</small><div class="watch-state ${state.discordStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.discordStatus ?? "Not checked")}</span></div></div>` : ""}
         </div>
         <div class="watcher-statuses">
           ${(["stats", "cycles"] as const)
@@ -1346,6 +1348,10 @@ export function renderApplication(
                       "play",
                     ),
                   )
+                : currentPage === "discord"
+                  ? discordPage(state)
+                : currentPage === "lumia"
+                  ? lumiaPage(state)
                 : currentPage === "streamer" || currentPage === "twitch"
                   ? settingsPage(state, currentPage)
                   : settingsPage(state);

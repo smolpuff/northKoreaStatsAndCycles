@@ -4,6 +4,8 @@ window.MarblesOverlayConfig = {
   // All players are included; this controls the visible scrolling window.
   visibleRows: 6,
   scrollPixelsPerSecond: 20,
+  // Cycle standings move more slowly than race results.
+  cycleScrollPixelsPerSecond: 8,
   scrollPauseSeconds: 2,
   scale: 1,
   // Slide/fade updates and smooth number counting (milliseconds).

@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { captureSwitchFrames, restoreSwitchFrames } from "./switch-motion";
+import { installSidebarGroups } from "./sidebar-groups";
 import { listen } from "@tauri-apps/api/event";
 import type { Config, LogEntry, Snapshot } from "./types";
 import { openMarbleCycleImport } from "./marble-cycle-import";
@@ -26,6 +28,8 @@ import { confirmClear, confirmClearWithBackup, chooseExportFormat } from "./conf
 import { initializeUpdates, bindUpdateSettings } from "./updates";
 import { installIntegrationHelp } from "./integration-help";
 import { openOverlayVariables } from "./overlay-help";
+import { defaultDiscordConfig, readDiscordSettings, openDiscordWebhookDialog, discordEvents, discordPreview } from "./discord-view";
+import { defaultLumiaConfig, readLumiaSettings, openLumiaTokenDialog } from "./lumia-view";
 import { openEventVariables } from "./streamer-events";
 import { openOverlayPreview, installOverlayPreviewSizing } from "./overlay-view";
 import { hideSidebarTooltip, installSidebarTooltips } from "./sidebar-tooltips";
@@ -55,7 +59,10 @@ let state: Snapshot = {
       autoStartWatcher: false,
       autoStartCycles: false,
     },
+    lumia: defaultLumiaConfig(),
+    discord: defaultDiscordConfig(),
     streamerBot: {
+      enabled: false,
       host: "127.0.0.1",
       port: 7474,
       events: { raceComplete: false, worldRecord: true, cycleComplete: false },
@@ -82,6 +89,8 @@ let state: Snapshot = {
   cyclesTrackingEnabled: false,
   watcherMessage: "Connecting to the local watcher",
   streamerBotStatus: "Disabled",
+  lumiaStatus: "Disabled",
+  discordStatus: "Disabled",
   twitchStatus: "Disconnected",
   session: {
     gamesPlayed: 0,
@@ -136,7 +145,7 @@ function applyButtonFeedback(): void {
     const error = document.querySelector<HTMLElement>(`[data-error-for="${key}"]`);
     if (error) error.textContent = feedback.error ?? "";
     if (feedback.phase === "error") {
-      if (button.hasAttribute("data-streamer-test")) {
+      if ((button.hasAttribute("data-streamer-test") || button.hasAttribute("data-lumia-test") || button.hasAttribute("data-discord-test"))) {
         button.classList.add("button-error");
         button.innerHTML = `<span>Failed — retry</span>`;
       }
@@ -168,6 +177,11 @@ async function runButtonAction(key: string, action: () => Promise<void>, busyLab
 }
 
 function syncFeatureSections(): void {
+  document.querySelectorAll<HTMLFieldSetElement>("[data-integration-master]").forEach(group => {
+    const master = document.getElementById(group.dataset.integrationMaster!) as HTMLInputElement | null;
+    group.disabled = !master?.checked;
+    group.inert = group.disabled;
+  });
   document.querySelectorAll<HTMLElement>("[data-feature-section]").forEach(section => {
     const toggle = document.getElementById(section.dataset.featureSection!) as HTMLInputElement;
     const master = section.dataset.masterToggle ? document.getElementById(section.dataset.masterToggle) as HTMLInputElement : undefined;
@@ -237,6 +251,7 @@ function renderMainWindow(): void {
   );
   root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
   root.querySelector(".overlays-page")?.setAttribute("data-directory", overlayDirectory);
+  const refreshSidebarGroups = installSidebarGroups(root, () => sidebarCollapsed);
   const sidebarToggle = root.querySelector<HTMLButtonElement>("[data-collapse-sidebar]");
   if (sidebarToggle) {
     const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
@@ -248,6 +263,7 @@ function renderMainWindow(): void {
       sidebarCollapsed = !sidebarCollapsed;
       localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
       root.querySelector(".app-shell")?.classList.toggle("sidebar-collapsed", sidebarCollapsed);
+      refreshSidebarGroups();
       const label = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
       sidebarToggle.dataset.sidebarTooltip = label;
       sidebarToggle.setAttribute("aria-label", label);
@@ -367,7 +383,7 @@ function renderMainWindow(): void {
     });
   });
 
-  if (["settings", "streamer", "twitch"].includes(currentPage)) {
+  if (["settings", "streamer", "twitch", "lumia", "discord"].includes(currentPage)) {
     bindSettingsForm();
     applyButtonFeedback();
   }
@@ -532,6 +548,7 @@ function renderMainWindow(): void {
 function render(): void {
   if (selectedRaceId && (selectedRaceId === state.latestResult?.id || !state.recentResults.some(game => game.id === selectedRaceId))) selectedRaceId = "";
   const samePage = renderedPage === currentPage;
+  const switchFrames = samePage ? captureSwitchFrames(root) : new Map();
   const scrollSelector = ".content, .table-scroll, .cycle-table-wrap, .twitch-message-preview";
   const scrollPositions = samePage
     ? [...root.querySelectorAll<HTMLElement>(scrollSelector)].map(element => ({ top: element.scrollTop, left: element.scrollLeft }))
@@ -569,6 +586,7 @@ function render(): void {
       }
     });
   }
+  restoreSwitchFrames(root, switchFrames);
 }
 
 async function toggleWatcher(kind: "stats" | "cycles" = currentPage === "racecycles" ? "cycles" : "stats"): Promise<void> {
@@ -611,6 +629,8 @@ function readSettingsForm(): Config {
   );
   return {
     ...state.config,
+    lumia: readLumiaSettings(state.config.lumia),
+    discord: readDiscordSettings(state.config.discord),
     theme: normalizeTheme(document.querySelector<HTMLSelectElement>("#appearance-theme")?.value ?? state.config.theme),
     autoUpdateCheckEnabled: document.querySelector<HTMLInputElement>("#auto-update-check")?.checked ?? state.config.autoUpdateCheckEnabled ?? true,
     startMinimized: document.querySelector<HTMLInputElement>("#start-minimized")?.checked ?? state.config.startMinimized ?? false,
@@ -622,6 +642,7 @@ function readSettingsForm(): Config {
     },
     streamerBot: {
       ...state.config.streamerBot,
+      enabled: document.querySelector<HTMLInputElement>("#streamer-enabled")?.checked ?? state.config.streamerBot.enabled ?? true,
       host: streamerHost?.value.trim() || state.config.streamerBot.host,
       port: Number(streamerPort?.value) || state.config.streamerBot.port,
       events: {
@@ -718,12 +739,15 @@ function bindSettingsForm(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-event-variables]").forEach(button => button.addEventListener("click", () => openEventVariables(button.dataset.eventVariables!)));
   const form = document.querySelector<HTMLFormElement>("#settings-form")!;
   form.querySelectorAll<HTMLElement>(".twitch-settings-section").forEach(card => {
+    const expand = () => { if (card.closest("[inert]")) return; const customization=card.querySelector<HTMLDetailsElement>(".twitch-message-customization"); if(customization)customization.open=true; };
     card.addEventListener("click", event => {
-      const target = event.target as Element;
-      if (target.closest("button, input, textarea, select, a, label, summary, [contenteditable]")) return;
-      if (window.getSelection()?.type === "Range") return;
-      const customization = card.querySelector<HTMLDetailsElement>(".twitch-message-customization");
-      if (customization) customization.open = true;
+      const target=event.target as Element;
+      if(target.closest("summary,button,a") || window.getSelection()?.type === "Range") return;
+      expand();
+    });
+    card.addEventListener("focusin", event => {
+      if ((event.target as Element).closest("summary")) return;
+      expand();
     });
   });
   document.querySelectorAll<HTMLElement>("[data-customized-for]").forEach(status => {
@@ -809,6 +833,43 @@ function bindSettingsForm(): void {
       }, "Posting...", "Sent");
     });
   });
+  document.querySelectorAll<HTMLButtonElement>("[data-discord-test]").forEach(button => button.addEventListener("click", async () => {
+    const config = readSettingsForm().discord;
+    const target=button.dataset.discordTarget;
+    await runButtonAction(button.dataset.feedbackKey!, async () => { state = await invoke<Snapshot>("test_discord", {config, kind:button.dataset.discordTest!, target}); }, ["connection", "webhook"].includes(button.dataset.discordTest!) ? "Checking..." : "Posting...", ["connection", "webhook"].includes(button.dataset.discordTest!) ? "Verified" : "Posted");
+  }));
+  document.querySelectorAll<HTMLButtonElement>("[data-discord-save]").forEach(button => button.addEventListener("click", async () => {
+    const config = readSettingsForm();
+    await runButtonAction(button.dataset.feedbackKey!, async () => { state = await invoke<Snapshot>("save_config", {config}); }, "Saving...", "Saved");
+  }));
+  document.querySelectorAll<HTMLButtonElement>("[data-discord-webhook]").forEach(button => button.addEventListener("click", () => openDiscordWebhookDialog(readSettingsForm().discord,button.dataset.discordWebhook,snapshot => {state=snapshot;render();})));
+  document.querySelector<HTMLButtonElement>("[data-discord-add-channel]")?.addEventListener("click", () => openDiscordWebhookDialog(readSettingsForm().discord,undefined,snapshot => {state=snapshot;render();}));
+  document.querySelectorAll<HTMLButtonElement>("[data-discord-remove]").forEach(button => button.addEventListener("click", async () => {
+    const config=readSettingsForm().discord;
+    await runButtonAction(button.dataset.feedbackKey!, async () => {state=await invoke<Snapshot>("remove_discord_webhook",{config,target:button.dataset.discordRemove!});},"Removing...","Removed");
+  }));
+  for(const {kind} of discordEvents) {
+    const refresh=() => {
+      const event=readSettingsForm().discord.events[kind];
+      const preview=document.querySelector<HTMLElement>(`[data-discord-preview="${kind}"]`);if(preview)preview.textContent=discordPreview(kind,event);
+      const target=document.querySelector<HTMLElement>(`[data-discord-preview-target="${kind}"]`);if(target)target.textContent=event.target;
+      const customized=document.querySelector<HTMLElement>(`[data-discord-customized="${kind}"]`);
+      const defaults=defaultDiscordConfig().events[kind];if(customized)customized.hidden=event.messageTemplate===defaults.messageTemplate&&event.placementTemplate===defaults.placementTemplate&&event.placementSeparator===defaults.placementSeparator;
+    };
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id^="discord-${kind}-"]`).forEach(input => input.addEventListener("input",refresh));
+  }
+  document.querySelectorAll<HTMLButtonElement>("[data-lumia-test]").forEach(button => button.addEventListener("click", async () => {
+    const config = readSettingsForm().lumia;
+    await runButtonAction(button.dataset.feedbackKey!, async () => { state = await invoke<Snapshot>("test_lumia", { config, kind: button.dataset.lumiaTest! }); });
+  }));
+  document.querySelector<HTMLButtonElement>("[data-lumia-token]")?.addEventListener("click", () => openLumiaTokenDialog(readSettingsForm().lumia, snapshot => { state = snapshot; render(); }));
+  document.querySelector<HTMLButtonElement>("[data-lumia-remove-token]")?.addEventListener("click", async () => {
+    await runButtonAction("lumia-remove-token", async () => {
+      state = await invoke<Snapshot>("remove_lumia_token");
+      const enabled = document.querySelector<HTMLInputElement>("#lumia-enabled"); if (enabled) enabled.checked = false;
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>("[data-lumia-variables]").forEach(button => button.addEventListener("click", () => openEventVariables(button.dataset.lumiaVariables!, "lumia")));
   document.querySelectorAll<HTMLButtonElement>("[data-streamer-test]").forEach(button => {
     button.addEventListener("click", async () => {
       const kind = button.dataset.streamerTest!;

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   "use strict";
   const config = Object.assign({title:"Marbles Stats", scale:1, worldRecordSeconds:10, cycleSeconds:10}, window.MarblesOverlayConfig);
   const root = document.getElementById("overlay");
@@ -10,13 +10,13 @@
   for (const key of ["accent", "teal", "gold", "scale"]) {
     if (config[key] != null) document.documentElement.style.setProperty("--" + key, config[key]);
   }
-  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 20 : Number(config.visibleRows ?? config.maxResults) || 6))));
+  root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 10 : Number(config.visibleRows ?? config.maxResults) || 6))));
   let previewOptions;
   let previousOptions = "";
   let customHeading;
   function applyOptions() {
     let options = previewOptions || window.MarblesOverlayOptions?.[kind];
-    if (options && (kind === "results" || kind === "cycle-status")) options = { ...options, height: options.visibleRows * (kind === "cycle-status" ? 60 : 42) + (kind === "cycle-status" ? (options.headerVisible ? 192 : 114) : (options.headerVisible ? 161 : 106)) };
+    if (options && (kind === "results" || kind === "cycle-status")) options = { ...options, height: options.visibleRows * 26 + (options.headerVisible ? 90 : 50) };
     const signature = JSON.stringify(options || null) + ":" + innerWidth + ":" + innerHeight;
     if (signature === previousOptions) return;
     previousOptions = signature;
@@ -31,7 +31,7 @@
     if (heading) heading.style.display = options?.headerVisible === false ? "none" : "";
     if (title && title !== heading) title.style.display = "";
     customHeading?.remove(); customHeading = null;
-    root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 20 : Number(config.visibleRows ?? config.maxResults) || 6))));
+    root.style.setProperty("--visible-rows", Math.max(1, Math.min(25, (kind === "cycle-status" ? 10 : Number(config.visibleRows ?? config.maxResults) || 6))));
     if (!options) { if (!root.hidden) scrollResults(); return; }
     page.style.setProperty("--overlay-background", options.background);
     page.style.setProperty("--overlay-opacity", options.opacity / 100);
@@ -43,8 +43,8 @@
     const celebration = kind === "world-record" || kind === "cycle-complete";
     root.style.setProperty("--overlay-width", `${options.width}px`);
     root.style.setProperty("--overlay-height", `${options.height}px`);
-    root.style.width = `${celebration ? options.width : options.width - 36}px`;
-    root.style.height = `${celebration ? options.height : options.height - 36}px`;
+    root.style.width = `${celebration ? options.width : options.width - 8}px`;
+    root.style.height = `${celebration ? options.height : options.height - 8}px`;
     root.style.minHeight = "0";
     if (preview) root.style.transform = `scale(${Math.min(1, innerWidth / options.width, innerHeight / options.height)})`;
     root.style.setProperty("--visible-rows", options.visibleRows);
@@ -240,7 +240,8 @@
     if (!animate() || !window.requestAnimationFrame) return;
     const distance = viewport.scrollHeight - viewport.clientHeight;
     if (distance <= 0) return;
-    const speed = Math.max(5, Math.min(150, Number((previewOptions || window.MarblesOverlayOptions?.[kind])?.scrollPixelsPerSecond ?? config.scrollPixelsPerSecond) || 20));
+    const defaultSpeed = kind === "cycle-status" ? Number(config.cycleScrollPixelsPerSecond) || 8 : Number(config.scrollPixelsPerSecond) || 20;
+    const speed = Math.max(5, Math.min(150, Number((previewOptions || window.MarblesOverlayOptions?.[kind])?.scrollPixelsPerSecond) || defaultSpeed));
     const pause = Math.max(0, Number(config.scrollPauseSeconds ?? 2))*1000;
     let previous = performance.now(), pausedUntil = previous + pause, direction = 1, position = 0;
     function step(now) {

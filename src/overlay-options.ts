@@ -24,16 +24,16 @@ export const isScrollingOverlay = (name: string) => name === "results" || name =
 export const isCelebration = (name: string) => name === "world-record" || name === "cycle-complete";
 export function defaultOverlayOptions(name: OverlayName): OverlayOptions {
   return {
-    width: isCelebration(name) ? 1920 : name === "cycle-status" ? 1200 : 400,
-    height: isCelebration(name) ? 1080 : name === "cycle-status" ? 1392 : name === "points" ? 260 : name === "podium" ? 300 : 413,
+    width: isCelebration(name) ? 1920 : name === "cycle-status" ? 440 : 320,
+    height: isCelebration(name) ? 1080 : name === "cycle-status" ? 350 : name === "points" ? 146 : name === "podium" ? 168 : 246,
     opacity: 80, background: "#071324", text: "#f5f5ff", secondary: "#b8c4e8",
     accent: "#ff0081", gold: "#ffe024", teal: "#00efaa", borderStart: "#493064", borderEnd: "#28395d", headerVisible: true,
     headerText: "", durationSeconds: isCelebration(name) ? 10 : 0,
-    visibleRows: name === "cycle-status" ? 20 : 6, scrollPixelsPerSecond: 20,
+    visibleRows: name === "cycle-status" ? 10 : 6, scrollPixelsPerSecond: name === "cycle-status" ? 8 : 20,
   };
 }
 export const overlayOptions: Partial<Record<OverlayName, OverlayOptions>> = {};
-export const sourceHeight = (name: OverlayName, options: OverlayOptions) => isScrollingOverlay(name) ? options.visibleRows * (name === "cycle-status" ? 60 : 42) + (name === "cycle-status" ? (options.headerVisible ? 192 : 114) : (options.headerVisible ? 161 : 106)) : options.height;
+export const sourceHeight = (name: OverlayName, options: OverlayOptions) => isScrollingOverlay(name) ? options.visibleRows * 26 + (options.headerVisible ? 90 : 50) : options.height;
 export const optionsFor = (name: OverlayName) => {
   const options = { ...defaultOverlayOptions(name), ...overlayOptions[name] };
   return { ...options, height: sourceHeight(name, options) };
@@ -56,7 +56,7 @@ export function renderOverlayCustomization(name: OverlayName): string {
     <form id="overlay-options-${name}" data-overlay-options="${name}">
       <div class="overlay-options-grid">
         <div class="overlay-layout-options">
-          ${number("width", "OBS width (px)", 280, 3840)}${isScrollingOverlay(name) ? `<div class="field overlay-auto-height"><span>OBS height (auto)</span><output data-overlay-height>${sourceHeight(name, options)} px</output></div>` : number("height", "OBS height (px)", 180, 2160)}
+          ${number("width", "OBS width (px)", 280, 3840)}${isScrollingOverlay(name) ? `<div class="field overlay-auto-height"><span>OBS height (auto)</span><output data-overlay-height>${sourceHeight(name, options)} px</output></div>` : number("height", "OBS height (px)", isCelebration(name) ? 180 : 100, 2160)}
           ${isCelebration(name) ? number("durationSeconds", "Duration (seconds)", 1, 300) : ""}
           <label class="field overlay-opacity"><span>Background opacity <output data-overlay-opacity>${options.opacity}%</output></span><input type="range" min="0" max="100" step="1" id="overlay-${name}-opacity" name="opacity" value="${options.opacity}" /></label>
           <label class="field overlay-header-text"><span>Header text</span><input id="overlay-${name}-headerText" name="headerText" maxlength="100" value="${escape(options.headerText)}" placeholder="Default overlay heading" /></label>

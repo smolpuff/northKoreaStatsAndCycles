@@ -10,7 +10,7 @@ export interface HelpFieldGroup {
 
 export const commonHelpFields: HelpFieldGroup = {
   title: "Match and totals",
-  availability: "All three Streamer.bot events and normal HTML overlay data. Match fields can be absent before a result exists.",
+  availability: "Race/BR complete, World Record and Cycle complete hooks for Streamer.bot and Lumia and normal HTML overlay data. Match fields can be absent before a result exists.",
   fields: [
     ["race", "Readable match type: Race or Battle Royale."],
     ["gameType", "Machine match type: race or battleRoyale."],
@@ -26,7 +26,7 @@ export const commonHelpFields: HelpFieldGroup = {
     ["cycleSeasonName", "Your RaceCycles season label."],
     ["cyclePlayers", "Unique tracked RaceCycles players."],
     ["cycleRaces", "Matches counted by RaceCycles since its reset (including BR when processed by that pipeline)."],
-    ["hasWorldRecord", "Confirmed new-record flag. Current CSV parsing does not confirm new records, so real matches currently send false."],
+    ["hasWorldRecord", "Confirmed new-record flag. Changed custom-map metadata must match the completed match before this becomes true."],
     ["gameId", "Stable match identifier."],
     ["snapshotId", "Source CSV snapshot identifier; can be null."],
     ["timestamp", "Normalized result timestamp."],
@@ -48,7 +48,7 @@ const expandPlayer = (prefix: string): HelpField[] => playerSuffixes.map(([suffi
 
 export const podiumHelpFields: HelpFieldGroup = {
   title: "First, second and third",
-  availability: "All Streamer.bot events and HTML packets with a match. These use actual placement numbers, rather than CSV row order.",
+  availability: "Race/BR complete, World Record and Cycle complete hooks for Streamer.bot and Lumia and HTML packets with a match. These use actual placement numbers, rather than CSV row order.",
   fields: ["first", "second", "third"].flatMap(prefix => [
     [prefix + "place", "Player name for this placement; empty if no such player."],
     [prefix + "placepoints", "Points this player earned in this match; zero if no such player."],
@@ -80,16 +80,23 @@ export const cycleHelpFields: HelpFieldGroup = {
   ],
 };
 
+export const promotionHelpFields: HelpFieldGroup = {
+  title: "Mission app promotion",
+  availability: "Promotion hooks for Streamer.bot and Lumia only. Uses the Settings interval without requiring this app's Twitch login. Match/player fields are not sent by promotion.",
+  fields: [["promotionMessage", "Promotion text."], ["downloadUrl", "Mission app download link."],
+    ["intervalMinutes", "Configured posting interval."], ["eventType", "missionPromotion."], ["isTest", "True for a test, false for scheduled promotion."]],
+};
+
 export const structuredHelpFields: HelpFieldGroup = {
   title: "Structured data",
-  availability: "Arrays/objects require a repeater or custom processing; they are not simple text values. Streamer.bot does not receive dotted array entries as individually named arguments.",
+  availability: "Arrays/objects require a repeater or custom processing; they are not simple text values. Neither automation provider receives dotted array entries as individually named arguments.",
   fields: [
-    ["placements", "Full player-result array. HTML sorts it by place before binding; Streamer.bot preserves normalized result order."],
+    ["placements", "Full player-result array. HTML sorts it by place before binding; Both automation providers preserve normalized result order."],
     ["placementsJson", "JSON string of the full player-result array."],
     ["cycleCompletions", "New completions for this match: playerName, cycleNumber and races. Normal overlay state sends an empty array."],
     ["cycleStandings", "All RaceCycles players in standings order, with the same fields as cycleLeaders. Used by the Cycle status overlay."],
     ["cycleLeaders", "Up to three RaceCycles leaders, ordered by completed cycles, then progress, then name. Contains playerKey, playerName, cycles, placementCounts, currentCyclePositions, cycleProgress and cycleRaceCounts."],
-    ["overlayDataJson", "Streamer.bot only: JSON string of the complete event packet, without recursive overlayDataJson."],
+    ["overlayDataJson", "Streamer.bot and Lumia hooks: JSON string of the complete event packet, without recursive overlayDataJson."],
     ["isTest", "Sample hook/overlay packets only: true. This field is absent in real event packets."],
   ],
 };
@@ -126,7 +133,7 @@ export const cycleLeaderHelpFields: HelpFieldGroup = {
 
 export const overlayDerivedHelpFields: HelpFieldGroup = {
   title: "HTML-only helper values",
-  availability: "Added by overlay.js; not Streamer.bot arguments. Boolean helpers are most useful with data-show or data-class.",
+  availability: "Added by overlay.js; not automation arguments. Boolean helpers are most useful with data-show or data-class.",
   fields: [["brand", "overlay-config.js title."], ["br", "True for Battle Royale."], ["isRace", "True when gameType is not battleRoyale."],
     ["hasRecordPoints", "True when wrplayerpoints is available."],
     ["playerKey", "Player-row key formed from platform and username/name."], ["winner", "Player row is place 1."],
@@ -165,5 +172,5 @@ export const overlayConfigHelpFields: HelpFieldGroup = {
 };
 
 export const allHelpFieldGroups: HelpFieldGroup[] = [commonHelpFields, podiumHelpFields, recordHelpFields,
-  cycleHelpFields, structuredHelpFields, placementRowHelpFields, cycleRowHelpFields, cycleLeaderHelpFields,
+  cycleHelpFields, promotionHelpFields, structuredHelpFields, placementRowHelpFields, cycleRowHelpFields, cycleLeaderHelpFields,
   overlayDerivedHelpFields, legacyHelpFields, overlayConfigHelpFields];

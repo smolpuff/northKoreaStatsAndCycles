@@ -48,7 +48,30 @@ export interface LogEntry {
 
 export type AppearanceTheme = "default" | "dark" | "minimal";
 
+export interface LumiaConfig {
+  enabled: boolean;
+  port: number;
+  events: Config["streamerBot"]["events"];
+  actions: Config["streamerBot"]["actions"];
+}
+
+export type DiscordEventKind = "race" | "battleRoyale" | "cycleComplete" | "worldRecord";
+export interface DiscordEvent {
+  enabled: boolean;
+  target: string;
+  messageTemplate: string;
+  placementTemplate: string;
+  placementSeparator: string;
+}
+export interface DiscordConfig {
+  enabled: boolean;
+  targets: string[];
+  events: Record<DiscordEventKind, DiscordEvent>;
+}
+
 export interface Config {
+  discord: DiscordConfig;
+  lumia: LumiaConfig;
   theme: AppearanceTheme;
   autoUpdateCheckEnabled: boolean;
   startMinimized: boolean;
@@ -60,6 +83,7 @@ export interface Config {
     autoStartCycles: boolean;
   };
   streamerBot: {
+    enabled: boolean;
     host: string;
     port: number;
     events: { raceComplete: boolean; worldRecord: boolean; cycleComplete: boolean; missionPromotion?: boolean };
@@ -87,6 +111,8 @@ export interface Config {
 }
 
 export interface Snapshot {
+  discordStatus: string;
+  discordMessage?: string;
   eventResultIds?: string[];
   cycleHistory: { timestamp: string; playerName: string; cycleNumber: number; mapName?: string; gameId: string; winnerName?: string; winningTime?: number; playerCount?: number; standings?: RaceCyclePlayer[]; game?: GameResult; earnings?: { playerKey: string; playerName: string; placement: number; pointsEarned: number; cyclesEarned: number; cycleNumber: number; placementCounts: number[] }[]; completions?: { playerName: string; cycleNumber: number }[] }[];
   totalCycleRaceCount: number;
@@ -103,6 +129,8 @@ export interface Snapshot {
   lastUpdate?: string;
   cycleLastUpdate?: string;
   latestResult?: GameResult;
+  lumiaStatus: string;
+  lumiaMessage?: string;
   streamerBotStatus: string;
   streamerBotMessage?: string;
   twitchStatus: string;

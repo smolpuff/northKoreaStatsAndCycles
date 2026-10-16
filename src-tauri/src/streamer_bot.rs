@@ -219,6 +219,29 @@ pub fn event_actions(config: &StreamerBotConfig, game: &GameResult, season_name:
     actions
 }
 
+// One preparation path serves both automation providers. Only transport and names differ.
+pub fn prepared_events(config: &StreamerBotConfig, snapshot: &AppSnapshot, game: &GameResult,
+    completions: &[crate::CycleCompletion], stats_new: bool) -> Vec<(String, Value)> {
+    if !config.enabled { return vec![]; }
+    let mut events = if stats_new { event_actions(config, game, &snapshot.config.seasons.race_name) } else { vec![] };
+    if config.events.cycle_complete && snapshot.cycles_tracking_enabled {
+        for completion in completions {
+            events.push((config.actions.cycle_complete.clone(), cycle_complete_args(
+                game, &completion.player_name, completion.cycle_number, completion.races)));
+        }
+    }
+    let completion_data = Value::Array(completions.iter().map(|completion| json!({
+        "playerName": completion.player_name, "cycleNumber": completion.cycle_number, "races": completion.races,
+    })).collect());
+    for (_, args) in &mut events { add_overlay_data(args, snapshot, game, completion_data.clone()); }
+    events
+}
+pub fn confirmed_record_args(snapshot: &AppSnapshot, game: &GameResult) -> Value {
+    let mut args = world_record_args(game);
+    add_overlay_data(&mut args, snapshot, game, json!([]));
+    args
+}
+
 pub fn cycle_complete_args(game: &GameResult, player: &str, cycle: u64, races: Option<u64>) -> Value {
     let result = game.results.iter().find(|result| result.player_name.eq_ignore_ascii_case(player) || result.username.eq_ignore_ascii_case(player) || result.display_name.eq_ignore_ascii_case(player));
     let mut args = json!({"eventType":"cycleComplete", "eventId":format!("cycle:{}:{}:{}", game.id, player, cycle), "gameId":game.id, "cycleplayer":player,

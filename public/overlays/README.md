@@ -1,17 +1,17 @@
 # Standalone HTML overlays
 
-Marbles Stats creates these files in the live overlay folder shown in the app. The app writes their data directly. Streamer.bot custom-event hooks are a separate integration and are not required for these overlays.
+Marbles Stats creates these files in the live overlay folder shown in the app. The app writes their data directly. Streamer.bot and Lumia custom-event hooks are separate optional integrations and are not required for these overlays. Lumia commands are invoked directly through its local API, without posting chat messages. Configure automation effects in your chosen integration; its master Enable switch controls automatic hooks and sidebar status visibility. Discord channel messages are also independent of overlays and can be configured on the Discord page directly above Overlays. Overlay rendering remains independent.
 
 ## In-app help
 
-Click **Help & variables** on the Overlays, Streamer.bot or Twitch page. The help dialog has illustrated setup steps, the complete custom HTML shell, a searchable field reference, examples and troubleshooting. Each overlay's **Edit HTML & variables** and each Streamer.bot event's **Variables** popup link to the full guide. Twitch cards have **Message help**.
+Click **Help & variables** on the Overlays, Streamer.bot, Lumia Stream, Discord or Twitch page. The help dialog has illustrated setup steps, the complete custom HTML shell, a searchable field reference, examples and troubleshooting. Each overlay's **Edit HTML & variables** and each Streamer.bot event's **Variables** popup link to the full guide. Twitch and Discord message cards have **Message help**. Discord includes four matching illustrated setup cards for channel webhooks, event selection, message editing and tests; it needs no shared developer app or bot token.
 
 The variable reference marks which fields are available in normal HTML state, WR/cycle alerts, Streamer.bot event arguments or repeated rows. Settings are listed separately and are not brace variables. The app labels variables with braces; Streamer.bot's native text fields require its own argument delimiter, which **Copy for Streamer.bot** supplies.
 
 ## Add to OBS
 
 1. Click **Copy path** on an overlay card.
-2. In OBS choose **Sources + > Browser > Local file** and paste the HTML path. Use the size shown on the card: defaults are **400 x 413** for Results, **400 x 300** for Podium, **400 x 260** for Points, or your canvas size (usually **1920 x 1080**) for celebrations.
+2. In OBS choose **Sources + > Browser > Local file** and paste the HTML path. Use the size shown on the card: defaults are **320 x 246** for Results, **320 x 168** for Podium, **320 x 146** for Points, or your canvas size (usually **1920 x 1080**) for celebrations.
 3. Position Results, Podium and Points using their live match data. Click **Test** on World record or Cycle completed to position those celebrations.
 
 Leave the source enabled. Results/podium/points stay visible; WR/cycle celebrations show on their events and hide after 10 seconds by default. Open **Customize** and set **Duration (seconds)** on each celebration card in the app and click **Save** (1–300 seconds). Saved durations persist and override the corresponding overlay-config.js duration; future events use them automatically. Place celebration sources above the rest. Automatic WR alerts require changed record metadata matching the completed match?s map, winner and time; old records on startup do not trigger alerts. Use **Test** to position the source without a real record.
@@ -21,6 +21,8 @@ Leave the source enabled. Results/podium/points stay visible; WR/cycle celebrati
 Click **Customize** at the right of each card's buttons. Change width/height, background opacity and color, text/secondary/accent/gold/green colors, and header visibility or text. Results also supports visible player count and scrolling speed; its height is automatic from that count and header visibility. Background opacity uses a slider for every overlay. The thumbnail previews unsaved edits. **Save** applies that overlay's settings to the live source within its next 3-second data check. These settings persist separately for each overlay.
 
 After resizing, set your OBS Browser Source's width and height to the updated size on the card; the app does not change OBS properties. Very small dimensions can cut off content. **Restore defaults** resets the app controls without replacing your HTML/CSS edits. An empty header uses the original heading. A custom heading is plain text, not a variable template. Generic custom.html pages retain their own styles; these controls apply to the six premade overlays.
+
+The compact templates use small headers, 26px player rows, and the app's checkered flag / sword icons for Race / BR. Cycles uses the Race flag and stays wider to fit all ten placement counts. Existing custom sizes are preserved; choose **Restore defaults** to adopt the compact source sizes. Unmodified live templates update on the next app startup; edited HTML/CSS stays preserved. Refresh OBS after the template update. Celebrations retain their full-screen layout.
 
 ## Customize the HTML
 
@@ -46,6 +48,8 @@ The **Edit HTML & variables** link on each app card has a copyable example and t
 | `points.html` | `{matchPoints}`, `{sessionPoints}`, `{seasonPoints}` (all Race + BR player points combined) | None |
 | `world-record.html` | `{wrplayer}`, `{wrrecordtime}`, `{wrplayerpoints}`, `{mapName}` | None |
 | `cycle-complete.html` | `{cycleSeasonName}` | In `cycleCompletions`: `{playerName}`, `{cycleNumber}`, `{races}` |
+
+BR winners' earned CSV points contribute to both `{sessionPoints}` and `{seasonPoints}`. Blank earned points, including bot simulations, contribute 0; cumulative CSV season totals are not match points.
 
 `{name}` belongs inside a player-row template. For the winner outside the table, use `{firstplace}`. A repeating template receives the page values plus the current item's values.
 
@@ -102,7 +106,7 @@ Dotted paths such as `{placements.0.name}` select rows in placement order. Index
 
 ### Cycle status ? cycle-status.html
 
-Use a **1200 ? 1361** Browser Source and center it in your scene. Rows are 60px tall for readability. It shows 20 players at once and scrolls through all tracked players. Customize the visible row count, width, colors and scroll speed in the app; source height adjusts automatically.
+Use a **440 x 350** Browser Source. Compact 26px rows show 10 players at once and scroll through all tracked players at 8 px/s by default (Results stays at 20 px/s). Standalone templates use `cycleScrollPixelsPerSecond` in `overlay-config.js`; app customization overrides it. Customize the visible row count, width, colors and scroll speed in the app; source height adjusts automatically. Results and Cycles use `visible rows x 26 + 90` pixels with the header, or `visible rows x 26 + 50` without it.
 
 Columns show rank, player, completed cycles, total placement counts for positions 1-10, and **Left** (positions still needed for the next cycle). Completed cycles stay gold; Left uses muted text so the remaining count does not compete with completed cycles. Green cells mark positions whose counts exceed the completed-cycle count. All extra placements carry forward. The data comes from `cycleStandings`, ordered by completed cycles, current progress, then name. Empty standings hide the overlay. It uses live `overlay-data.js` and stays visible; use your source visibility controls to show it when needed.
 

@@ -6,6 +6,10 @@ mod promotion;
 mod records;
 mod storage;
 mod streamer_bot;
+mod lumia;
+mod discord;
+mod discord_credentials;
+mod discord_integration;
 mod twitch;
 mod twitch_oauth;
 mod updater;
@@ -36,6 +40,8 @@ struct Runtime {
     cached_file: Option<(FileStamp, Option<FileStamp>, GameResult)>,
     record_tracker: records::Tracker,
     announced_records: Vec<String>,
+    discord_tx: Option<mpsc::SyncSender<discord::Delivery>>,
+    discord_revision: u64,
 }
 
 type SharedRuntime = Arc<Mutex<Runtime>>;
@@ -59,6 +65,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
     let mut config = storage
         .read::<AppConfig>("config.json")
         .unwrap_or_else(|_| AppConfig::default_for(default_csv_path()));
+    discord::upgrade_defaults(&mut config.discord);
     config.csv.game_type = GameType::Auto;
     let twitch_defaults = TwitchConfig::default();
     if config.twitch.message_prefix.is_empty() {
@@ -76,7 +83,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         storage.read::<RaceState>("race-state.json")?
     } else { RaceState::default() };
     let race_cycles = cycle_players_for_display(&race_state.race_cycles);
-    let streamer_bot_status = if config.streamer_bot.has_enabled_events() {
+    let streamer_bot_status = if config.streamer_bot.enabled {
         "Not checked"
     } else {
         "Disabled"
@@ -112,6 +119,8 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         })
         .collect();
     Ok(Runtime {
+        discord_tx: None,
+        discord_revision: 0,
         overlay_writer: overlays::Writer::new(app_data_dir.join("overlays")),
         race_state: race_state.clone(),
         snapshot: AppSnapshot {
@@ -122,6 +131,9 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             season_points_earned: race_state.season_points_earned,
             total_cycle_race_count: tracked_cycle_races(&race_state),
             session_results: vec![],
+            discord_status: if config.discord.enabled { "Not checked".into() } else { "Disabled".into() },
+            discord_message: None,
+            lumia_status: if config.lumia.enabled { "Not checked".into() } else { "Disabled".into() },
             config,
             watcher_status: "Stopped".into(),
             stats_tracking_enabled: false,
@@ -133,6 +145,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             latest_result,
             streamer_bot_status: streamer_bot_status.into(),
             streamer_bot_message: None,
+            lumia_message: None,
             twitch_status,
             twitch_message,
             twitch_username,
@@ -208,6 +221,10 @@ fn snapshot_for_ui(source: &AppSnapshot) -> AppSnapshot {
         latest_result: source.latest_result.clone(),
         streamer_bot_status: source.streamer_bot_status.clone(),
         streamer_bot_message: source.streamer_bot_message.clone(),
+        discord_status: source.discord_status.clone(),
+        discord_message: source.discord_message.clone(),
+        lumia_status: source.lumia_status.clone(),
+        lumia_message: source.lumia_message.clone(),
         twitch_status: source.twitch_status.clone(),
         twitch_message: source.twitch_message.clone(),
         twitch_username: source.twitch_username.clone(),
@@ -600,25 +617,15 @@ fn send_streamer_bot_events(runtime: &SharedRuntime, app: &tauri::AppHandle, gam
         Err(_) => return,
     };
     let config = snapshot.config.streamer_bot.clone();
-    if !config.has_enabled_events() {
+    if !config.enabled {
         set_streamer_bot_status(runtime, "Disabled", None);
         emit_snapshot(runtime, app);
         return;
     }
-    let mut actions = if stats_new { streamer_bot::event_actions(&config, game, &snapshot.config.seasons.race_name) } else { vec![] };
-    if config.events.cycle_complete && snapshot.cycles_tracking_enabled {
-        for completion in completions {
-            actions.push((config.actions.cycle_complete.clone(), streamer_bot::cycle_complete_args(
-                game, &completion.player_name, completion.cycle_number, completion.races)));
-        }
-    }
+    let actions = streamer_bot::prepared_events(&config, &snapshot, game, completions, stats_new);
     if actions.is_empty() { return; }
     let mut failed = false;
-    for (action, mut args) in actions {
-        let completions = serde_json::Value::Array(completions.iter().map(|completion| serde_json::json!({
-            "playerName": completion.player_name, "cycleNumber": completion.cycle_number, "races": completion.races,
-        })).collect());
-        streamer_bot::add_overlay_data(&mut args, &snapshot, game, completions);
+    for (action, args) in actions {
         if let Err(error) = streamer_bot::trigger_action(&config, &action, args) {
             set_streamer_bot_status(runtime, "Unavailable", Some(error.clone()));
             log(
@@ -646,6 +653,119 @@ fn send_streamer_bot_events(runtime: &SharedRuntime, app: &tauri::AppHandle, gam
     );
     }
     emit_snapshot(runtime, app);
+}
+
+fn set_lumia_status(runtime: &SharedRuntime, status: &str, message: Option<String>) {
+    if let Ok(mut rt) = runtime.lock() { rt.snapshot.lumia_status = status.into(); rt.snapshot.lumia_message = message; }
+}
+fn deliver_lumia(runtime: &SharedRuntime, app: &tauri::AppHandle, config: &LumiaConfig, command: &str, args: serde_json::Value) -> bool {
+    match lumia::trigger_command(config, command, args) {
+        Ok(()) => { log(runtime, app, "info", format!("[Lumia] {command} accepted")); true }
+        Err(error) => {
+            set_lumia_status(runtime, "Unavailable", Some(error.clone()));
+            log(runtime, app, "warning", format!("[Lumia] {error}")); false
+        }
+    }
+}
+fn send_lumia_events(runtime: &SharedRuntime, app: &tauri::AppHandle, game: &GameResult, completions: &[CycleCompletion], stats_new: bool) {
+    let snapshot = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
+    let config = &snapshot.config.lumia;
+    if !config.enabled { return; }
+    let actions = streamer_bot::prepared_events(&config.event_config(), &snapshot, game, completions, stats_new);
+    if actions.is_empty() { return; }
+    let mut failed = false;
+    for (command, args) in actions {
+        if !deliver_lumia(runtime, app, config, &command, args) { failed = true; }
+    }
+    if !failed { set_lumia_status(runtime, "Connected", None); }
+    emit_snapshot(runtime, app);
+}
+
+#[tauri::command]
+async fn save_lumia_token(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, config: LumiaConfig, token: String) -> Result<AppSnapshot, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        lumia::validate_token(&config, &token)?;
+        lumia::save_credential(&token.trim().to_string())?;
+        set_lumia_status(&runtime, "Not checked", Some("API token saved securely. Save settings, then test the connection.".into()));
+        emit_snapshot(&runtime, &app);
+        let snapshot = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
+        snapshot
+    }).await.map_err(|_| "Lumia request worker failed".to_string())?
+}
+#[tauri::command]
+fn remove_lumia_token(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
+    // Disable delivery before deleting the credential, preserving it if config persistence fails.
+    {
+        let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
+        let mut config = rt.snapshot.config.clone(); config.lumia.enabled = false;
+        rt.storage.write("config.json", &config)?; rt.snapshot.config = config;
+    }
+    lumia::delete_credential()?;
+    set_lumia_status(&runtime, "Disabled", Some("API token removed".into()));
+    emit_snapshot(&runtime, &app);
+    runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into())
+}
+#[tauri::command]
+async fn test_lumia(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, config: LumiaConfig, kind: String) -> Result<AppSnapshot, String> {
+    let runtime = runtime.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = if kind == "connection" { lumia::test_connection(&config) } else {
+            let (command, args) = match kind.as_str() {
+                "gameComplete" => (&config.actions.game_complete, streamer_bot::test_args("gameComplete")),
+                "worldRecord" => (&config.actions.world_record, streamer_bot::test_args("worldRecord")),
+                "cycleComplete" => (&config.actions.cycle_complete, streamer_bot::test_args("cycleComplete")),
+                "missionPromotion" => (&config.actions.mission_promotion, streamer_bot::promotion_args(
+                    runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.promotion_interval_minutes, true)),
+                _ => return Err("Unknown Lumia test event".into()),
+            };
+            lumia::trigger_command(&config, command, args)
+        };
+        match result {
+            Ok(()) => {
+                set_lumia_status(&runtime, "Connected", Some("API request accepted".into()));
+                log(&runtime, &app, "info", "[Lumia] Test request accepted");
+                emit_snapshot(&runtime, &app);
+                let snapshot = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
+                snapshot
+            }
+            Err(error) => {
+                set_lumia_status(&runtime, "Error", Some(error.clone()));
+                log(&runtime, &app, "warning", format!("[Lumia] {error}"));
+                emit_snapshot(&runtime, &app); Err(error)
+            }
+        }
+    }).await.map_err(|_| "Lumia request worker failed".to_string())?
+}
+fn start_lumia_checks(runtime: &SharedRuntime, app: &tauri::AppHandle) {
+    let shared = runtime.clone(); let app = app.clone();
+    thread::spawn(move || loop {
+        let config = match shared.lock() {
+            Ok(rt) if rt.connection_checks_stopped => return,
+            Ok(rt) => rt.snapshot.config.lumia.clone(), Err(_) => return,
+        };
+        if config.enabled {
+            let (status, message) = match lumia::test_connection(&config) {
+                Ok(()) => ("Connected", "Connection check succeeded".to_string()),
+                Err(error) => ("Unavailable", format!("{error}; retrying in 30 seconds")),
+            };
+            let changed = match shared.lock() {
+                Ok(mut rt) => {
+                    if rt.connection_checks_stopped { return; }
+                    if !rt.snapshot.config.lumia.enabled || rt.snapshot.config.lumia.port != config.port { false }
+                    else {
+                        let changed = rt.snapshot.lumia_status != status || rt.snapshot.lumia_message.as_deref() != Some(message.as_str());
+                        rt.snapshot.lumia_status = status.into(); rt.snapshot.lumia_message = Some(message.clone()); changed
+                    }
+                }, Err(_) => return,
+            };
+            if changed {
+                log(&shared, &app, if status == "Connected" { "info" } else { "warning" }, format!("[Lumia] {message}"));
+                emit_snapshot(&shared, &app);
+            }
+        }
+        thread::sleep(Duration::from_secs(30));
+    });
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -771,11 +891,9 @@ fn check_world_record(runtime: &SharedRuntime, app: &tauri::AppHandle, race_path
     emit_snapshot(runtime, app);
     let snapshot = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
     let config = snapshot.config.streamer_bot;
-    if config.events.world_record {
-        let mut args = streamer_bot::world_record_args(&confirmed);
-        // The snapshot still carries the full winner/points data for custom hooks.
+    if config.enabled && config.events.world_record {
         let current = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
-        streamer_bot::add_overlay_data(&mut args, &current, &confirmed, serde_json::json!([]));
+        let args = streamer_bot::confirmed_record_args(&current, &confirmed);
         match streamer_bot::trigger_action(&config, &config.actions.world_record, args) {
             Ok(()) => log(runtime, app, "info", format!("[Streamer.bot] Triggered {}", config.actions.world_record)),
             Err(error) => {
@@ -784,6 +902,15 @@ fn check_world_record(runtime: &SharedRuntime, app: &tauri::AppHandle, race_path
             }
         }
     }
+    let current = match runtime.lock() { Ok(rt) => snapshot_for_ui(&rt.snapshot), Err(_) => return };
+    if current.config.lumia.enabled && current.config.lumia.events.world_record {
+        let args = streamer_bot::confirmed_record_args(&current, &confirmed);
+        if deliver_lumia(runtime, app, &current.config.lumia, &current.config.lumia.actions.world_record, args) {
+            set_lumia_status(runtime, "Connected", None);
+        }
+        emit_snapshot(runtime, app);
+    }
+    discord_integration::confirmed_record(runtime, app, &confirmed);
     send_twitch_world_record(runtime, app, confirmed);
 }
 
@@ -1079,7 +1206,9 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     );
                 }
 
+                discord_integration::game_events(runtime, app, &game, &cycle_completions, stats_new);
                 send_streamer_bot_events(runtime, app, &game, &cycle_completions, stats_new);
+                send_lumia_events(runtime, app, &game, &cycle_completions, stats_new);
                 if stats_new {
                     send_twitch_world_record(runtime, app, game.clone());
                     send_twitch_results(runtime, app, game);
@@ -1143,6 +1272,8 @@ fn save_config(
     runtime: State<'_, SharedRuntime>,
     config: AppConfig,
 ) -> Result<AppSnapshot, String> {
+    discord::validate_config(&config.discord)?;
+    if config.lumia.port == 0 { return Err("Choose a Lumia port from 1 to 65535".into()); }
     if !(1..=1440).contains(&config.twitch.promotion_interval_minutes) {
         return Err("Promotion interval must be between 1 and 1440 minutes".into());
     }
@@ -1151,13 +1282,18 @@ fn save_config(
             .lock()
             .map_err(|_| "Application state unavailable")?;
         rt.storage.write("config.json", &config)?;
+        if rt.snapshot.config.discord != config.discord { rt.discord_revision = rt.discord_revision.wrapping_add(1); }
         rt.snapshot.config = config;
-        rt.snapshot.streamer_bot_status = if rt.snapshot.config.streamer_bot.has_enabled_events() {
+        rt.snapshot.streamer_bot_status = if rt.snapshot.config.streamer_bot.enabled {
             "Not checked".into()
         } else {
             "Disabled".into()
         };
         rt.snapshot.streamer_bot_message = None;
+        rt.snapshot.lumia_status = if rt.snapshot.config.lumia.enabled { "Not checked".into() } else { "Disabled".into() };
+        rt.snapshot.lumia_message = None;
+        rt.snapshot.discord_status = if rt.snapshot.config.discord.enabled { "Not checked".into() } else { "Disabled".into() };
+        rt.snapshot.discord_message = None;
     }
 
     log(&runtime, &app, "info", "[Settings] Configuration saved");
@@ -1972,7 +2108,7 @@ fn start_connection_checks(runtime: &SharedRuntime, app: &tauri::AppHandle) {
             Ok(rt) => rt.snapshot.config.streamer_bot.clone(),
             Err(_) => return,
         };
-        if config.has_enabled_events() {
+        if config.enabled {
             let result = streamer_bot::test_connection(&config);
             let (status, message) = match result {
                 Ok(()) => ("Connected", "Connection check succeeded".to_string()),
@@ -1983,7 +2119,7 @@ fn start_connection_checks(runtime: &SharedRuntime, app: &tauri::AppHandle) {
                 Ok(mut rt) => {
                     let current = &rt.snapshot.config.streamer_bot;
                     if rt.connection_checks_stopped { return; }
-                    if !current.has_enabled_events() || current.host != config.host || current.port != config.port {
+                    if !current.enabled || current.host != config.host || current.port != config.port {
                         false
                     } else {
                         let changed = rt.snapshot.streamer_bot_status != status
@@ -2103,6 +2239,8 @@ pub fn run() {
             app.manage(runtime.clone());
             emit_snapshot(&runtime, app.handle());
             start_connection_checks(&runtime, app.handle());
+            start_lumia_checks(&runtime, app.handle());
+            discord_integration::start(&runtime, app.handle());
             promotion::start(&runtime, app.handle());
             Ok(())
         })
@@ -2122,6 +2260,12 @@ pub fn run() {
             disconnect_twitch,
             test_twitch_message,
             test_streamer_bot_connection,
+            save_lumia_token,
+            remove_lumia_token,
+            test_lumia,
+            discord_integration::save_discord_webhook,
+            discord_integration::remove_discord_webhook,
+            discord_integration::test_discord,
             get_overlay_directory,
             get_overlay_options,
             save_overlay_options,
@@ -2243,6 +2387,10 @@ mod pipeline_tests {
             latest_result: None,
             streamer_bot_status: "Disabled".into(),
             streamer_bot_message: None,
+            discord_status: "Disabled".into(),
+            discord_message: None,
+            lumia_status: "Disabled".into(),
+            lumia_message: None,
             twitch_status: "Disconnected".into(),
             twitch_message: None,
             twitch_username: None,
@@ -2250,6 +2398,80 @@ mod pipeline_tests {
             recent_results: vec![],
             race_cycles: vec![],
             logs: vec![],
+        }
+    }
+
+    #[test]
+    fn automation_master_switches_suppress_hooks_without_changing_event_choices() {
+        let mut snapshot = test_snapshot(); snapshot.cycles_tracking_enabled = true;
+        let game = streamer_bot::sample_game();
+        let events = StreamerBotEvents { race_complete: true, world_record: true, cycle_complete: true, mission_promotion: true };
+        let streamer = StreamerBotConfig { enabled: false, events: events.clone(), ..StreamerBotConfig::default() };
+        let lumia = LumiaConfig { enabled: false, events, ..LumiaConfig::default() };
+        let completions = vec![CycleCompletion { player_name: "Test Winner".into(), cycle_number: 2, races: None }];
+        assert!(streamer_bot::prepared_events(&streamer, &snapshot, &game, &completions, true).is_empty());
+        assert!(streamer_bot::prepared_events(&lumia.event_config(), &snapshot, &game, &completions, true).is_empty());
+        assert!(streamer.events.race_complete && lumia.events.cycle_complete);
+        assert!(streamer.events.mission_promotion && lumia.events.mission_promotion);
+        let mut stored = serde_json::to_value(&streamer).unwrap();
+        stored.as_object_mut().unwrap().remove("enabled");
+        let legacy: StreamerBotConfig = serde_json::from_value(stored).unwrap();
+        assert!(legacy.enabled); assert_eq!(legacy.actions.game_complete, streamer.actions.game_complete);
+        let explicit: StreamerBotConfig = serde_json::from_value(serde_json::to_value(&streamer).unwrap()).unwrap();
+        assert!(!explicit.enabled); assert!(explicit.events.world_record);
+        assert!(!StreamerBotConfig::default().enabled);
+    }
+
+    #[test]
+    fn automation_providers_prepare_identical_events_for_every_switch_combination() {
+        use serde_json::json;
+        let mut snapshot = test_snapshot();
+        snapshot.config.seasons.race_name = "Race season".into();
+        snapshot.config.seasons.cycle_name = "Cycle season".into();
+        let completions = vec![
+            CycleCompletion { player_name: "Test Winner".into(), cycle_number: 2, races: Some(42) },
+            CycleCompletion { player_name: "Test Second".into(), cycle_number: 3, races: None },
+        ];
+        for game_type in [GameType::Race, GameType::BattleRoyale] {
+            let mut game = streamer_bot::sample_game(); game.game_type = game_type;
+            game.results[0].raw_data.insert("MatchKills".into(), "5".into());
+            snapshot.session_results = vec![game.clone()]; snapshot.season_points_earned = 321;
+            for switches in 0..16 {
+                let events = StreamerBotEvents { race_complete: switches & 1 != 0, world_record: switches & 2 != 0,
+                    cycle_complete: switches & 4 != 0, mission_promotion: switches & 8 != 0 };
+                let streamer = StreamerBotConfig { enabled: true, events: events.clone(), ..StreamerBotConfig::default() };
+                let lumia = LumiaConfig { enabled: true, events, ..LumiaConfig::default() };
+                for stats_new in [false, true] {
+                    for cycles_enabled in [false, true] {
+                        snapshot.cycles_tracking_enabled = cycles_enabled;
+                        let sb = streamer_bot::prepared_events(&streamer, &snapshot, &game, &completions, stats_new);
+                        let lm = streamer_bot::prepared_events(&lumia.event_config(), &snapshot, &game, &completions, stats_new);
+                        let payloads = |events: &Vec<(String, serde_json::Value)>| events.iter().map(|(_, args)| args.clone()).collect::<Vec<_>>();
+                        assert_eq!(payloads(&sb), payloads(&lm));
+                        let expected = usize::from(stats_new && streamer.events.race_complete)
+                            + usize::from(stats_new && streamer.events.world_record)
+                            + if cycles_enabled && streamer.events.cycle_complete { 2 } else { 0 };
+                        assert_eq!(sb.len(), expected);
+                        for (_, args) in &lm {
+                            assert_eq!(args["placements"].as_array().unwrap().len(), 3);
+                            assert_eq!(args["firstplace"], "Test Winner");
+                            assert_eq!(args["seasonPoints"], 321);
+                            assert_eq!(args["cycleSeasonName"], "Cycle season");
+                            let packet: serde_json::Value = serde_json::from_str(args["overlayDataJson"].as_str().unwrap()).unwrap();
+                            assert_eq!(args["placements"], packet["placements"]);
+                            assert_eq!(args["cycleCompletions"].as_array().unwrap().len(), 2);
+                        }
+                    }
+                }
+            }
+            let record = streamer_bot::confirmed_record_args(&snapshot, &game);
+            assert_eq!(record["wrplayer"], "Test Winner");
+            assert_eq!(record["placements"].as_array().unwrap().len(), 3);
+            assert_eq!(record["cycleCompletions"], json!([]));
+            game.has_world_record = false;
+            let config = StreamerBotConfig { enabled: true, events: StreamerBotEvents { world_record: true, race_complete: false,
+                cycle_complete: false, mission_promotion: false }, ..StreamerBotConfig::default() };
+            assert!(streamer_bot::prepared_events(&config, &snapshot, &game, &[], true).is_empty());
         }
     }
 
@@ -2634,15 +2856,21 @@ mod pipeline_tests {
         game.source_snapshot_id = Some("br-points-source".into());
         game.game_type = GameType::BattleRoyale;
         game.results[0].season_points_earned = 7;
+        game.results[1].season_points_earned = 0;
+        let mut session = vec![game.clone()];
+        assert_eq!(session.iter().map(game_points_earned).sum::<i64>(), 7);
         let (both, _, _) = prepare_race_commit(&race, &game, true, false, "next", ReadReason::Manual).unwrap();
-        assert_eq!(both.season_points_earned, 33);
+        assert_eq!(both.season_points_earned, 25);
         let restored: RaceState = serde_json::from_str(&serde_json::to_string(&both).unwrap()).unwrap();
-        assert_eq!(restored.season_points_earned, 33);
+        assert_eq!(restored.season_points_earned, 25);
         assert!(prepare_race_commit(&restored, &game, true, false, "duplicate", ReadReason::Manual).is_none());
         game.results[0].season_points_earned = 11;
         assert!(prepare_race_commit(&restored, &game, true, false, "auto-br-edit", ReadReason::FileChanged).is_none());
         let (corrected, stats_new, _) = prepare_race_commit(&restored, &game, true, false, "br-edit", ReadReason::Manual).unwrap();
-        assert_eq!(corrected.season_points_earned, 37);
+        assert_eq!(corrected.season_points_earned, 29);
+        refresh_counted_result(&mut session, &game);
+        assert_eq!(session.len(), 1);
+        assert_eq!(session.iter().map(game_points_earned).sum::<i64>(), 11);
         assert_eq!(corrected.total_battle_royale_count, 1);
         assert!(!stats_new);
         let (cycles_only, _, _) = prepare_race_commit(&RaceState::default(), &game, false, true, "cycles", ReadReason::Manual).unwrap();

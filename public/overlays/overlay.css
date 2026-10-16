@@ -184,23 +184,51 @@ body.overlay-customized[data-overlay="results"] th { height: 36px; line-height: 
 
 .results-viewport th { height: 36px; line-height: 16px; }
 
-/* Give cycle players breathing room; source height follows the visible row count. */
-body[data-overlay="cycle-status"] #overlay { width: 1164px; --row-height: 60px; }
+/* Compact broadcast panels. Celebration and user-created pages retain their canvas. */
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) { padding: 4px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"]) #overlay { width: 312px; }
+body[data-overlay="cycle-status"] #overlay { width: 432px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .card {
+  padding: 8px; border-radius: 2px;
+  background: linear-gradient(110deg, rgba(16,18,25,.92), rgba(7,12,20,.92));
+  box-shadow: none;
+}
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .heading { gap: 6px; height: 34px; margin-bottom: 6px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .heading > div { flex: 1; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) h1 { font-size: 14px; line-height: 18px; color: var(--gold); }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .subtitle { font-size: 10px; line-height: 14px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .heading .icon { width: 18px; height: 18px; color: var(--gold); }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .brand { display: none; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="cycle-status"]) table { font-size: 12px; line-height: 16px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="cycle-status"]) :is(th, td) { padding: 4px 3px; border: 0; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="cycle-status"]) th { height: 24px; font-size: 10px; line-height: 16px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="cycle-status"]) td { height: 26px; }
+body:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="cycle-status"]) tbody tr:nth-child(even) { background: #ffffff06; }
+body:is([data-overlay="results"], [data-overlay="podium"]) :is(th, td):first-child { width: 22px; }
+body:is([data-overlay="results"], [data-overlay="podium"]) th:not(:first-child):not(:nth-child(2)) { width: 44px; }
+body:is([data-overlay="results"], [data-overlay="podium"]) th[data-show="br"]:nth-child(3) { width: 30px; }
+body:is([data-overlay="results"], [data-overlay="podium"]) th[data-show="br"]:nth-child(4) { width: 48px; }
+body:is([data-overlay="results"], [data-overlay="podium"]) .rank-icon { width: 14px; height: 14px; }
+body:is([data-overlay="results"], [data-overlay="cycle-status"]) .results-viewport { max-height: calc(var(--visible-rows, 6) * 26px + 24px); }
+body[data-overlay="points"] .totals { gap: 12px; }
+body[data-overlay="points"] .metric { padding-top: 6px; }
+body[data-overlay="points"] .metric small { font-size: 10px; line-height: 14px; }
+body[data-overlay="points"] .metric strong { margin-top: 2px; font-size: 22px; line-height: 28px; }
+body[data-overlay="points"] .foot { margin-top: 8px; font-size: 10px; line-height: 14px; }
 body[data-overlay="cycle-status"] .card { display: flex; flex-direction: column; }
-body[data-overlay="cycle-status"] .heading { gap: 14px; }
-body[data-overlay="cycle-status"] .heading h1 { font-size: 32px; line-height: 40px; }
-body[data-overlay="cycle-status"] .heading .subtitle { font-size: 18px; line-height: 24px; }
-body[data-overlay="cycle-status"] .heading .icon { width: 36px; height: 36px; }
-body[data-overlay="cycle-status"] .heading .brand { font-size: 18px; }
-body[data-overlay="cycle-status"] table { font-size: 32px; line-height: 32px; }
-body[data-overlay="cycle-status"] :is(th, td) { text-align: center; padding: 7px 4px; }
-body[data-overlay="cycle-status"] td { height: 60px; padding-top: 12px; padding-bottom: 12px; }
-body[data-overlay="cycle-status"] .results-viewport { max-height: calc(var(--visible-rows, 20) * 60px + 44px); }
-body[data-overlay="cycle-status"] :is(th, td):first-child { width: 46px; color: var(--muted); }
+body[data-overlay="cycle-status"] :is(th, td) { text-align: center; }
+body[data-overlay="cycle-status"] :is(th, td):first-child { width: 20px; color: var(--muted); }
 body[data-overlay="cycle-status"] :is(th, td):nth-child(2) { text-align: left; }
-body[data-overlay="cycle-status"] th:not(:first-child):not(:nth-child(2)) { width: 56px; }
-body[data-overlay="cycle-status"] th:nth-child(3) { width: 78px; }
-body[data-overlay="cycle-status"] th { height: 44px; font-size: 22px; line-height: 28px; }
+body[data-overlay="cycle-status"] th:nth-child(n+4) { width: 22px; }
+body[data-overlay="cycle-status"] th:nth-child(3) { width: 38px; }
+body[data-overlay="cycle-status"] th:last-child { width: 24px; }
 body[data-overlay="cycle-status"] .cycle-total { color: var(--gold); font-weight: 700; }
 body[data-overlay="cycle-status"] td.ready { color: var(--teal); background: #00efaa18; font-weight: 700; }
 body[data-overlay="cycle-status"] .cycle-left { color: var(--muted); font-weight: 400; }
+/* Saved colors and opacity still take precedence over the compact default surface. */
+body.overlay-customized:is([data-overlay="results"], [data-overlay="podium"], [data-overlay="points"], [data-overlay="cycle-status"]) .card {
+  background: color-mix(in srgb, var(--overlay-background) calc(var(--overlay-opacity) * 100%), transparent);
+}
+
+body[data-overlay="cycle-status"] :is(th, td):not(:nth-child(2)) { padding-inline: 2px; font-variant-numeric: tabular-nums; }
+body[data-overlay="cycle-status"] td:not(:nth-child(2)) { font-size: 11px; }

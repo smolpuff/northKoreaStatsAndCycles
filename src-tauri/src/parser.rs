@@ -430,6 +430,7 @@ mod tests {
         assert_eq!(game.map_name.as_deref(), Some("Grasslands"));
         assert_eq!(game.player_count, 20);
         assert_eq!(game.results[0].username, "Qaixagdi3");
+        assert!(game.results.iter().all(|player| player.season_points_earned == 0));
         assert_eq!(game.results[0].finish_time, Some(259.260529));
         assert_eq!(
             game.results[0]
@@ -440,6 +441,16 @@ mod tests {
         );
         assert!(!game.has_world_record);
         assert_eq!(parse_file(&results).unwrap().id, game.id);
+        // Earned points belong to the match; cumulative season totals do not.
+        // Blank simulation fields stay zero.
+        let scored_csv = include_str!("../tests/fixtures/LastSeasonRoyale.csv")
+            .replace(",false,2,89,,,,", ",false,2,89,42,1042,3,20");
+        fs::write(&results, scored_csv).unwrap();
+        let scored = parse_file(&results).unwrap();
+        assert_eq!(scored.results[0].season_points_earned, 42);
+        assert_eq!(scored.results[0].season_points_total, Some(1042));
+        assert_eq!(scored.results.iter().map(|player| player.season_points_earned).sum::<i64>(), 42);
+        assert_eq!(scored.id, game.id);
         assert_ne!(
             fingerprint(
                 &game.results,

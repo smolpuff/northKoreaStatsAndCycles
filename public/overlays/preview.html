@@ -10,14 +10,16 @@
     h1 { margin: 0 0 8px; } p { color: #b8c4e8; }
     button { color: #f5f5ff; background: #111c32; border: 1px solid #384575; border-radius: 5px; padding: 10px 16px; cursor: pointer; }
     button.active { background: #ff0081; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr)); gap: 20px; margin-top: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-top: 24px; }
     section { min-width: 0; }
     h2 { margin: 0; font-size: 17px; }
     iframe { width: 100%; height: 480px; border: 0; background: repeating-conic-gradient(#182238 0% 25%, #111a2b 0% 50%) 0 / 24px 24px; }
-    #results { height: 413px; }
-    iframe[src^="cycle-status"] { width: 1200px; height: 1361px; }
-    iframe[src^="results"], iframe[src^="points"], iframe[src^="podium"] { width: 360px; max-width: 100%; }
-    @media (max-width: 650px) { body { padding: 12px; } .grid { grid-template-columns: 600px; } }
+    #results { height: 246px; }
+    iframe[src^="cycle-status"] { width: 440px; height: 350px; }
+    iframe[src^="results"], iframe[src^="points"], iframe[src^="podium"] { width: 320px; max-width: 100%; }
+    iframe[src^="podium"] { height: 168px; }
+    iframe[src^="points"] { height: 146px; }
+    @media (max-width: 650px) { body { padding: 12px; } .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>

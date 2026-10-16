@@ -8,7 +8,7 @@ export function sidebarArtwork(name: string, id: string): string {
   const aliases: Record<string, string> = {
     home: "house", overview: "ranking-star", stats: "ranking-star",
     racecycles: "repeat", history: "clock-rotate-left", overlays: "layer-group",
-    twitch: "twitch", logs: "file-lines", settings: "gear",
+    lumia: "layer-group", twitch: "twitch", logs: "file-lines", settings: "gear",
   };
   const shape = navigationShapes[aliases[name] ?? "house"];
   let viewBox = shape.viewBox;
@@ -21,6 +21,20 @@ export function sidebarArtwork(name: string, id: string): string {
   const rect = (x: number, y: number, width: number, height: number) =>
     `<rect x="${x}" y="${y}" width="${width}" height="${height}"/>`;
   switch (name) {
+    case "discord":
+      viewBox = "0 0 256 256";
+      artwork = path("M58 48c22-10 42-14 58-15l6 13h12l6-13c16 1 36 5 58 15 28 40 40 82 42 130-24 21-46 30-68 35l-13-20c10-3 19-7 27-12-37 15-79 15-116 0 8 5 17 9 27 12l-13 20c-22-5-44-14-68-35 2-48 14-90 42-130Z", "primary") +
+        path("M140 33c16 1 36 5 58 15 28 40 40 82 42 130-24 21-46 30-68 35l-13-20c10-3 19-7 27-12-19 8-38 11-58 11V46h6Z", "cool") +
+        path("M83 106a17 21 0 1 0 0 42 17 21 0 1 0 0-42Zm90 0a17 21 0 1 0 0 42 17 21 0 1 0 0-42Z", "secondary");
+      break;
+    case "lumia":
+      // Broad bulb facets stay legible at sidebar size; use the same gradients as the other icons.
+      viewBox = "0 0 256 256";
+      artwork = path("M128 12C77 12 40 48 40 96c0 33 18 55 36 77 9 11 14 20 15 31h74c1-11 6-20 15-31 18-22 36-44 36-77 0-48-37-84-88-84Z", "primary") +
+        path("M128 12c51 0 88 36 88 84 0 33-18 55-36 77-9 11-14 20-15 31h-37v-47c28-27 43-44 43-65 0-29-16-52-43-80Z", "secondary") +
+        path("M91 210h74v12H91Zm8 18h58v5c0 12-13 19-29 19s-29-7-29-19Z", "cool") +
+        path("M128 55c-24 0-42 17-42 40 0 17 8 31 20 31 14 0 22-15 22-33a8 8 0 0 0-16 0c0 14-4 17-6 17-3 0-4-9-4-15 0-14 10-24 26-24s26 10 26 25c0 15-13 31-29 49-13 16-24 31-26 45h17c2-10 10-22 22-35 18-21 32-39 32-59 0-24-17-41-42-41Z", "bright");
+      break;
     case "twitch":
       artwork += part(rect(225, 90, 185, 130), "bright", "eyes") +
         part('<path d="M24 0H140V421H24Z"/>', "primary", "side");

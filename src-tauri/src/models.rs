@@ -54,6 +54,8 @@ impl Default for StreamerBotActions {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StreamerBotConfig {
+    #[serde(default = "legacy_streamer_enabled")]
+    pub enabled: bool,
     pub host: String,
     pub port: u16,
     pub actions: StreamerBotActions,
@@ -62,9 +64,13 @@ pub struct StreamerBotConfig {
 }
 
 
+// Earlier versions implicitly enabled Streamer.bot. Preserve saved setups on upgrade.
+fn legacy_streamer_enabled() -> bool { true }
+
 impl Default for StreamerBotConfig {
     fn default() -> Self {
         Self {
+            enabled: false,
             host: "127.0.0.1".into(),
             port: 7474,
             actions: StreamerBotActions::default(),
@@ -91,6 +97,65 @@ pub struct StreamerBotEvents {
 impl Default for StreamerBotEvents {
     fn default() -> Self {
         Self { race_complete: false, world_record: true, cycle_complete: false, mission_promotion: false }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LumiaConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub actions: StreamerBotActions,
+    pub events: StreamerBotEvents,
+}
+impl Default for LumiaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false, port: 39231,
+            actions: StreamerBotActions {
+                game_complete: "marbles-game-complete".into(), world_record: "marbles-world-record".into(),
+                cycle_complete: "marbles-cycle-complete".into(), mission_promotion: "marbles-mission-promotion".into(),
+            },
+            events: StreamerBotEvents { world_record: false, ..StreamerBotEvents::default() },
+        }
+    }
+}
+impl LumiaConfig {
+    pub fn event_config(&self) -> StreamerBotConfig {
+        StreamerBotConfig { enabled: self.enabled, host: "127.0.0.1".into(), port: self.port, actions: self.actions.clone(), events: self.events.clone() }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordEvent {
+    pub enabled: bool,
+    pub target: String,
+    pub message_template: String,
+    pub placement_template: String,
+    pub placement_separator: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DiscordConfig {
+    pub enabled: bool,
+    pub targets: Vec<String>,
+    pub events: std::collections::BTreeMap<String, DiscordEvent>,
+}
+
+impl Default for DiscordConfig {
+    fn default() -> Self {
+        let events = ["race", "battleRoyale", "cycleComplete", "worldRecord"].into_iter().map(|kind| {
+            let message = match kind {
+                "cycleComplete" => "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
+                "worldRecord" => "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!",
+                _ => "🏁 {race} results: {placements}",
+            };
+            (kind.into(), DiscordEvent { enabled: false, target: "marbles-results".into(), message_template: message.into(),
+                placement_template: "{place} {player} +{points}pts".into(), placement_separator: " | ".into() })
+        }).collect();
+        Self { enabled: false, targets: vec!["marbles-results".into()], events }
     }
 }
 
@@ -132,7 +197,7 @@ pub fn default_promotion_interval() -> u64 { 60 }
 pub fn default_promotion_enabled() -> bool { false }
 
 pub fn default_promotion_message() -> String {
-    "Doing missions? Try Korea's Mission Manager! Automate your entire MoS flow with 1 click. Never pay for resets again.  Full self-custody with build-in burner wallet. Windows, Mac & Linux. You dont need to buy my love.  Get it at https://www.missions.lol".into()
+    "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 https://www.missions.lol".into()
 }
 
 impl Default for TwitchConfig {
@@ -179,6 +244,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub streamer_bot: StreamerBotConfig,
     #[serde(default)]
+    pub lumia: LumiaConfig,
+    #[serde(default)]
+    pub discord: DiscordConfig,
+    #[serde(default)]
     pub twitch: TwitchConfig,
 }
 
@@ -196,6 +265,8 @@ impl AppConfig {
                 auto_start_cycles: false,
             },
             streamer_bot: StreamerBotConfig::default(),
+            lumia: LumiaConfig::default(),
+            discord: DiscordConfig::default(),
             twitch: TwitchConfig::default(),
         }
     }
@@ -312,6 +383,10 @@ pub struct AppSnapshot {
     pub latest_result: Option<GameResult>,
     pub streamer_bot_status: String,
     pub streamer_bot_message: Option<String>,
+    pub lumia_status: String,
+    pub lumia_message: Option<String>,
+    pub discord_status: String,
+    pub discord_message: Option<String>,
     pub twitch_status: String,
     pub twitch_message: Option<String>,
     pub twitch_username: Option<String>,

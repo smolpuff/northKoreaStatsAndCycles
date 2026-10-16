@@ -159,7 +159,8 @@ fn refresh_customizations(directory: &Path) -> Result<(), String> {
 }
 pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -> Result<OverlayOptions, String> {
     if !known_overlay(kind) { return Err("Unknown overlay".into()); }
-    if !(280..=3840).contains(&options.width) || (!matches!(kind, "results" | "cycle-status") && !(180..=2160).contains(&options.height)) || options.opacity > 100 {
+    let minimum_height = if matches!(kind, "world-record" | "cycle-complete") { 180 } else { 100 };
+    if !(280..=3840).contains(&options.width) || (!matches!(kind, "results" | "cycle-status") && !(minimum_height..=2160).contains(&options.height)) || options.opacity > 100 {
         return Err("Check the width, height and opacity limits".into());
     }
     if options.header_text.chars().count() > 100 || !(1..=25).contains(&options.visible_rows) || !(5..=100).contains(&options.scroll_pixels_per_second) {
@@ -174,10 +175,8 @@ pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -
         }
     }
     if matches!(kind, "results" | "cycle-status") {
-        let header_height = if kind == "cycle-status" {
-            if options.header_visible { 192 } else { 114 }
-        } else if options.header_visible { 161 } else { 106 };
-        options.height = options.visible_rows * (if kind == "cycle-status" { 60 } else { 42 }) + header_height;
+        let header_height = if options.header_visible { 90 } else { 50 };
+        options.height = options.visible_rows * 26 + header_height;
     }
     let mut settings = customizations(directory)?;
     settings.insert(kind.to_string(), options.clone());
