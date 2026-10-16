@@ -2873,7 +2873,12 @@ mod pipeline_tests {
         assert_eq!(session.iter().map(game_points_earned).sum::<i64>(), 11);
         assert_eq!(corrected.total_battle_royale_count, 1);
         assert!(!stats_new);
-        let (cycles_only, _, _) = prepare_race_commit(&RaceState::default(), &game, false, true, "cycles", ReadReason::Manual).unwrap();
+        // A normal BR does not award cycle placements; a Race-only commit must
+        // still leave season points untouched when RaceStats is disabled.
+        assert!(prepare_race_commit(&RaceState::default(), &game, false, true, "br-cycles", ReadReason::Manual).is_none());
+        let mut cycle_game = game.clone();
+        cycle_game.game_type = GameType::Race;
+        let (cycles_only, _, _) = prepare_race_commit(&RaceState::default(), &cycle_game, false, true, "cycles", ReadReason::Manual).unwrap();
         assert_eq!(cycles_only.season_points_earned, 0);
     }
 
