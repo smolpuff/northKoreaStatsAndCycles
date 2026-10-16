@@ -1,13 +1,14 @@
 {
-  "version": "0.2.6",
+  "version": "0.2.7",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Added a sortable Wins column to the main RaceStats results table.",
-    "Restored podium row colors in alternate themes and aligned result headers with their values.",
-    "Simplified player history cards by showing the name once with its icon in the heading.",
-    "Show sidebar tooltips only when collapsed.",
-    "Turn off Mission Manager chat promotion by default while preserving saved choices.",
-    "Use muted text for the Cycles overlay Left count so completed cycles stand out.",
-    "Make Reprocess independent for RaceStats and Cycles and remove it from the dashboard."
+    "Compact Results, Podium and Points overlays with Race/BR icons. Cycles defaults to 440 x 350 with ten visible players and slower 8 px/s scrolling; celebrations stay full screen.",
+    "Add optional Lumia Stream automation through its direct local API for match completion, world records, cycle completion and timed Mission Manager promotion, with secure token storage, tests and illustrated help.",
+    "Add optional Discord channel webhooks for Race/BR results, cycle completions and world records, with independent targets, customizable Twitch-style messages, green/gold embeds, previews, secure credentials and setup guides. Tilt is not included.",
+    "Add master switches and enabled-only sidebar statuses for integrations. Discord automatically checks service reachability; its full-width webhook table has individual tests and readable feedback.",
+    "Add collapsible Merbz and Integrations sidebar groups, smooth switches across the app, and consistent connection controls, event layouts and single-column credential dialogs.",
+    "Keep BR earned-point totals consistent with the CSV, including winner points and zero-point simulations.",
+    "Update Mission Manager promotion wording and add standard Unicode emojis.",
+    "Fix Lumia request compatibility and Discord response handling; run the full backend regression suite before publishing."
   ]
 }
