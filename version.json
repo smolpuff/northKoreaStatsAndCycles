@@ -1,7 +1,8 @@
 {
-  "version": "0.2.7",
+  "version": "0.2.8",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
+    "Add optional Twitch !mycycle viewer replies with total races, completed cycles, current progress and missing placements. Enable it under Twitch, then reconnect once for chat reading permission. Includes automatic reconnect, reply cooldowns and duplicate protection.",
     "Compact Results, Podium and Points overlays with Race/BR icons. Cycles defaults to 440 x 350 with ten visible players and slower 8 px/s scrolling; celebrations stay full screen.",
     "Add optional Lumia Stream automation through its direct local API for match completion, world records, cycle completion and timed Mission Manager promotion, with secure token storage, tests and illustrated help.",
     "Add optional Discord channel webhooks for Race/BR results, cycle completions and world records, with independent targets, customizable Twitch-style messages, green/gold embeds, previews, secure credentials and setup guides. Tilt is not included.",
@@ -9,6 +10,7 @@
     "Add collapsible Merbz and Integrations sidebar groups, smooth switches across the app, and consistent connection controls, event layouts and single-column credential dialogs.",
     "Keep BR earned-point totals consistent with the CSV, including winner points and zero-point simulations.",
     "Update Mission Manager promotion wording and add standard Unicode emojis.",
-    "Fix Lumia request compatibility and Discord response handling; run the full backend regression suite before publishing."
+    "Fix Lumia request compatibility and Discord response handling; run the full backend regression suite before publishing.",
+    "Simplify the README and fix stale full-suite regression fixtures. Add Windows development checks before release promotion."
   ]
 }
