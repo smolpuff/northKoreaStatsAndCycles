@@ -34,6 +34,10 @@ jobs:
       - run: npm ci
       - name: Check frontend types
         run: npx tsc --noEmit
+      - name: Validate and package Stream Deck controls
+        run: npm run streamdeck:pack
+      - name: Check Stream Deck plugin behavior
+        run: npm run streamdeck:check
       - name: Check all version files
         run: node scripts/release.mjs --check
       - name: Run all backend regression tests

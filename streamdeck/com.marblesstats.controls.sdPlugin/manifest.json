@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "com.marblesstats.controls",
+  "Name": "Marbles Stats Controls",
+  "Version": "1.0.5.0",
+  "Author": "Marbles Stats",
+  "Description": "Start and stop RaceStats and RaceCycles from your Stream Deck, with live tracker status on each key.",
+  "Category": "Marbles Stats Controls",
+  "CategoryIcon": "images/category",
+  "Icon": "images/plugin",
+  "CodePath": "bin/plugin.cjs",
+  "SDKVersion": 2,
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Software": {
+    "MinimumVersion": "7.0"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Actions": [
+    {
+      "UUID": "com.marblesstats.controls.stats",
+      "Name": "RaceStats Start / Stop",
+      "Icon": "images/stats-action",
+      "Tooltip": "Press to start or stop RaceStats. The key shows the app's actual tracker state. Keep Marbles Stats open.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "images/stats-key",
+          "Title": "",
+          "TitleAlignment": "top",
+          "FontSize": 10,
+          "TitleColor": "#FFFFFF"
+        }
+      ]
+    },
+    {
+      "UUID": "com.marblesstats.controls.cycles",
+      "Name": "RaceCycles Start / Stop",
+      "Icon": "images/cycles-action",
+      "Tooltip": "Press to start or stop RaceCycles. The key shows the app's actual tracker state. Keep Marbles Stats open.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "images/cycles-key",
+          "Title": "",
+          "TitleAlignment": "top",
+          "FontSize": 10,
+          "TitleColor": "#FFFFFF"
+        }
+      ]
+    }
+  ]
+}

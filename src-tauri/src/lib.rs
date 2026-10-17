@@ -14,6 +14,7 @@ mod twitch;
 mod twitch_oauth;
 mod twitch_chat;
 mod updater;
+mod streamdeck;
 
 use chrono::Utc;
 use models::*;
@@ -46,6 +47,7 @@ struct Runtime {
 }
 
 type SharedRuntime = Arc<Mutex<Runtime>>;
+static TRACKING_COMMAND_LOCK: Mutex<()> = Mutex::new(());
 
 fn default_csv_path() -> String {
     std::env::var_os("LOCALAPPDATA")
@@ -1821,6 +1823,7 @@ fn set_tracking_enabled_inner(
     kind: String,
     enabled: bool,
 ) -> Result<AppSnapshot, String> {
+    let _command_guard = TRACKING_COMMAND_LOCK.lock().map_err(|_| "Tracker controls unavailable")?;
     if kind != "stats" && kind != "cycles" { return Err("Unknown tracking page".into()); }
     let previous = {
         let mut rt = runtime.lock().map_err(|_| "Application state unavailable")?;
@@ -2241,6 +2244,9 @@ pub fn run() {
                 }
             }
             app.manage(runtime.clone());
+            if let Err(error) = streamdeck::start(&runtime, app.handle()) {
+                log(&runtime, app.handle(), "warning", format!("[Stream Deck] Controls unavailable: {error}"));
+            }
             emit_snapshot(&runtime, app.handle());
             start_connection_checks(&runtime, app.handle());
             start_lumia_checks(&runtime, app.handle());
@@ -2250,6 +2256,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            streamdeck::install_streamdeck_plugin,
+            streamdeck::install_dropgate_plugin,
+            streamdeck::get_streamdeck_install_status,
             check_app_updates,
             install_app_update,
             cancel_app_update,

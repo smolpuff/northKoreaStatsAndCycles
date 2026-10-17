@@ -5,6 +5,7 @@ import { icons } from "./icons";
 import { sidebarArtwork } from "./sidebar-icons";
 import { discordPage } from "./discord-view";
 import { lumiaPage } from "./lumia-view";
+import { streamDeckPage } from "./streamdeck-view";
 import { feedbackButton } from "./button-feedback";
 import { overlaysPage } from "./overlay-view";
 import type { Config, GameResult, Snapshot } from "./types";
@@ -1290,6 +1291,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
         ${navItem("streamer", currentPage, "Streamer.bot")}
         ${navItem("lumia", currentPage, "Lumia Stream")}
         ${navItem("discord", currentPage, "Discord")}
+        ${navItem("streamdeck", currentPage, "Stream Deck")}
         ${navItem("overlays", currentPage, "Overlays")}
         ${navItem("settings", currentPage, "Settings")}
         </div>
@@ -1364,6 +1366,8 @@ export function renderApplication(
                   )
                 : currentPage === "discord"
                   ? discordPage(state)
+                : currentPage === "streamdeck"
+                  ? streamDeckPage()
                 : currentPage === "lumia"
                   ? lumiaPage(state)
                 : currentPage === "streamer" || currentPage === "twitch"

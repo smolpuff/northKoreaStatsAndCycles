@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { captureSwitchFrames, restoreSwitchFrames } from "./switch-motion";
 import { installSidebarGroups } from "./sidebar-groups";
+import { refreshStreamDeckInstallStatus } from "./streamdeck-install-status";
 import { listen } from "@tauri-apps/api/event";
 import type { Config, LogEntry, Snapshot } from "./types";
 import { openMarbleCycleImport } from "./marble-cycle-import";
@@ -372,7 +373,14 @@ function renderMainWindow(): void {
   document.querySelector("[data-import-marble-cycle]")?.addEventListener("click", () => {
     openMarbleCycleImport(state, imported => { state = imported; render(); });
   });
+  document.querySelector("[data-install-streamdeck-plugin]")?.addEventListener("click", () => {
+    void runButtonAction("streamdeck-controls-install", () => invoke("install_streamdeck_plugin"), "Opening...", "Installer opened");
+  });
+  document.querySelector("[data-install-dropgate-plugin]")?.addEventListener("click", () => {
+    void runButtonAction("streamdeck-dropgate-install", () => invoke("install_dropgate_plugin"), "Opening...", "Installer opened");
+  });
   applyButtonFeedback();
+  void refreshStreamDeckInstallStatus();
 
   document.querySelectorAll<HTMLButtonElement>("[data-results-sort]").forEach(button => {
     button.addEventListener("click", () => {

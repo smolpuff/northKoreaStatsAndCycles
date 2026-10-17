@@ -21,6 +21,12 @@ export function sidebarArtwork(name: string, id: string): string {
   const rect = (x: number, y: number, width: number, height: number) =>
     `<rect x="${x}" y="${y}" width="${width}" height="${height}"/>`;
   switch (name) {
+    case "streamdeck":
+      viewBox = "0 0 256 256";
+      artwork = path("M32 32h192a16 16 0 0 1 16 16v144a16 16 0 0 1-16 16H32a16 16 0 0 1-16-16V48a16 16 0 0 1 16-16Z", "secondary") +
+        path("M48 64h32v32H48Zm64 0h32v32h-32Zm64 0h32v32h-32ZM48 128h32v32H48Zm64 0h32v32h-32Zm64 0h32v32h-32Z", "primary") +
+        path("M80 224h96v16H80Z", "cool");
+      break;
     case "discord":
       viewBox = "0 0 256 256";
       artwork = path("M58 48c22-10 42-14 58-15l6 13h12l6-13c16 1 36 5 58 15 28 40 40 82 42 130-24 21-46 30-68 35l-13-20c10-3 19-7 27-12-37 15-79 15-116 0 8 5 17 9 27 12l-13 20c-22-5-44-14-68-35 2-48 14-90 42-130Z", "primary") +

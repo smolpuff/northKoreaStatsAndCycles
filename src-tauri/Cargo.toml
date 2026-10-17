@@ -29,6 +29,7 @@ tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security_Credentials",
+  "Win32_Security_Cryptography",
   "Win32_Storage_FileSystem",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",

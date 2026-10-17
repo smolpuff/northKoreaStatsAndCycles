@@ -82,6 +82,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Check Stream Deck plugin behavior
+        run: npm run streamdeck:check
+
       - name: Build Windows application
         run: npm.cmd --% run build -- --ci --target x86_64-pc-windows-msvc
 

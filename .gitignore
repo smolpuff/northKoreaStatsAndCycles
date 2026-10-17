@@ -4,6 +4,7 @@ node_modules/
 /release-assets/
 /src-tauri/target/
 /src-tauri/gen/
+/streamdeck/*.sdPlugin/bin/
 *.tsbuildinfo
 .vite/
 coverage/

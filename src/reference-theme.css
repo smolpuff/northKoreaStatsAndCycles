@@ -962,7 +962,8 @@ tbody tr.p1 td.points {
 }
 
 .action.start,
-.test-actions .twitch-connect-button {
+.test-actions .twitch-connect-button,
+.streamdeck-plugin-card .compact-button {
   background: linear-gradient(180deg, #ff006d, #ed005b);
   border-color: #ff2e8b;
   color: #fff;
@@ -1979,6 +1980,47 @@ tbody tr.p1 td.points {
   .toggle-row input[type="checkbox"]::before {
     transition: none;
   }
+}
+
+.streamdeck-page-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.streamdeck-page-layout .streamdeck-plugin-card .panel-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+
+.streamdeck-plugin-content > .twitch-layout-heading { align-self: stretch; }
+.streamdeck-plugin-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.streamdeck-plugin-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 112px;
+}
+.streamdeck-plugin-install { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-left: 44px; }
+.streamdeck-plugin-meta { color: #949aaa; font-size: 12px; font-weight: 400; }
+.streamdeck-plugin-content p { margin: 0; color: var(--reference-secondary); }
+.streamdeck-plugin-sample { display: block; max-width: 100%; height: auto; margin: 0; }
+.streamdeck-page-layout .streamdeck-plugin-card .integration-connection-controls { margin: 0; }
+.streamdeck-plugin-card .compact-button:not(:disabled):hover {
+  background: linear-gradient(180deg, #ff3388, #ec0c65);
+  border-color: #ff399d;
+}
+
+@media (max-width: 600px) {
+  .streamdeck-page-layout .streamdeck-plugin-card .panel-body { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Twitch layout only: reuse the current panels, controls, toggles and previews. */
