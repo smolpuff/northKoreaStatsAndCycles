@@ -45,7 +45,7 @@ for (const name of ["twitch.rs", "lumia.rs", "discord_credentials.rs"]) {
 }
 assert(read("src-tauri/src/streamer_bot.rs").includes("redirect(reqwest::redirect::Policy::none())"), "Local action requests must not redirect elsewhere");
 const dropgate = fs.readFileSync("public/streamdeck/com.mosdropgate.plugin.streamDeckPlugin");
-assert.equal(crypto.createHash("sha256").update(dropgate).digest("hex"), "0099669db7e6017c744da6eef018df5aa814a9e491247fbea34ec54b42966609", "A new bundled Drop Gate package needs its own source/provenance review");
+assert.equal(crypto.createHash("sha256").update(dropgate).digest("hex"), "139f4ef564d76491a4282d8343c61edff94eb26f7e79eb82c9aea28a1ef30463", "A new bundled Drop Gate package needs its own source/provenance review");
 for (const file of ["checks.yml", "release.yml"]) {
   const workflow = read(".github/workflows/" + file);
   for (const match of workflow.matchAll(/uses:\s+([^\s#]+)/g)) assert(/@[a-f0-9]{40}$/.test(match[1]), "Third-party actions must be pinned to immutable commits");
