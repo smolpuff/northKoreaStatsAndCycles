@@ -3,13 +3,8 @@ import { showAnimatedDialog } from "./dialog-motion";
 import { icons } from "./icons";
 import { renderGuideIllustration } from "./guide-illustrations";
 const events: Record<string, {title: string; example: string; fields: [string, string][]}> = {
-  missionPromotion: {
-    title: "Mission app promotion",
-    example: "{promotionMessage}",
-    fields: [["promotionMessage", "Promotion text"], ["downloadUrl", "Download link"], ["intervalMinutes", "Promotion interval"], ["isTest", "Whether this is a test"]],
-  },
   gameComplete: {
-    title: "Race complete",
+    title: "Race / BR results",
     example: "Winner: {firstplace} (+{firstplacepoints} points)",
     fields: [["firstplace", "Winner's name"], ["firstplacepoints", "Winner's earned points"],
       ["secondplace", "Second player's name"], ["secondplacepoints", "Second player's earned points"],
@@ -74,7 +69,7 @@ export function openEventVariables(kind: string, provider: "streamer" | "lumia" 
   dialog.id = "event-variables-dialog";
   dialog.className = "overlay-preview-dialog event-variables-dialog";
   dialog.setAttribute("aria-label", `${event.title} variables`);
-  const extra = kind === "missionPromotion" ? [] : kind === "gameComplete"
+  const extra = kind === "gameComplete"
     ? ["firstplace", "secondplace", "thirdplace"].flatMap(playerFields).concat([["secondplacetime", "Second player's time"], ["thirdplacetime", "Third player's time"]])
     : playerFields(kind === "worldRecord" ? "wrplayer" : "cycleplayer").concat(kind === "cycleComplete" ? [["cycleplayerpoints", "Points earned in the completing race"]] : []);
   const list = (fields: [string, string][]) => fields.map(([key, description]) => `<div><dt><code>{${key}}</code></dt><dd>${description}</dd></div>`).join("");

@@ -12,7 +12,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc, Mutex,
     },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant},
 };
 use tauri::{Emitter, Manager};
 
@@ -408,19 +408,7 @@ pub fn prepare(
             return Err(recovery_message(&previous));
         }
     }
-    let token = hex::encode(Sha256::digest(
-        format!(
-            "{}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|e| e.to_string())?
-                .as_nanos(),
-            target.display()
-        )
-        .as_bytes(),
-    ))[..32]
-        .to_owned();
+    let token = crate::secure_token::generate()?[..32].to_owned();
     let directory = target
         .parent()
         .ok_or("Missing application folder")?
@@ -501,6 +489,10 @@ pub fn prepare(
             .arg(&record.directory)
             .arg("-ParentProcessId")
             .arg(record.owner_pid.to_string())
+            .arg("-ExpectedSha256")
+            .arg(&artifact.sha256)
+            .arg("-ExpectedSize")
+            .arg(artifact.size.to_string())
             .current_dir(&record.directory)
             .stdin(Stdio::null());
         let log = File::create(record.directory.join("helper.log")).map_err(|e| e.to_string())?;

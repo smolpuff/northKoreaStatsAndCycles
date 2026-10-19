@@ -61,7 +61,6 @@ export interface DiscordEvent {
   target: string;
   messageTemplate: string;
   placementTemplate: string;
-  placementSeparator: string;
 }
 export interface DiscordConfig {
   enabled: boolean;
@@ -98,6 +97,7 @@ export interface Config {
     myCycleCommand?: boolean;
     promoteMissionApp?: boolean;
     promotionIntervalMinutes?: number;
+    promotionStartDelayMinutes?: number;
     postWorldRecords: boolean;
     worldRecordMessageTemplate: string;
     postResults: boolean;

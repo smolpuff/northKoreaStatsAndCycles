@@ -1,5 +1,7 @@
 param([Parameter(Mandatory=$true)][string]$Transaction,
-      [Parameter(Mandatory=$true)][int]$ParentProcessId)
+      [Parameter(Mandatory=$true)][int]$ParentProcessId,
+      [Parameter(Mandatory=$true)][ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedSha256,
+      [Parameter(Mandatory=$true)][ValidateRange(1,2147483648)][long]$ExpectedSize)
 $ErrorActionPreference = 'Stop'
 $record = Get-Content -LiteralPath (Join-Path $Transaction 'transaction.json') -Encoding UTF8 -Raw | ConvertFrom-Json
 $target = $record.target
@@ -9,6 +11,12 @@ $lock = Join-Path (Split-Path $target) ('.' + (Split-Path $target -Leaf) + '.upd
 $backup = Join-Path $Transaction 'backup.exe'
 $download = Join-Path $Transaction 'download.exe'
 $encoding = New-Object System.Text.UTF8Encoding($false)
+function Verify-Executable([string]$path) {
+  if ((Get-Item -LiteralPath $path).Length -ne $ExpectedSize -or
+      (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $ExpectedSha256) {
+    throw 'Update executable changed after verification; refusing to run it.'
+  }
+}
 function Write-State([string]$value) {
   [IO.File]::WriteAllText((Join-Path $Transaction 'state.next'), $value, $encoding)
   Move-Item -LiteralPath (Join-Path $Transaction 'state.next') -Destination (Join-Path $Transaction 'state') -Force
@@ -54,6 +62,7 @@ try {
   if ((Get-Content -LiteralPath (Join-Path $lock 'token') -Encoding UTF8 -Raw) -ne $token) { throw 'Update lock ownership changed.' }
   $parent = Get-Process -Id $ParentProcessId -ErrorAction Stop
   if ((Resolve-Path -LiteralPath $parent.Path).ProviderPath -ine $resolvedTarget) { throw 'The running app could not be identified; leaving it unchanged.' }
+  Verify-Executable $resolvedDownload
   Write-State 'ready'
   [IO.File]::WriteAllText((Join-Path $Transaction 'ready'), '', $encoding)
   $deadline = (Get-Date).AddSeconds(90)
@@ -68,6 +77,7 @@ try {
     if ((Get-Date) -gt $deadline) { Write-State 'exit_timeout'; Unlock; exit 1 }
     Start-Sleep -Milliseconds 200
   }
+  Verify-Executable $resolvedDownload
   Write-State 'replacing'
   try { Move-WithRetry $target $backup } catch {
     Write-State 'replace_failed'; Unlock
@@ -77,6 +87,7 @@ try {
   Write-State 'backed_up'
   try {
     Move-WithRetry $download $target
+    Verify-Executable $target
     Write-State 'opening'
     Open-App "--marbles-update-token=$token"
   } catch { Rollback; exit 1 }

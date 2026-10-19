@@ -5,6 +5,18 @@ import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
+// Regression guard for the credential-access behavior reviewed on 2026-10-17.
+// This checks our authentication code; it is not a malware detector or OS sandbox.
+for (const name of ["twitch.rs", "twitch_oauth.rs", "twitch_chat.rs", "lumia.rs", "discord_credentials.rs"]) {
+  const source = fs.readFileSync(path.join("src-tauri/src", name), "utf8").split("#[cfg(test)]")[0];
+  assert(!/CryptUnprotectData|ProtectedData|CredEnumerate|VaultEnumerate|VaultGetItem|powershell|pwsh|Command::|std::process|std::fs|fs::read/i.test(source), `${name} must not decrypt credential files, enumerate credentials or launch a shell`);
+}
+for (const [name, target] of [["twitch.rs", "MarblesStats/TwitchOAuth"], ["lumia.rs", "MarblesStats/LumiaStream"]]) {
+  const source = fs.readFileSync(path.join("src-tauri/src", name), "utf8");
+  assert(source.includes(`const CREDENTIAL_TARGET: &str = "${target}";`), `${name} must address its own fixed credential entry`);
+}
+const updateHelper = fs.readFileSync("src-tauri/src/windows-update-helper.ps1", "utf8");
+assert(!/CryptUnprotectData|ProtectedData|CredRead|CredEnumerate|VaultGetItem/i.test(updateHelper), "The updater helper must not access Windows credentials");
 const pluginPath = path.resolve("streamdeck/com.marblesstats.controls.sdPlugin/plugin.js");
 const { Controls, ACTIONS, appearance } = require(pluginPath);
 const { glyphs, palettes, keySvg } = require("../streamdeck/com.marblesstats.controls.sdPlugin/artwork.js");
@@ -76,7 +88,18 @@ class Socket {
 }
 const module = { exports: {} };
 const pluginRequire = createRequire(pluginPath);
-const mockedRequire = name => name === "ws" ? Socket : name === "node:fs" ? { readFileSync: () => JSON.stringify(discovery) } : pluginRequire(name);
+const discoveryReads = [];
+const mockedRequire = name => {
+  assert(["ws", "node:fs", "node:path", "./artwork.js"].includes(name), "Controls must not import credential access or process-launching modules");
+  if (name === "ws") return Socket;
+  if (name === "node:fs") return { readFileSync: (file, encoding) => {
+    assert.equal(file, path.join("C:/test-appdata", "com.marblesstats.app", "streamdeck-connection.json"), "Controls may read only its app connection discovery file");
+    assert.equal(encoding, "utf8");
+    discoveryReads.push(file);
+    return JSON.stringify(discovery);
+  } };
+  return pluginRequire(name);
+};
 mockedRequire.main = module;
 vm.runInNewContext(fs.readFileSync(pluginPath, "utf8"), {
   require: mockedRequire, module, Buffer, WebSocket: Socket, Date: { now: () => now },
@@ -99,4 +122,7 @@ assert.deepEqual(app.sent, [{ type: "authenticate", token: discovery.token }], "
 app.emit("message", { type: "state", state: watching }); now += 6500; timers[0]();
 assert.equal(app.readyState, 3, "A silent connection expires");
 assert(decodeURIComponent(deck.sent.filter(m => m.event === "setImage").at(-1).payload.image.split(",")[1]).includes(" offline</text>"));
+assert(discoveryReads.length >= 2, "Discovery reads were exercised during connection and reconnect");
+for (const marker of ["a".repeat(64), "b".repeat(64)]) assert(!JSON.stringify(deck.sent).includes(marker), "Local authentication must not leak to Stream Deck key settings or log messages");
+console.log("Credential boundary checks passed: fixed app-owned credential targets, no decryption/shell access in authentication, discovery-only Controls file access and no local token leakage to Stream Deck.");
 console.log("Stream Deck checks passed: live key states, independent trackers, acknowledged controls, failures, registration, authentication, reconnect and stale-connection expiry.");

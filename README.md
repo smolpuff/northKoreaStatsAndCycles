@@ -7,7 +7,7 @@ A lightweight Windows app for tracking **Marbles on Stream** results, points, an
 - Race and Battle Royale results, leaderboards, and session/season stats.
 - RaceCycles progress, completion history, and imports.
 - Compact OBS overlays and full-screen World Record/Cycle celebrations.
-- Optional Twitch chat, Streamer.bot, Lumia Stream, and Discord integration.
+- Optional Twitch chat, Streamer.bot, Lumia Stream, and Discord integration. Discord uses one shared Race / BR results event, plus Cycle complete and World record events. Discord results list only positive point earners, one player per line, with no configurable separator. Discord result headings use `🏁 Race finished | Map name results (38)` (Battle Royale for BR); cycle headings name the player, and cycle messages include their tracked total races at completion (marked at least when incomplete); result lines include points and race-only finish times. The plain footer shows the original match date/time in the computer's local time with its UTC offset.
 - Installable Stream Deck plugin with RaceStats and RaceCycles start/stop keys and live status.
 - Viewer `!mycycle` command in your Twitch channel for personal RaceCycles stats.
 - Local JSON storage, CSV exports, and in-app updates.
@@ -53,3 +53,9 @@ Development happens on `dev`; `main` is the release branch. `npm run release` ha
 ## Data and credentials
 
 Stats and settings stay on your computer as JSON files. Integration credentials are stored in Windows Credential Manager. Twitch, Discord, Streamer.bot, and Lumia Stream are configured independently.
+
+Overlay customization includes font size (75-200%). Cycle status defaults to larger text at 680 x 482 and shows next-cycle progress while preserving stacked placements. Mission app promotion is a Twitch chat setting only. Confirmed world-record holders are highlighted in app results and Results/Podium overlays. The Wins column uses Marbles' CSV season-win totals; a dash means that CSV value is unavailable.
+
+The app uses Twitch approval and stores only its own authorized tokens in Windows Credential Manager. It does not import browser or other applications' Twitch credentials. Native commands are restricted to the local main window; overlay previews use bundled scripts under a Content Security Policy. CSV exports treat formula-like names/labels as text. Update downloads are verified against repository metadata and rechecked before launch; releases are not independently publisher-signed. Run `npm run security:check` for source/configuration and mocked plugin security regressions without building or starting the app. Packaged validation remains separate.
+
+Mission App promotion has separate Start delay and Post every settings. Start delay defaults to 30 minutes (set 15 if preferred) and begins when promotion is enabled and Twitch is connected. The watcher controls do not start or reset it. App restarts, Twitch reconnections/account changes, disabling/re-enabling promotion and saved timing changes restart the delay; later posts follow the repeat interval. Test promotion sends immediately.

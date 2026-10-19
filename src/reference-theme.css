@@ -50,8 +50,8 @@ svg.phosphor-icon.spinner path { stroke: none; }
 }
 
 .sidebar nav {
-  padding: 16px 12px;
-  gap: 6px;
+  padding: 12px;
+  gap: 4px;
 }
 
 .sidebar nav>span {
@@ -62,7 +62,7 @@ svg.phosphor-icon.spinner path { stroke: none; }
 }
 
 .sidebar .nav-item {
-  height: 38px;
+  height: 34px;
   padding: 0 12px;
   gap: 12px;
   border-radius: var(--reference-radius-card);
@@ -73,8 +73,8 @@ svg.phosphor-icon.spinner path { stroke: none; }
 }
 
 .sidebar .nav-item svg {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 .sidebar .nav-item:hover:not(.active) {
@@ -1297,26 +1297,44 @@ tbody tr.p1 td.points {
   overflow-wrap: anywhere;
 }
 
-.cycle-table :is(th, td):first-child {
-  width: 42px;
-  text-align: center;
+.cycle-table :is(th, td) {
+  padding-inline: 5px;
+  white-space: nowrap;
 }
 
-.cycle-table :is(th, td):nth-child(2) {
-  width: 25%;
-  text-align: left;
+/* Reserve most of the table for stats and the ten placement columns. */
+.cycle-table {
+  table-layout: fixed;
+  min-width: 700px;
 }
+
+.cycle-table :is(th, td) { text-align: center; }
+.cycle-table :is(th, td):first-child { width: 5%; }
+.cycle-table :is(th, td):nth-child(2) { width: 22%; text-align: left; }
+.cycle-table :is(th, td):nth-child(3) { width: 8%; }
+.cycle-table :is(th, td):nth-child(4) { width: 9%; }
+.cycle-table :is(th, td):nth-child(5) { width: 8%; }
+.cycle-table :is(th, td):nth-child(n + 6) { width: 4.8%; }
 
 .cycle-table :is(th, td):nth-child(2) .cycle-sort {
   justify-content: flex-start;
 }
 
-.cycle-table :is(th, td):nth-child(3) {
-  width: 58px;
+.cycle-table .cycle-sort > span:empty {
+  display: none;
 }
 
 .cycle-table .cycle-player {
+  min-width: 0;
   max-width: none;
+}
+
+.cycle-table .cycle-player .player-history-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cycle-rank {
@@ -2140,6 +2158,8 @@ form.integration-page-layout {
 .integration-page-layout .twitch-feature-note {
   margin: 0;
   color: var(--reference-secondary);
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .integration-page-layout .twitch-settings-section .twitch-message-preview {
@@ -2323,24 +2343,25 @@ form.integration-page-layout {
   flex: none;
 }
 
-.integration-page-layout .feature-disabled .feature-content {
+/* Keep event headings and switches visible; ghost only each card's contents. */
+.integration-page-layout .feature-disabled > :not(.twitch-feature-heading),
+.integration-hook-controls:disabled [data-feature-section] > :not(.twitch-feature-heading) {
   opacity: .4;
 }
 
-.integration-page-layout .feature-disabled .twitch-feature-heading> :is(i, span) {
-  opacity: .4;
+/* Contents supply the dimming, so disabled controls inside them stay consistent. */
+.integration-page-layout .feature-disabled > :not(.twitch-feature-heading) :is(button, input, select, textarea):disabled,
+.integration-hook-controls:disabled [data-feature-section] > :not(.twitch-feature-heading) :is(button, input, select, textarea):disabled {
+  opacity: 1;
 }
 
 .integration-page-layout .feature-content {
   transition: opacity 160ms ease;
 }
 
-.integration-page-layout .feature-disabled .feature-content :disabled {
-  opacity: 1;
-}
-
-:is(input, select, textarea):disabled {
-  opacity: .45;
+/* Keep disabled controls visibly ghosted, including inside integration cards. */
+:root :is(button, input, select, textarea):disabled {
+  opacity: .4;
   cursor: not-allowed;
 }
 
@@ -2627,6 +2648,20 @@ form.integration-page-layout {
   gap: 12px;
   margin: 0;
   padding: 16px 0;
+}
+
+/* Match other panels: the panel body supplies the outer spacing. */
+.settings-page-layout .panel-body > .settings-option:first-child,
+.settings-page-layout .mission-promotion-settings > .settings-option:first-child {
+  padding-top: 0;
+}
+
+.settings-page-layout .app-update-controls {
+  padding-bottom: 0;
+}
+
+.settings-page-layout .mission-promotion-settings > .settings-option:has(+ .promotion-options:not([open])) {
+  padding-bottom: 0;
 }
 
 .settings-page-layout .settings-option+.settings-option {
@@ -3147,7 +3182,7 @@ dialog[open].dialog-closing::backdrop {
 }
 
 .integration-page-layout .streamer-action-controls .feature-content {
-  flex: 0 1 420px;
+  flex: 1 1 560px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
@@ -3478,16 +3513,6 @@ dialog[open].dialog-closing::backdrop {
 
 .twitch-message-actions button[data-twitch-save]:not(.button-success):hover {
   background: #ff1985;
-}
-
-.integration-page-layout .twitch-settings-grid .feature-disabled .feature-content {
-  opacity: 1;
-}
-
-.twitch-settings-grid .feature-disabled .feature-content>.field,
-.twitch-settings-grid .feature-disabled .twitch-message-preview,
-.twitch-settings-grid .feature-disabled .inline-action:has([data-twitch-test]) {
-  opacity: .4;
 }
 
 .integration-help-dialog {
@@ -4880,8 +4905,8 @@ dialog[open].dialog-closing::backdrop {
 }
 
 .integration-page-layout .streamer-connection-fields {
-  width: min(100%, 472px);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 100px) auto;
+  width: min(100%, 512px);
+  grid-template-columns: minmax(0, 1fr) 140px auto;
 }
 
 .results-actions>.icon-input {
@@ -5121,6 +5146,7 @@ dialog[open].dialog-closing::backdrop {
 .mission-promotion-panel .promotion-preview > p { color: #f4efff; }
 .mission-promotion-panel .promotion-preview > span { color: #c9a7ff; }
 .mission-promotion-controls > small { grid-column: 1 / -1; color: var(--reference-secondary); font-size: 12px; }
+.promotion-timing { display: grid; gap: 12px; min-width: 0; }
 .promotion-interval input { width: 100px; }
 .promotion-actions { grid-column: 1 / -1; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 600px) { .mission-promotion-controls { grid-template-columns: minmax(0, 1fr); } }
@@ -5362,8 +5388,7 @@ dialog[open].dialog-closing::backdrop {
 
 /* Race text editors stay beside the preview, with actions below the whole editor. */
 .race-message-templates { grid-column: 1; grid-row: 2; display: grid; gap: 12px; min-width: 0; }
-.race-message-templates textarea { width: 100%; resize: vertical; }
-.twitch-settings-section .race-message-templates textarea[rows="1"] { min-height: 32px; height: 32px; line-height: 16px; }
+.race-message-templates textarea { width: 100%; }
 .race-podium-templates { min-width: 0; }
 .race-podium-templates > summary { cursor: pointer; font-size: 13px; color: var(--reference-ink); }
 .race-podium-templates > p { font-size: 12px; color: var(--reference-secondary); }
@@ -5389,7 +5414,8 @@ dialog[open].dialog-closing::backdrop {
 .results-header .results-actions-group { gap: 8px; }
 .results-panel .race-context .track-item { gap: 8px; }
 .results-panel .race-context .track-item+.track-item { padding-left: 10px; }
-.results-panel .race-context .track-item:nth-child(2) { min-width: 140px; max-width: 45%; }
+.results-panel .race-context { gap: 10px; }
+.results-panel .race-context .track-item:nth-child(2) { min-width: 0; max-width: 45%; }
 .results-panel .race-context .track-item > i { width: 24px; height: 24px; }
 .results-panel .race-context .track-item small { white-space: nowrap; font-size: 11px; }
 .results-panel .race-context .track-item b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
@@ -5475,12 +5501,6 @@ dialog[open].dialog-closing::backdrop {
   padding: 0;
   min-width: 0;
 }
-.integration-hook-controls:disabled { opacity: .4; }
-.integration-hook-controls:disabled .feature-disabled .feature-content,
-.integration-hook-controls:disabled .feature-disabled .twitch-feature-heading > :is(i, span),
-.integration-hook-controls:disabled :is(input, select, textarea):disabled {
-  opacity: 1;
-}
 
 /* Automation master switches stay at the top right, including smaller windows. */
 .integration-page-layout .automation-connection-heading {
@@ -5522,25 +5542,27 @@ dialog[open].dialog-closing::backdrop {
   border-radius: var(--reference-radius-panel);
   overflow: hidden;
 }
-.discord-hook-table { width: 100%; margin: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.discord-hook-table { width: 100%; margin: 0; table-layout: auto; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .discord-hook-table :is(thead, tbody, tr, th, td) { background: transparent; }
-.discord-hook-table :is(th, td) { padding: 10px 12px; text-align: left; vertical-align: top; border: 0; }
+.discord-hook-table :is(th, td) { padding: 6px 8px; text-align: left; vertical-align: middle; border: 0; }
 .discord-hook-table th { color: inherit; font-weight: 600; }
-.discord-hook-table th:first-child { width: 35%; }
+.discord-hook-table th:first-child { width: 60%; min-width: 280px; white-space: nowrap; }
 .discord-hook-table thead th { border-bottom: 1px solid var(--reference-border); }
 .discord-hook-table tbody tr + tr td { border-top: 1px solid var(--reference-border); }
-.discord-hook-table td:first-child { overflow-wrap: anywhere; line-height: 32px; }
-.discord-hook-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.discord-hook-table td:first-child { white-space: normal; overflow-wrap: anywhere; line-height: 18px; }
+.discord-hook-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .discord-hook-actions > .inline-action { flex: 0 1 auto; }
-.discord-hook-actions .compact-button { width: 112px; min-width: 112px; height: 32px; min-height: 32px; }
-.discord-page-layout button[data-discord-test] { width: 144px; min-width: 144px; height: 32px; min-height: 32px; }
-@media (max-width: 760px) {
-  .discord-hook-table th:first-child { width: 28%; }
-  .discord-hook-table :is(th, td) { padding: 8px; }
+.discord-page-layout .integration-connection-controls button[data-discord-test] { width: 144px; min-width: 144px; height: 32px; min-height: 32px; }
+.discord-page-layout .discord-hook-actions .compact-button {
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 .discord-message-fields { grid-column: 1; display: grid; gap: 14px; min-width: 0; }
 .discord-message-fields .field { min-width: 0; }
-.discord-message-fields textarea { width: 100%; min-width: 0; resize: vertical; }
+.discord-message-fields textarea { width: 100%; min-width: 0; }
 .discord-message-content .twitch-message-preview > p { white-space: pre-wrap; }
 .discord-embed-preview {
   margin-top: 10px;
@@ -5552,7 +5574,7 @@ dialog[open].dialog-closing::backdrop {
 }
 .discord-embed-preview > b { display: block; font-size: 14px; line-height: 20px; }
 .discord-embed-preview > p { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.discord-embed-preview > small { color: #b5bac1; font-size: 11px; }
+.discord-embed-preview > small { color: #b5bac1; font-size: 11px; font-weight: 400; }
 .discord-message-content .twitch-message-preview > span > span { display: inline; }
 @media (max-width: 760px) {
   .integration-page-layout .discord-message-content > .twitch-message-actions { grid-row: 2; }
@@ -5564,7 +5586,7 @@ dialog[open].dialog-closing::backdrop {
 .guide-art-discord-connect .guide-mini-field { grid-template-columns: 56px minmax(0, 1fr); }
 
 .switch-motion-reset, .switch-motion-reset::before { transition: none !important; }
-.sidebar-group-content { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sidebar-group-content { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .sidebar-group-content[hidden] { display: none; }
 .sidebar-group-toggle { display: flex; align-items: center; gap: 6px; flex: 1; padding: 3px 0; border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; cursor: pointer; text-align: left; }
 .sidebar-group-toggle:hover { color: var(--reference-ink); }
@@ -5575,3 +5597,13 @@ dialog[open].dialog-closing::backdrop {
 .sidebar-collapsed .sidebar-group-toggle, .sidebar-collapsed .sidebar-integrations-heading { display: none; }
 @media (prefers-reduced-motion: reduce) { .sidebar-group-toggle > i { transition: none; } }
 .guide-art-discord-connect .guide-mini-field > span:first-child { flex-basis: 56px; }
+
+/* Confirmed record holders stand out in the main results and dashboard. */
+.results-panel tr.world-record-row > td, .home-page tr.world-record-row > td {
+  background: color-mix(in srgb, var(--reference-gold, #ffe024) 13%, transparent);
+  box-shadow: inset 0 1px #ffe02455, inset 0 -1px #ffe02455;
+}
+.world-record-badge { display: inline-block; margin-left: 8px; color: #ffe024; font-size: 10px; font-weight: 700; }
+
+.player > span:has(.world-record-badge) { display: flex; align-items: center; gap: 0; }
+.player .world-record-badge { flex: none; }

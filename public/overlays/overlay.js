@@ -16,13 +16,16 @@
   let customHeading;
   function applyOptions() {
     let options = previewOptions || window.MarblesOverlayOptions?.[kind];
-    if (options && (kind === "results" || kind === "cycle-status")) options = { ...options, height: options.visibleRows * 26 + (options.headerVisible ? 90 : 50) };
+    const fontScale = Math.max(.75, Math.min(2, Number(options?.fontScale ?? (kind === "cycle-status" ? 135 : 100)) / 100));
+    if (options && (kind === "results" || kind === "cycle-status")) options = { ...options, height: Math.ceil(options.visibleRows * Math.ceil(26 * fontScale) + (options.headerVisible ? 90 : 50) * fontScale) };
     const signature = JSON.stringify(options || null) + ":" + innerWidth + ":" + innerHeight;
     if (signature === previousOptions) return;
     previousOptions = signature;
     const page = document.documentElement;
     for (const key of ["background", "opacity", "ink", "muted", "accent", "gold", "teal", "border-start", "border-end"]) page.style.removeProperty("--overlay-" + key);
     root.style.removeProperty("width"); root.style.removeProperty("height"); root.style.removeProperty("min-height"); root.style.removeProperty("transform");
+    page.style.setProperty("--overlay-font-scale", fontScale);
+    page.style.setProperty("--overlay-row-height", `${Math.ceil(26 * fontScale)}px`);
     document.body.classList.toggle("overlay-customized", !!options);
     const heading = root.querySelector(".heading") || root.querySelector(".celebration-content > h1:not(.custom-overlay-heading)");
     const title = root.querySelector(".heading h1") || heading;
@@ -279,13 +282,17 @@
     const placements = [...(data.placements || [])].sort((a,b) => a.place-b.place).map(player => Object.assign({}, player, {
       playerKey:String(player.platform || "") + ":" + String(player.username || player.name),
       winner:player.place === 1, dead:br && player.place !== 1, ordinary:player.place !== 1 && !br,
+      worldRecord: !!data.hasWorldRecord && !!data.worldRecordPlayer &&
+        [player.name, player.username].some(name => String(name || "").trim().toLowerCase() === String(data.worldRecordPlayer).trim().toLowerCase()),
     }));
     const result = Object.assign({}, data, {brand:config.title, race:br ? "Battle Royale" : "Race", br, placements, hasRecordPoints:data.wrplayerpoints != null,
       // Rows arrive in backend standings order; only derive presentation fields here.
       cycleStandings:(data.cycleStandings || []).map((player, index) => {
-        const positions = new Set(player.currentCyclePositions || []);
+        const counts = Array.from({length:10}, (_, i) => Number(player.placementCounts?.[i]) || 0);
+        const completed = Math.min(...counts);
+        const positions = new Set(counts.flatMap((count, i) => count > completed ? [i + 1] : []));
         const missing = Array.from({length:10}, (_, i) => i + 1).filter(position => !positions.has(position));
-        const row = Object.assign({}, player, {rank:index + 1, left:missing.length, missingPositions:missing.join(", ") || "None"});
+        const row = Object.assign({}, player, {rank:index + 1, cycleProgress:positions.size, progress:`${positions.size}/10`, left:missing.length, missingPositions:missing.join(", ") || "None"});
         for (let position = 1; position <= 10; position++) row["position" + position] = {count:player.placementCounts?.[position - 1] ?? 0, ready:positions.has(position)};
         return row;
       }),

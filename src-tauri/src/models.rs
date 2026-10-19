@@ -81,7 +81,7 @@ impl Default for StreamerBotConfig {
 
 impl StreamerBotConfig {
     pub fn has_enabled_events(&self) -> bool {
-        self.events.race_complete || self.events.world_record || self.events.cycle_complete || self.events.mission_promotion
+        self.events.race_complete || self.events.world_record || self.events.cycle_complete
     }
 }
 
@@ -133,7 +133,6 @@ pub struct DiscordEvent {
     pub target: String,
     pub message_template: String,
     pub placement_template: String,
-    pub placement_separator: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -148,12 +147,12 @@ impl Default for DiscordConfig {
     fn default() -> Self {
         let events = ["race", "battleRoyale", "cycleComplete", "worldRecord"].into_iter().map(|kind| {
             let message = match kind {
-                "cycleComplete" => "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
-                "worldRecord" => "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!",
-                _ => "🏁 {race} results: {placements}",
+                "cycleComplete" => "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉 Total races: {totalRaces}.",
+                "worldRecord" => "🎉 New World Record on {mapName}!\n{wrplayer} +{wrplayerpoints} points in {wrrecordtime}s!",
+                _ => "{placements}",
             };
             (kind.into(), DiscordEvent { enabled: false, target: "marbles-results".into(), message_template: message.into(),
-                placement_template: "{place} {player} +{points}pts".into(), placement_separator: " | ".into() })
+                placement_template: "{place} {player} +{points}pts{timeSuffix}".into() })
         }).collect();
         Self { enabled: false, targets: vec!["marbles-results".into()], events }
     }
@@ -168,6 +167,8 @@ pub struct TwitchConfig {
     pub promote_mission_app: bool,
     #[serde(default = "default_promotion_interval")]
     pub promotion_interval_minutes: u64,
+    #[serde(default = "default_promotion_start_delay")]
+    pub promotion_start_delay_minutes: u64,
     #[serde(default)]
     pub post_world_records: bool,
     #[serde(default = "default_world_record_message")]
@@ -196,10 +197,11 @@ pub fn default_world_record_message() -> String {
 pub fn default_race_separator() -> String { " | ".into() }
 
 pub fn default_promotion_interval() -> u64 { 60 }
+pub fn default_promotion_start_delay() -> u64 { 30 }
 pub fn default_promotion_enabled() -> bool { false }
 
 pub fn default_promotion_message() -> String {
-    "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 https://www.missions.lol".into()
+    "🚀 Korea's MoS Missions App - *Full Missions Automation. 100% free. Resets, rentals, cooldowns, mission mode, auto mode, built-in burner wallet for txs. Win, Mac, Linux 🔗 https://www.missions.lol".into()
 }
 
 impl Default for TwitchConfig {
@@ -208,6 +210,7 @@ impl Default for TwitchConfig {
             my_cycle_command: false,
             promote_mission_app: default_promotion_enabled(),
             promotion_interval_minutes: default_promotion_interval(),
+            promotion_start_delay_minutes: default_promotion_start_delay(),
             post_world_records: false,
             world_record_message_template: default_world_record_message(),
             post_results: true,

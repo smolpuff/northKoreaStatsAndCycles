@@ -77,6 +77,7 @@ let state: Snapshot = {
       myCycleCommand: false,
       promoteMissionApp: false,
       promotionIntervalMinutes: 60,
+      promotionStartDelayMinutes: 30,
       postWorldRecords: false,
       worldRecordMessageTemplate: defaultWorldRecordMessage,
       postResults: true,
@@ -655,7 +656,7 @@ function readSettingsForm(): Config {
       host: streamerHost?.value.trim() || state.config.streamerBot.host,
       port: Number(streamerPort?.value) || state.config.streamerBot.port,
       events: {
-        missionPromotion: document.querySelector<HTMLInputElement>("#streamer-promotion-enabled")?.checked ?? state.config.streamerBot.events?.missionPromotion ?? false,
+        missionPromotion: false,
         cycleComplete: document.querySelector<HTMLInputElement>("#streamer-cycle-enabled")?.checked ?? state.config.streamerBot.events?.cycleComplete ?? false,
         raceComplete: document.querySelector<HTMLInputElement>("#streamer-race-enabled")?.checked ?? state.config.streamerBot.events?.raceComplete ?? false,
         worldRecord: document.querySelector<HTMLInputElement>("#streamer-record-enabled")?.checked ?? state.config.streamerBot.events?.worldRecord ?? true,
@@ -676,6 +677,7 @@ function readSettingsForm(): Config {
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
       promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? false,
       promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),
+      promotionStartDelayMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-start-delay")?.value ?? state.config.twitch.promotionStartDelayMinutes ?? 30)) || 30)),
       worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
       postCycleResults: document.querySelector<HTMLInputElement>("#twitch-post-cycles")?.checked ?? state.config.twitch.postCycleResults,
 
@@ -749,15 +751,12 @@ function bindSettingsForm(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-event-variables]").forEach(button => button.addEventListener("click", () => openEventVariables(button.dataset.eventVariables!)));
   const form = document.querySelector<HTMLFormElement>("#settings-form")!;
   form.querySelectorAll<HTMLElement>(".twitch-settings-section").forEach(card => {
-    const expand = () => { if (card.closest("[inert]")) return; const customization=card.querySelector<HTMLDetailsElement>(".twitch-message-customization"); if(customization)customization.open=true; };
     card.addEventListener("click", event => {
-      const target=event.target as Element;
-      if(target.closest("summary,button,a") || window.getSelection()?.type === "Range") return;
-      expand();
-    });
-    card.addEventListener("focusin", event => {
-      if ((event.target as Element).closest("summary")) return;
-      expand();
+      const target = event.target as Element;
+      if (card.closest("[inert]") || !target.closest(".twitch-feature-heading")) return;
+      if (target.closest('input,button,a') || window.getSelection()?.type === "Range") return;
+      const customization = card.querySelector<HTMLDetailsElement>(".twitch-message-customization");
+      if (customization) customization.open = !customization.open;
     });
   });
   document.querySelectorAll<HTMLElement>("[data-customized-for]").forEach(status => {
@@ -862,9 +861,8 @@ function bindSettingsForm(): void {
     const refresh=() => {
       const event=readSettingsForm().discord.events[kind];
       const preview=document.querySelector<HTMLElement>(`[data-discord-preview="${kind}"]`);if(preview)preview.textContent=discordPreview(kind,event);
-      const target=document.querySelector<HTMLElement>(`[data-discord-preview-target="${kind}"]`);if(target)target.textContent=event.target;
       const customized=document.querySelector<HTMLElement>(`[data-discord-customized="${kind}"]`);
-      const defaults=defaultDiscordConfig().events[kind];if(customized)customized.hidden=event.messageTemplate===defaults.messageTemplate&&event.placementTemplate===defaults.placementTemplate&&event.placementSeparator===defaults.placementSeparator;
+      const defaults=defaultDiscordConfig().events[kind];if(customized)customized.hidden=event.messageTemplate===defaults.messageTemplate&&event.placementTemplate===defaults.placementTemplate;
     };
     document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`[id^="discord-${kind}-"]`).forEach(input => input.addEventListener("input",refresh));
   }

@@ -26,6 +26,7 @@ export const commonHelpFields: HelpFieldGroup = {
     ["cycleSeasonName", "Your RaceCycles season label."],
     ["cyclePlayers", "Unique tracked RaceCycles players."],
     ["cycleRaces", "Matches counted by RaceCycles since its reset (including BR when processed by that pipeline)."],
+    ["worldRecordPlayer", "Confirmed record holder name; null before a record is confirmed. Used to mark the holder in results overlays."],
     ["hasWorldRecord", "Confirmed new-record flag. Changed custom-map metadata must match the completed match before this becomes true."],
     ["gameId", "Stable match identifier."],
     ["snapshotId", "Source CSV snapshot identifier; can be null."],
@@ -80,13 +81,6 @@ export const cycleHelpFields: HelpFieldGroup = {
   ],
 };
 
-export const promotionHelpFields: HelpFieldGroup = {
-  title: "Mission app promotion",
-  availability: "Promotion hooks for Streamer.bot and Lumia only. Uses the Settings interval without requiring this app's Twitch login. Match/player fields are not sent by promotion.",
-  fields: [["promotionMessage", "Promotion text."], ["downloadUrl", "Mission app download link."],
-    ["intervalMinutes", "Configured posting interval."], ["eventType", "missionPromotion."], ["isTest", "True for a test, false for scheduled promotion."]],
-};
-
 export const structuredHelpFields: HelpFieldGroup = {
   title: "Structured data",
   availability: "Arrays/objects require a repeater or custom processing; they are not simple text values. Neither automation provider receives dotted array entries as individually named arguments.",
@@ -126,8 +120,8 @@ export const cycleLeaderHelpFields: HelpFieldGroup = {
   availability: "Inside data-repeat=cycleStandings (Cycle status overlay), data-repeat=cycleLeaders or structured cycle data.",
   fields: [["playerKey", "Tracked player identity."], ["playerName", "Player name."], ["cycles", "Completed cycles."],
     ["placementCounts", "Array of counts for places 1–10; use a dotted index or custom processing."],
-    ["currentCyclePositions", "Distinct finishing positions 1–10 collected in the current progress set. After all ten are collected, the player's next match starts a fresh set; places above 10 add no slot."],
-    ["cycleProgress", "Current occupied-slot count, 0–10. Repeated positions count once. The completed 10/10 set restarts on that player's next match."],
+    ["currentCyclePositions", "Positions 1-10 whose placement counts exceed the completed cycle count. Stacked placements carry forward toward the next cycle; positions above 10 add no slot."],
+    ["cycleProgress", "Number of distinct placements toward the next cycle, 0-9. Each completed set increases cycles; excess placements carry forward."],
     ["cycleRaceCounts", "One-entry array containing the matches entered in the current position set, including repeats; unknown legacy duration is null."]],
 };
 
@@ -139,6 +133,8 @@ export const overlayDerivedHelpFields: HelpFieldGroup = {
     ["playerKey", "Player-row key formed from platform and username/name."], ["winner", "Player row is place 1."],
     ["dead", "Player row is BR and not place 1."], ["ordinary", "Player row is not place 1 and is not BR."],
     ["completionKey", "Cycle-row key formed from name and cycle number."], ["hasRaceCount", "Cycle row has a known races value."],
+    ["worldRecord", "Player-row boolean: this is the confirmed record holder. Use data-class or data-show for a WR row/badge."],
+    ["progress", "Cycle standings row: next-cycle progress label, such as 4/10. Stacked placements carry forward."],
     ["receivedAt", "Alert-file timestamp used for expiry; WR/cycle packets only."],
   ],
 };
@@ -172,5 +168,5 @@ export const overlayConfigHelpFields: HelpFieldGroup = {
 };
 
 export const allHelpFieldGroups: HelpFieldGroup[] = [commonHelpFields, podiumHelpFields, recordHelpFields,
-  cycleHelpFields, promotionHelpFields, structuredHelpFields, placementRowHelpFields, cycleRowHelpFields, cycleLeaderHelpFields,
+  cycleHelpFields, structuredHelpFields, placementRowHelpFields, cycleRowHelpFields, cycleLeaderHelpFields,
   overlayDerivedHelpFields, legacyHelpFields, overlayConfigHelpFields];

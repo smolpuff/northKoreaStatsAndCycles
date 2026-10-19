@@ -20,15 +20,17 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           targets: x86_64-pc-windows-msvc
-      - uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           workspaces: ./src-tauri -> target
       - run: npm ci
@@ -36,6 +38,9 @@ jobs:
         run: npx tsc --noEmit
       - name: Validate and package Stream Deck controls
         run: npm run streamdeck:pack
+      - name: Check security boundaries
+        run: npm run security:check
+
       - name: Check Stream Deck plugin behavior
         run: npm run streamdeck:check
       - name: Check all version files

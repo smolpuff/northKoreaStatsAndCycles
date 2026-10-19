@@ -13,10 +13,18 @@ fn http_error(config: &StreamerBotConfig, status: u16) -> String {
 
 fn endpoint(config: &StreamerBotConfig) -> Result<String, String> {
     let host = config.host.trim();
-    if host.is_empty() || host.contains(['\r', '\n']) {
-        return Err("Streamer.bot host is invalid".into());
+    if host.is_empty() || config.port == 0 || host.contains(['\r', '\n', '\\']) {
+        return Err("Streamer.bot host or port is invalid".into());
     }
-    Ok(format!("{host}:{}", config.port))
+    let authority = format!("{host}:{}", config.port);
+    let url = reqwest::Url::parse(&format!("http://{authority}"))
+        .map_err(|_| "Enter a Streamer.bot hostname or IP address, without a URL or path")?;
+    if url.host_str().is_none() || !url.username().is_empty() || url.password().is_some()
+        || url.path() != "/" || url.query().is_some() || url.fragment().is_some()
+        || url.port_or_known_default() != Some(config.port) {
+        return Err("Enter a Streamer.bot hostname or IP address, without credentials, a path or query".into());
+    }
+    Ok(authority)
 }
 
 fn request(
@@ -27,6 +35,7 @@ fn request(
 ) -> Result<reqwest::blocking::Response, String> {
     let client = reqwest::blocking::Client::builder()
         .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(NETWORK_TIMEOUT)
         .timeout(NETWORK_TIMEOUT)
         .build().map_err(|error| format!("Unable to create Streamer.bot client: {error}"))?;
@@ -63,16 +72,6 @@ fn enabled_action_id(actions: &Value, action_name: &str) -> Result<String, Strin
 
 pub fn test_connection(config: &StreamerBotConfig) -> Result<(), String> {
     get_actions(config).map(|_| ())
-}
-
-pub fn promotion_args(interval_minutes: u64, is_test: bool) -> Value {
-    json!({
-        "eventType": "missionPromotion",
-        "promotionMessage": crate::models::default_promotion_message(),
-        "downloadUrl": "https://www.missions.lol",
-        "intervalMinutes": interval_minutes.clamp(1, 1440),
-        "isTest": is_test,
-    })
 }
 
 pub fn trigger_action(
@@ -132,6 +131,7 @@ pub fn game_complete_args(game: &GameResult) -> Value {
         "timestamp": game.timestamp,
         "mapName": game.map_name,
         "hasWorldRecord": game.has_world_record,
+        "worldRecordPlayer": game.world_record_player,
         "placementsJson": serde_json::to_string(&placements).unwrap_or_default(),
         "placements": placements,
     });
@@ -353,6 +353,19 @@ pub fn test_args(kind: &str) -> Value {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn host_settings_cannot_inject_a_different_authority_or_path() {
+        let mut config = StreamerBotConfig::default();
+        for host in ["127.0.0.1", "localhost", "[::1]", "streamer.local"] {
+            config.host = host.into();
+            assert!(endpoint(&config).is_ok());
+        }
+        for host in ["user@127.0.0.1", "127.0.0.1/path", "127.0.0.1?token=secret", "127.0.0.1#fragment", "http://127.0.0.1", "127.0.0.1\r\nHeader: value"] {
+            config.host = host.into();
+            assert!(endpoint(&config).is_err());
+        }
+    }
+
     use super::*;
 
     #[test]

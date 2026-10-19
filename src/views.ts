@@ -1,3 +1,4 @@
+import { eventCopy } from "./event-copy";
 import { formatTimestamp, formatTime } from "./dates";
 import { iconInput } from "./input-field";
 import { renderGuideHeader, renderGuideStep } from "./guide-illustrations";
@@ -446,18 +447,25 @@ function watcherControls(
   </div>`;
 }
 
+function isRecordPlayer(game: GameResult, result: GameResult["results"][number]): boolean {
+  const recordName = game.worldRecordPlayer?.trim().toLowerCase();
+  return !!game.hasWorldRecord && !!recordName &&
+    [result.playerName, result.username, result.displayName].some(name => name?.trim().toLowerCase() === recordName);
+}
+
 function resultRow(
   result: GameResult["results"][number],
   battleRoyale: boolean,
   compact = false,
+  worldRecord = false,
 ): string {
-  const playerColor = escapeHtml(result.nameColorHex ?? "94a3b8");
+  const playerColor = /^(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(result.nameColorHex ?? "") ? result.nameColorHex! : "94a3b8";
   const eliminated =
     result.eliminated == null ? "—" : result.eliminated ? "Yes" : "No";
   const royaleValue = (field: string) =>
     escapeHtml(result.rawData?.[field]?.trim() || "—");
   const dead = battleRoyale && result.placement !== 1;
-  const rowClass = dead ? "royale-dead" : `p${result.placement}`;
+  const rowClass = (dead ? "royale-dead" : `p${result.placement}`) + (worldRecord ? " world-record-row" : "");
 
   return `
     <tr class="${rowClass}">
@@ -467,7 +475,7 @@ function resultRow(
       <td>
         <div class="player">
           <span>
-            <b class="player-history-link" tabindex="0" role="button" data-race-player="${escapeHtml(playerKey(result))}" title="${escapeHtml(result.playerName)}" style="--player-color:#${playerColor}">${escapeHtml(result.playerName)}</b>
+            <b class="player-history-link" tabindex="0" role="button" data-race-player="${escapeHtml(playerKey(result))}" title="${escapeHtml(result.playerName)}" style="--player-color:#${playerColor}">${escapeHtml(result.playerName)}</b>${worldRecord ? '<span class="world-record-badge" title="Confirmed world record">WR</span>' : ""}
           </span>
         </div>
       </td>
@@ -531,7 +539,7 @@ function resultsTable(
             ${sortableHeader("placement", "#")}
             ${sortableHeader("player", "Player")}
             ${battleRoyale ? sortableHeader("kills", "Kills") + sortableHeader("damage", "Damage") : sortableHeader("time", "Race time")}
-            ${sortableHeader("points", battleRoyale ? "Points earned" : "Season points earned")}
+            ${sortableHeader("points", battleRoyale ? "Points earned" : "Points earned")}
             ${sortableHeader("total", "Season total")}
             ${sortableHeader("wins", "Wins")}
             ${sortableHeader("eliminated", "Eliminated")}
@@ -539,7 +547,7 @@ function resultsTable(
         </thead>
         <tbody>
           ${sortResults(game, sort)
-            .map((result) => resultRow(result, battleRoyale))
+            .map((result) => resultRow(result, battleRoyale, false, isRecordPlayer(game, result)))
             .join("")}
         </tbody>
       </table>
@@ -723,8 +731,11 @@ function settingsPage(
           <summary><span class="customize-button">${icons.caretDown} Options</span></summary>
         <div class="mission-promotion-controls">
           <div class="twitch-message-preview promotion-preview"><span>Preview</span><p>${escapeHtml(defaultPromotionMessage)}</p></div>
-          <label class="field promotion-interval"><span>Post every (minutes)</span><input id="promotion-interval" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionIntervalMinutes ?? 60}" /></label>
-          <small>Posts while this app is open and Twitch is connected. The optional Mission app promotion hook on the Streamer.bot page uses this interval independently. The first post waits one full interval. Save to apply an interval change.</small>
+          <div class="promotion-timing">
+            <label class="field promotion-interval"><span>Start delay (minutes)</span><input id="promotion-start-delay" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionStartDelayMinutes ?? 30}" /></label>
+            <label class="field promotion-interval"><span>Post every (minutes)</span><input id="promotion-interval" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionIntervalMinutes ?? 60}" /></label>
+          </div>
+          <small>The first post waits Start delay after promotion is enabled and Twitch is connected. Watchers do not affect this timer. Restarting the app, reconnecting, or saving timing changes restarts the delay. Later posts use Post every. Save to apply. Test promotion posts immediately.</small>
           <div class="promotion-actions">${feedbackButton("twitch-promotion", "Test promotion", `data-twitch-test="promotion" ${state.twitchStatus === "Connected" ? "" : "disabled"}`, "test")}${feedbackButton("save-promotion", "Save", "data-twitch-save", "file")}</div>
         </div>
         </details>
@@ -758,9 +769,7 @@ function settingsPage(
       {
         key: "race",
         kind: "gameComplete",
-        title: "Race complete",
-        description:
-          "Runs after a Race or Battle Royale, with player results and earned points.",
+        ...eventCopy.results,
         icon: icons.raceFlag,
         enabled: streamerBot.events?.raceComplete ?? false,
         action: streamerBot.actions.gameComplete,
@@ -769,9 +778,7 @@ function settingsPage(
       {
         key: "record",
         kind: "worldRecord",
-        title: "World record",
-        description:
-          "Runs for a confirmed new record, with the record player, time, and points.",
+        ...eventCopy.worldRecord,
         icon: icons.stopwatch,
         enabled: streamerBot.events?.worldRecord ?? true,
         action: streamerBot.actions.worldRecord,
@@ -780,33 +787,19 @@ function settingsPage(
       {
         key: "cycle",
         kind: "cycleComplete",
-        title: "Cycle complete",
-        description:
-          "Runs once for each completed cycle, with the player, cycle number, and races taken.",
+        ...eventCopy.cycleComplete,
         icon: icons.cycles,
         enabled: streamerBot.events?.cycleComplete ?? false,
         action: streamerBot.actions.cycleComplete || "Marbles - Cycle Complete",
         input: "streamer-cycle-action",
-      },
-      {
-        key: "promotion",
-        kind: "missionPromotion",
-        title: "Mission app promotion",
-        description:
-          "Runs on the promotion interval in Settings, even without Twitch. Sends promotionMessage, downloadUrl, and intervalMinutes arguments.",
-        icon: icons.webhook,
-        enabled: streamerBot.events?.missionPromotion ?? false,
-        action:
-          streamerBot.actions.missionPromotion || "Marbles - Mission Promotion",
-        input: "streamer-promotion-action",
       },
     ]
       .map(
         (
           event,
         ) => `<section class="twitch-settings-section streamer-event-card" data-feature-section="streamer-${event.key}-enabled">
-      <label class="toggle-row twitch-feature-heading"><i>${event.icon}</i><span><b>${event.title}</b><small>${event.description}</small></span><input id="streamer-${event.key}-enabled" type="checkbox" role="switch" ${event.enabled ? "checked" : ""} /></label>
-      <div class="streamer-action-controls"><div class="feature-content"><label class="field"><span>Action name:</span>${iconInput(icons.streamer, `<input id="${event.input}" value="${escapeHtml(event.action)}" />`)}</label>${feedbackButton(`streamer-${event.key}`, "Test", `data-streamer-test="${event.kind}"`, "test")}</div>${event.kind === "missionPromotion" ? "" : `<button type="button" class="overlay-inline-link event-variables-link" data-event-variables="${event.kind}">Variables</button>`}</div>
+      <div class="toggle-row twitch-feature-heading"><i>${event.icon}</i><span><b>${event.title}</b><small>${event.description}</small></span><input id="streamer-${event.key}-enabled" type="checkbox" role="switch" aria-label="${escapeHtml(event.title)}" ${event.enabled ? "checked" : ""} /></div>
+      <div class="streamer-action-controls"><div class="feature-content"><label class="field"><span>Action name:</span>${iconInput(icons.streamer, `<input id="${event.input}" value="${escapeHtml(event.action)}" />`)}</label>${feedbackButton(`streamer-${event.key}`, "Test", `data-streamer-test="${event.kind}"`, "test")}</div><button type="button" class="overlay-inline-link event-variables-link" data-event-variables="${event.kind}">Variables</button></div>
     </section>`,
       )
       .join("")}</div>
@@ -849,20 +842,6 @@ function settingsPage(
   const twitchMessages = `
   <div class="twitch-layout-heading twitch-message-heading"><i>${icons.webhook}</i><h2>Chat messages</h2><p>Choose which events to post and customize their messages.</p></div>
   <div class="twitch-settings-grid">
-    <section class="twitch-settings-section" data-feature-section="twitch-my-cycle-command">
-      <div class="toggle-row twitch-feature-heading">
-        <i>${icons.trophy}</i>
-        <span><b>Viewer command: !mycycle</b><small>Reply with each viewer's saved RaceCycles progress.</small></span>
-        <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycle" ${twitch.myCycleCommand ? "checked" : ""} />
-      </div>
-      <div class="feature-content">
-        <p>Listens in the connected Twitch account's own channel while this app is open. Viewers type <code>!mycycle</code> to see their total races, completed cycles, progress and missing placements. No Streamer.bot or Lumia action is needed.</p>
-        <p>Enable this option before connecting Twitch. If already connected, disconnect and reconnect once to grant chat reading permission. Tracking can be stopped; replies still use saved data.</p>
-        <div class="twitch-message-preview" role="status"><span>Chat listener</span><p>${escapeHtml(twitch.myCycleCommand ? state.twitchChatMessage || "Connecting to Twitch chat…" : "Chat listener disabled")}</p></div>
-        <div class="twitch-message-preview"><span>Example reply</span><p>Cycle data for @viewer - Total Races: 577. Completed Cycles: 10. Current Progress: 8/10. Need: 2, 4</p></div>
-        <small>One reply per viewer every 30 seconds, up to five command replies per 30 seconds. Imported data with incomplete race totals is marked “at least”.</small>
-      </div>
-    </section>
     <section class="twitch-settings-section" data-feature-section="twitch-post-results">
       <div class="toggle-row twitch-feature-heading">
         <i>${icons.raceFlag}</i>
@@ -874,7 +853,7 @@ function settingsPage(
         />
 
       </div>
-          <details class="twitch-message-customization" name="twitch-post-customization">
+          <details class="twitch-message-customization">
         ${twitchCustomizationSummary("twitch-message-prefix", twitch.messagePrefix, raceMessageIsCustomized(twitch))}
         <div class="feature-content">
 
@@ -919,7 +898,7 @@ function settingsPage(
         />
 
       </div>
-      <details class="twitch-message-customization" name="twitch-post-customization">
+      <details class="twitch-message-customization">
         ${twitchCustomizationSummary("twitch-cycle-message", twitch.cycleMessageTemplate)}
         <div class="feature-content">
      
@@ -930,7 +909,7 @@ function settingsPage(
         <textarea
           id="twitch-cycle-message"
           maxlength="500"
-          rows="3"
+          rows="1"
           placeholder="🎉 Congrats {player} on a cycle! That's cycle #{cycle}! 🎉"
         >${escapeHtml(twitch.cycleMessageTemplate)}</textarea>
 
@@ -951,17 +930,29 @@ function settingsPage(
       </details>
     </section>
 
+    <section class="twitch-settings-section" data-feature-section="twitch-my-cycle-command">
+      <div class="toggle-row twitch-feature-heading">
+        <i>${icons.trophy}</i>
+        <span><b>Viewer command: !mycycle</b><small>Listens in the connected Twitch account's chat for !mycycles. Total races, completed cycles, progress and missing placements.</small></span>
+        <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycle" ${twitch.myCycleCommand ? "checked" : ""} />
+      </div>
+      <div class="feature-content">
+        <div class="twitch-message-preview" role="status"><span>Chat listener</span><p>${escapeHtml(twitch.myCycleCommand ? state.twitchChatMessage || "Connecting to Twitch chat…" : "Chat listener disabled")}</p></div>
+        <div class="twitch-message-preview"><span>Preview</span><p>Cycle data for @viewer - Total Races: 577. Completed Cycles: 10. Current Progress: 8/10. Need: 2, 4</p></div>
+        <small class="twitch-feature-note">One reply per viewer every 30 seconds, up to five command replies per 30 seconds. Imported data with incomplete race totals is marked “at least”.</small>
+      </div>
+    </section>
     <section class="twitch-settings-section" data-feature-section="twitch-post-world-records">
       <div class="toggle-row twitch-feature-heading">
         <i>${icons.stopwatch}</i>
         <span><b>Post World Records</b><small>Celebrate confirmed records with the player's earned points, track, and time.</small></span>
         <input id="twitch-post-world-records" type="checkbox" role="switch" aria-label="Post World Records" ${twitch.postWorldRecords ? "checked" : ""} />
       </div>
-      <details class="twitch-message-customization" name="twitch-post-customization">
+      <details class="twitch-message-customization">
         ${twitchCustomizationSummary("twitch-world-record-message", twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}
         <div class="feature-content">
         <label class="field"><span>World record message</span>
-          <textarea id="twitch-world-record-message" maxlength="500" rows="3">${escapeHtml(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}</textarea>
+          <textarea id="twitch-world-record-message" maxlength="500" rows="1">${escapeHtml(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}</textarea>
           <small><code>{wrplayerpoints}</code> = points earned in this race &middot; <code>{wrplayer}</code> = record player &middot; <code>{wrrecordtime}</code> = record time in seconds &middot; <code>{mapName}</code> = track name</small>
         </label>
         <div class="twitch-message-preview"><span>Preview</span><p id="twitch-world-record-preview">${escapeHtml(worldRecordMessagePreview(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage))}</p></div>
@@ -1107,9 +1098,10 @@ function raceCyclesPage(
         <tr>
           <td class="cycle-rank"><b class="place">${ranks.get(player.playerKey)}</b></td>
           <td class="cycle-player">
-            <button type="button" class="player-history-link" data-cycle-player="${escapeHtml(player.playerKey)}">${escapeHtml(player.playerName)}</button>
+            <button type="button" class="player-history-link" title="${escapeHtml(player.playerName)}" data-cycle-player="${escapeHtml(player.playerKey)}">${escapeHtml(player.playerName)}</button>
           </td>
           <td class="cycle-total">${player.cycles}</td>
+          <td class="cycle-progress" title="Distinct placements collected toward the next cycle; stacked placements carry forward">${cycleProgress(player)}/10</td>
           <td title="${player.totalRacesComplete ? "Races participated in, including positions outside the top ten" : "Minimum known races; older saved results do not contain complete participation counts"}">${player.totalRacesComplete ? "" : "≥"}${cycleRaceTotal(player)}</td>
           ${Array.from({ length: 10 }, (_, index) => {
             const count = player.placementCounts[index] ?? 0;
@@ -1157,7 +1149,7 @@ function raceCyclesPage(
           players.length
             ? `<div class="table-frame"><div class="table-wrap cycle-table-wrap">
                 <table class="cycle-table">
-                  <thead><tr><th>#</th>${sortableHeader("racer", "Racer")}${sortableHeader("cycles", "Cycles")}${sortableHeader("races", "Races")}${Array.from({ length: 10 }, (_, index) => sortableHeader(`position-${index + 1}`, String(index + 1))).join("")}</tr></thead>
+                  <thead><tr><th>#</th>${sortableHeader("racer", "Racer")}${sortableHeader("cycles", "Cycles")}<th>Progress</th>${sortableHeader("races", "Races")}${Array.from({ length: 10 }, (_, index) => sortableHeader(`position-${index + 1}`, String(index + 1))).join("")}</tr></thead>
                   <tbody>${rows}</tbody>
                 </table>
               </div></div>`
@@ -1232,7 +1224,7 @@ function homePage(state: Snapshot, busy: boolean): string {
                         (player): player is GameResult["results"][number] =>
                           player != null,
                       )
-                      .map((player) => resultRow(player, true, true))
+                      .map((player) => resultRow(player, true, true, isRecordPlayer(game!, player)))
                       .join("")
                   : podium
                       .map(
@@ -1271,7 +1263,11 @@ function homePage(state: Snapshot, busy: boolean): string {
 }
 
 function sidebar(state: Snapshot, currentPage: string): string {
-  const automationCount = [state.config.streamerBot.enabled ?? true, state.config.lumia?.enabled, state.config.discord?.enabled].filter(Boolean).length;
+  const automationCount = [
+    state.config.streamerBot.enabled ?? true,
+    state.config.lumia?.enabled,
+    state.config.discord?.enabled,
+  ].filter(Boolean).length;
   return `
     <aside class="sidebar">
 
@@ -1310,11 +1306,15 @@ function sidebar(state: Snapshot, currentPage: string): string {
           )}</span></div>
         </div>
        
-        ${(state.config.streamerBot.enabled ?? true) ? `<div class="sidebar-watcher" data-sidebar-tooltip="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
+        ${
+          (state.config.streamerBot.enabled ?? true)
+            ? `<div class="sidebar-watcher" data-sidebar-tooltip="Streamer.bot: ${escapeHtml(state.streamerBotStatus)}">
           <i class="sidebar-status-icon" aria-hidden="true">${sidebarIcon("status-streamer")}</i>
           <small>Streamer.bot</small>
           <div class="watch-state ${streamerBotTone(state)}"><i></i><span>${escapeHtml(state.streamerBotStatus)}</span></div>
-        </div>` : ""}
+        </div>`
+            : ""
+        }
         ${state.config.lumia?.enabled ? `<div class="sidebar-watcher" data-sidebar-tooltip="Lumia Stream: ${escapeHtml(state.lumiaStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Lumia Stream</small><div class="watch-state ${state.lumiaStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.lumiaStatus ?? "Not checked")}</span></div></div>` : ""}
         ${state.config.discord?.enabled ? `<div class="sidebar-watcher discord-sidebar-status" data-sidebar-tooltip="Discord: ${escapeHtml(state.discordStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Discord</small><div class="watch-state ${state.discordStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.discordStatus ?? "Not checked")}</span></div></div>` : ""}
         </div>
@@ -1366,13 +1366,13 @@ export function renderApplication(
                   )
                 : currentPage === "discord"
                   ? discordPage(state)
-                : currentPage === "streamdeck"
-                  ? streamDeckPage()
-                : currentPage === "lumia"
-                  ? lumiaPage(state)
-                : currentPage === "streamer" || currentPage === "twitch"
-                  ? settingsPage(state, currentPage)
-                  : settingsPage(state);
+                  : currentPage === "streamdeck"
+                    ? streamDeckPage()
+                    : currentPage === "lumia"
+                      ? lumiaPage(state)
+                      : currentPage === "streamer" || currentPage === "twitch"
+                        ? settingsPage(state, currentPage)
+                        : settingsPage(state);
 
   return `
     <div class="app-shell">

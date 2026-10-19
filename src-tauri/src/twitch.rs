@@ -473,6 +473,10 @@ fn load_credential() -> Result<Option<StoredTwitchCredential>, String> {
 
     let parsed = unsafe {
         let credential = &*raw;
+        if credential.CredentialBlob.is_null() || credential.CredentialBlobSize == 0 {
+            CredFree(raw.cast());
+            return Err("The saved Twitch login is empty or invalid; reconnect or save it again".into());
+        }
         let bytes = std::slice::from_raw_parts(
             credential.CredentialBlob,
             credential.CredentialBlobSize as usize,
@@ -482,7 +486,7 @@ fn load_credential() -> Result<Option<StoredTwitchCredential>, String> {
     unsafe { CredFree(raw.cast()) };
     parsed
         .map(Some)
-        .map_err(|error| format!("The saved Twitch login is invalid: {error}"))
+        .map_err(|_| "The saved Twitch login is invalid; reconnect Twitch".into())
 }
 
 #[cfg(windows)]

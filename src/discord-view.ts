@@ -1,4 +1,5 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+import { eventCopy } from "./event-copy";
+import { invoke } from "@tauri-apps/api/core";
 import type {
   DiscordConfig,
   DiscordEvent,
@@ -15,10 +16,10 @@ export const discordEmbedStyles: Record<
   DiscordEventKind,
   { title: string; color: string }
 > = {
-  race: { title: "🏁 Race finished", color: "#00efaa" },
-  battleRoyale: { title: "⚔️ Battle Royale finished", color: "#00efaa" },
+  race: { title: "🏁 Race finished | Test Map results (3)", color: "#00efaa" },
+  battleRoyale: { title: "🏁 Battle Royale finished | Test Map results (3)", color: "#00efaa" },
   worldRecord: { title: "🏆 World record", color: "#ffe024" },
-  cycleComplete: { title: "🎉 Cycle complete", color: "#ffe024" },
+  cycleComplete: { title: "Test Winner completed a cycle!", color: "#ffe024" },
 };
 
 export const discordEvents: {
@@ -29,30 +30,18 @@ export const discordEvents: {
 }[] = [
   {
     kind: "race",
-    title: "Race results",
-    description:
-      "Post newly counted Race results, with every placement and earned points.",
+    ...eventCopy.results,
+    title: "Race / BR results posted",
     icon: "raceFlag",
   },
   {
-    kind: "battleRoyale",
-    title: "Battle Royale results",
-    description:
-      "Post newly counted Battle Royale results independently of Race posts.",
-    icon: "battleRoyale",
-  },
-  {
     kind: "cycleComplete",
-    title: "Cycle complete",
-    description:
-      "Post once for each completed cycle, with the player and races taken.",
+    ...eventCopy.cycleComplete,
     icon: "cycles",
   },
   {
     kind: "worldRecord",
-    title: "World record",
-    description:
-      "Post a confirmed world record, including records confirmed after the match.",
+    ...eventCopy.worldRecord,
     icon: "stopwatch",
   },
 ];
@@ -65,15 +54,15 @@ export function defaultDiscordConfig(): DiscordConfig {
         target: "marbles-results",
         messageTemplate:
           kind === "cycleComplete"
-            ? "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉"
+            ? "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉 Total races: {totalRaces}."
             : kind === "worldRecord"
-              ? "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!"
-              : "🏁 {race} results: {placements}",
-        placementTemplate: "{place} {player} +{points}pts",
-        placementSeparator: " | ",
+              ? "🎉 New World Record on {mapName}!\n{wrplayer} +{wrplayerpoints} points in {wrrecordtime}s!"
+              : "{placements}",
+        placementTemplate: "{place} {player} +{points}pts{timeSuffix}",
       },
     ]),
   ) as DiscordConfig["events"];
+  events.battleRoyale = { ...events.race };
   return { enabled: false, targets: ["marbles-results"], events };
 }
 const escape = (text: string) =>
@@ -96,6 +85,7 @@ const sample = (kind: DiscordEventKind): Record<string, string | number> => ({
   player: "Test Winner",
   cycle: 1,
   races: 823,
+  totalRaces: 1200,
   cycleplayer: "Test Winner",
   cyclenumber: 1,
   cycleraces: 823,
@@ -118,6 +108,12 @@ export function formatDiscordText(
     String(values[key] ?? token),
   );
 }
+export function discordPreviewDate(): string {
+  const date = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const offset = -date.getTimezoneOffset();
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${offset >= 0 ? "+" : "-"}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+}
 export function discordPreview(
   kind: DiscordEventKind,
   event: DiscordEvent,
@@ -133,14 +129,15 @@ export function discordPreview(
         place: ["🥇", "🥈", "🥉"][index],
         points: [10, 8, 6][index],
         time: [42.123, 43.123, 44.123][index],
+        timeSuffix: kind === "race" ? ` | ${[42.123, 43.123, 44.123][index].toFixed(3)}s` : "",
       }),
     )
-    .join(event.placementSeparator);
+    .join("\n");
   return formatDiscordText(event.messageTemplate, { ...values, placements });
 }
 export const discordGuideSteps = () => `<ol class="guide-steps">
   ${renderGuideStep(1, "Create a text channel", "In your Discord server, create a normal text channel such as #marbles-results, or choose an existing one. You need Manage Webhooks permission for that channel. Ask a server admin if it is unavailable.", "discord-channel")}
-  ${renderGuideStep(2, "Create its webhook", "Edit Channel > Integrations > Webhooks > New Webhook. Name it Marbles Stats, choose the correct channel, save changes if prompted, and Copy Webhook URL. Repeat for additional channels. Forum/media channels and threads are not supported here.", "discord-webhook")}
+  ${renderGuideStep(2, "Create its webhook", "Edit Channel > Integrations > Webhooks > New Webhook. Name it north korea stats, choose the correct channel, save changes if prompted, and Copy Webhook URL. Repeat for additional channels. Forum/media channels and threads are not supported here.", "discord-webhook")}
   ${renderGuideStep(3, "Connect your channels", "Click Set webhook here, label the target and paste its URL. The app validates it and stores it in Windows Credential Manager. Use Add channel for more targets; choose a saved target on each event. Every event starts on #marbles-results. No developer app, bot token or app ID is needed.", "discord-connect")}
   ${renderGuideStep(4, "Choose, customize and test", "Enable Discord, then only the events you want. Open Customize to edit the message and placement wording and check the live preview. Save, then Test posts a sample to that event's selected channel. The connection is checked automatically; Test connection checks Discord reachability without using webhooks or posting. Leave the app running for automatic posts.", "discord-test")}
 </ol>`;
@@ -170,15 +167,14 @@ export function discordPage(state: Snapshot): string {
       const results = ["race", "battleRoyale"].includes(kind);
       const customized =
         event.messageTemplate !== defaults.events[kind].messageTemplate ||
-        event.placementTemplate !== defaults.events[kind].placementTemplate ||
-        event.placementSeparator !== defaults.events[kind].placementSeparator;
-      return `<section class="twitch-settings-section" data-feature-section="discord-${kind}-enabled"><label class="toggle-row twitch-feature-heading"><i>${icons[icon] ?? icons.raceFlag}</i><span><b>${title}</b><small>${description}</small></span><input id="discord-${kind}-enabled" type="checkbox" role="switch" aria-label="Post ${title}" ${event.enabled ? "checked" : ""}></label>
+        event.placementTemplate !== defaults.events[kind].placementTemplate;
+      return `<section class="twitch-settings-section" data-feature-section="discord-${kind}-enabled"><div class="toggle-row twitch-feature-heading"><i>${icons[icon] ?? icons.raceFlag}</i><span><b>${title}</b><small>${results ? "Newly counted Race and Battle Royale results, with one positive point earner per line." : description}</small></span><input id="discord-${kind}-enabled" type="checkbox" role="switch" aria-label="${results ? "Post Race / BR results" : `Post ${title}`}" ${event.enabled ? "checked" : ""}></div>
     <details class="twitch-message-customization" data-discord-customization="${kind}"><summary><span class="customize-button">${icons.caretDown} Customize</span><span class="twitch-customized-state" data-discord-customized="${kind}" ${customized ? "" : "hidden"}>${icons.check} Customized</span></summary>
     <div class="feature-content discord-message-content"><div class="discord-message-fields">
       <label class="field"><span>Target channel</span><select id="discord-${kind}-target">${targets(event.target)}</select></label>
-      <label class="field"><span>${results ? "Overall message" : "Message"}</span><textarea id="discord-${kind}-message" rows="3" maxlength="2000">${escape(event.messageTemplate)}</textarea><small>${results ? "Use {race}, {mapName}, {playerCount}, {placements}, {firstplace}, {firstplacepoints}. Long results split into Discord-sized messages." : kind === "worldRecord" ? "Use {wrplayer}, {wrplayerpoints}, {wrrecordtime}, {mapName}." : "Use {player}, {cycle}, {races} (same as Twitch), or {cycleplayer}, {cyclenumber}, {cycleraces}, {cycleplayerpoints}, {cycleSeasonName}."} Discord Markdown is supported; mentions do not ping.</small></label>
-      ${results ? `<label class="field"><span>Each placement</span><textarea id="discord-${kind}-placement" rows="2" maxlength="500">${escape(event.placementTemplate)}</textarea><small>Use {place} for 🥇/🥈/🥉 or #4+, {placement} for the number, {player}, {points}, {time}, {username}. All players are included.</small></label><label class="field"><span>Between placements</span><textarea id="discord-${kind}-separator" rows="1" maxlength="40">${escape(event.placementSeparator)}</textarea></label>` : ""}
-    </div><div class="twitch-message-preview"><span>Preview · sample data · #<span data-discord-preview-target="${kind}">${escape(event.target)}</span></span><div class="discord-embed-preview" style="--discord-embed-color:${discordEmbedStyles[kind].color}"><b>${discordEmbedStyles[kind].title}</b><p data-discord-preview="${kind}">${escape(discordPreview(kind, event))}</p><small>Marbles Stats</small></div></div>
+      <label class="field"><span>${results ? "Overall message" : "Message"}</span><textarea id="discord-${kind}-message" rows="1" maxlength="2000">${escape(event.messageTemplate)}</textarea><small>${results ? "Use {race}, {mapName}, {playerCount}, {placements}, {firstplace}, {firstplacepoints}. Long results split into Discord-sized messages." : kind === "worldRecord" ? "Use {wrplayer}, {wrplayerpoints}, {wrrecordtime}, {mapName}." : "Use {player}, {cycle}, {totalRaces} (player total at completion), {races} (this cycle only), or {cycleplayer}, {cyclenumber}, {cycleraces}, {cycleplayerpoints}, {cycleSeasonName}."} Discord Markdown is supported; mentions do not ping.</small></label>
+      ${results ? `<label class="field"><span>Each placement</span><textarea id="discord-${kind}-placement" rows="1" maxlength="500">${escape(event.placementTemplate)}</textarea><small>Use {place} for 🥇/🥈/🥉 or #4+, {placement} for the number, {player}, {points}, {time}, {timeSuffix} (race time with units; blank for BR), {username}. Only players who earn points are included, one per line.</small></label>` : ""}
+    </div><div class="twitch-message-preview"><span>Preview</span><div class="discord-embed-preview" style="--discord-embed-color:${discordEmbedStyles[kind].color}"><b>${discordEmbedStyles[kind].title}</b><p data-discord-preview="${kind}">${escape(discordPreview(kind, event))}</p><small>${escape(discordPreviewDate())}</small></div></div>
     <div class="twitch-message-actions">${feedbackButton(`discord-${kind}`, "Test message", `data-discord-test="${kind}"`, "test")}${feedbackButton(`save-discord-${kind}`, "Save", "data-discord-save", "file")}<button type="button" class="overlay-inline-link" data-open-integration-help="discord">Message help</button></div>
     </div></details></section>`;
     })
@@ -215,12 +211,10 @@ export function readDiscordSettings(
         document.querySelector<HTMLTextAreaElement>(
           `#discord-${kind}-placement`,
         )?.value ?? event.placementTemplate,
-      placementSeparator:
-        document.querySelector<HTMLTextAreaElement>(
-          `#discord-${kind}-separator`,
-        )?.value ?? event.placementSeparator,
     };
   }
+  // Keep the stored per-game entries compatible while exposing one results event.
+  config.events.battleRoyale = { ...config.events.race };
   return config;
 }
 export function openDiscordWebhookDialog(

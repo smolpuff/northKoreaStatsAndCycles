@@ -108,6 +108,8 @@ pub fn save_duration(directory: &Path, kind: &str, seconds: u32) -> Result<Durat
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayOptions {
+    #[serde(default = "default_font_scale")]
+    pub font_scale: u32,
     pub width: u32,
     pub height: u32,
     pub opacity: u32,
@@ -127,6 +129,7 @@ pub struct OverlayOptions {
     pub visible_rows: u32,
     pub scroll_pixels_per_second: u32,
 }
+fn default_font_scale() -> u32 { 100 }
 fn default_border_start() -> String { "#493064".into() }
 fn default_border_end() -> String { "#28395d".into() }
 pub type Customizations = std::collections::BTreeMap<String, OverlayOptions>;
@@ -163,6 +166,7 @@ pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -
     if !(280..=3840).contains(&options.width) || (!matches!(kind, "results" | "cycle-status") && !(minimum_height..=2160).contains(&options.height)) || options.opacity > 100 {
         return Err("Check the width, height and opacity limits".into());
     }
+    if !(75..=200).contains(&options.font_scale) { return Err("Choose a font size from 75% to 200%".into()); }
     if options.header_text.chars().count() > 100 || !(1..=25).contains(&options.visible_rows) || !(5..=100).contains(&options.scroll_pixels_per_second) {
         return Err("Check the header text, visible players and scroll speed".into());
     }
@@ -176,7 +180,8 @@ pub fn save_options(directory: &Path, kind: &str, mut options: OverlayOptions) -
     }
     if matches!(kind, "results" | "cycle-status") {
         let header_height = if options.header_visible { 90 } else { 50 };
-        options.height = options.visible_rows * 26 + header_height;
+        let row_height = (26 * options.font_scale).div_ceil(100);
+        options.height = options.visible_rows * row_height + (header_height * options.font_scale).div_ceil(100);
     }
     let mut settings = customizations(directory)?;
     settings.insert(kind.to_string(), options.clone());
@@ -252,5 +257,24 @@ impl Writer {
             "cycleComplete" => self.write("cycle-complete-data.js", &data),
             _ => self.write("overlay-data.js", &data),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saved_overlay_options_accept_legacy_fonts_and_round_trip_font_size() {
+        let legacy = json!({"width":440,"height":350,"opacity":80,"background":"#071324",
+            "text":"#f5f5ff","secondary":"#b8c4e8","accent":"#ff0081","gold":"#ffe024",
+            "teal":"#00efaa","headerVisible":true,"headerText":"","durationSeconds":0,
+            "visibleRows":10,"scrollPixelsPerSecond":8});
+        let mut options: OverlayOptions = serde_json::from_value(legacy).unwrap();
+        assert_eq!(options.font_scale, 100);
+        options.font_scale = 135;
+        let saved = serde_json::to_value(&options).unwrap();
+        assert_eq!(saved["fontScale"], 135);
+        assert_eq!(serde_json::from_value::<OverlayOptions>(saved).unwrap().font_scale, 135);
     }
 }

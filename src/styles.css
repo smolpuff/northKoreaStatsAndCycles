@@ -31,6 +31,15 @@ body,
 
 body {
   background: var(--bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Keep normal editing, text selection and copy/paste inside form fields. */
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button,
@@ -771,9 +780,15 @@ form {
   margin-top: 2px;
 }
 
-.twitch-settings-section .field textarea {
-  min-height: 74px;
-  resize: vertical;
+/* Message editors grow and shrink with their text and wrapped lines. */
+.twitch-settings-section .field textarea,
+.twitch-message-editor textarea {
+  field-sizing: content;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  align-self: start;
+  resize: none;
 }
 
 .twitch-settings-section .field>small {
@@ -860,8 +875,8 @@ form {
 
 .cycle-table {
   width: 100%;
-  min-width: 620px;
-  table-layout: fixed;
+  min-width: 0;
+  table-layout: auto;
   font-size: 12px;
 }
 
@@ -935,11 +950,6 @@ form {
 
 .cycle-message-editor {
   margin-top: 12px;
-}
-
-.twitch-message-editor textarea {
-  resize: vertical;
-  min-height: 74px;
 }
 
 .race-context {

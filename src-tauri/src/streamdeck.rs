@@ -109,31 +109,6 @@ fn state(runtime: &SharedRuntime) -> Result<TrackerState, String> {
     })
 }
 
-#[cfg(windows)]
-fn session_token() -> Result<String, String> {
-    use windows_sys::Win32::Security::Cryptography::{
-        BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-    };
-    let mut bytes = [0u8; 32];
-    let result = unsafe {
-        BCryptGenRandom(
-            std::ptr::null_mut(),
-            bytes.as_mut_ptr(),
-            bytes.len() as u32,
-            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-        )
-    };
-    if result < 0 {
-        return Err("Unable to secure Stream Deck connection".into());
-    }
-    Ok(hex::encode(bytes))
-}
-
-#[cfg(not(windows))]
-fn session_token() -> Result<String, String> {
-    Err("Stream Deck controls require Windows".into())
-}
-
 fn allow_plugin(request: &Request, response: Response) -> Result<Response, ErrorResponse> {
     // Browsers send Origin. Only the local Node plugin may connect; no web API.
     if request.uri().path() != "/streamdeck" || request.headers().contains_key("origin") {
@@ -229,7 +204,7 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) -> Result<(), Stri
     let listener =
         TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let token = session_token()?;
+    let token = crate::secure_token::generate()?;
     let storage = Storage::new(app.path().app_data_dir().map_err(|e| e.to_string())?)?;
     storage.write(
         "streamdeck-connection.json",

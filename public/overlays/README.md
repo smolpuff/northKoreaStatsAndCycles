@@ -10,6 +10,8 @@ Twitch also supports an optional `!mycycle` viewer command, independently of ove
 
 Click **Help & variables** on the Overlays, Streamer.bot, Lumia Stream, Discord or Twitch page. The help dialog has illustrated setup steps, the complete custom HTML shell, a searchable field reference, examples and troubleshooting. Each overlay's **Edit HTML & variables** and each Streamer.bot event's **Variables** popup link to the full guide. Twitch and Discord message cards have **Message help**. Discord includes four matching illustrated setup cards for channel webhooks, event selection, message editing and tests; it needs no shared developer app or bot token.
 
+The Custom HTML help tab also lists its variables directly, with player/cycle row fields, settings and separate celebration-only groups. Discord shares one Race / BR results switch, channel and message template; `{race}` identifies the match type.
+
 The variable reference marks which fields are available in normal HTML state, WR/cycle alerts, Streamer.bot event arguments or repeated rows. Settings are listed separately and are not brace variables. The app labels variables with braces; Streamer.bot's native text fields require its own argument delimiter, which **Copy for Streamer.bot** supplies.
 
 ## Add to OBS
@@ -110,7 +112,7 @@ Dotted paths such as `{placements.0.name}` select rows in placement order. Index
 
 ### Cycle status ? cycle-status.html
 
-Use a **440 x 350** Browser Source. Compact 26px rows show 10 players at once and scroll through all tracked players at 8 px/s by default (Results stays at 20 px/s). Standalone templates use `cycleScrollPixelsPerSecond` in `overlay-config.js`; app customization overrides it. Customize the visible row count, width, colors and scroll speed in the app; source height adjusts automatically. Results and Cycles use `visible rows x 26 + 90` pixels with the header, or `visible rows x 26 + 50` without it.
+Use a **680 x 482** Browser Source by default. Larger 135% text and 36px rows show 10 players at once and scroll through all tracked players at 8 px/s by default (Results stays at 20 px/s). Standalone templates use `cycleScrollPixelsPerSecond` in `overlay-config.js`; app customization overrides it. Customize font size (75-200%), visible row count, width, colors and scroll speed in the app; source height adjusts automatically. Font size is available on every overlay. For scrolling tables, row height is `ceil(26 x font size / 100)` and header space is scaled with the text. After saving, copy the new source dimensions into OBS. Existing saved sizes remain until changed or restored to defaults. The Progress column shows distinct placements toward the next cycle, such as 4/10; stacked placements carry forward.
 
 Columns show rank, player, completed cycles, total placement counts for positions 1-10, and **Left** (positions still needed for the next cycle). Completed cycles stay gold; Left uses muted text so the remaining count does not compete with completed cycles. Green cells mark positions whose counts exceed the completed-cycle count. All extra placements carry forward. The data comes from `cycleStandings`, ordered by completed cycles, current progress, then name. Empty standings hide the overlay. It uses live `overlay-data.js` and stays visible; use your source visibility controls to show it when needed.
 
@@ -118,3 +120,7 @@ Columns show rank, player, completed cycles, total placement counts for position
 Cycles uses Race results only. Placement counts 1-10 always accumulate; the minimum count is the number of completed cycles. Extra placements carry forward and are never reset by completion. Cycle status shows positions already filled beyond the completed cycles. Clearing current stats or Cycles results updates overlays while preserving their independent local histories; the clear dialog optionally saves a timestamped JSON backup first.
 
 The Cycles page imports public Marble Cycle session placements into Cycles only through its **Import** dialog, without creating RaceStats results or changing normally recorded RaceStats standings. Imported finished Race placements use the same cumulative scoring and update overlay standings; the optional BR-win setting adds only winners as 1st places without increasing Race counts; historical import does not replay old celebration alerts or integration actions. Original dates/tracks unavailable from the source remain unknown. Participation counts are shown in the app's player cards and main Cycles table; older incomplete records use minimum known counts.
+
+Confirmed world-record holders have a gold row highlight and WR badge in the app results and Results/Podium overlays, including delayed confirmations. A normal winner keeps its usual treatment until a record is confirmed.
+
+Overlay data contains result/stat fields, not Twitch tokens or integration credentials. Result bindings insert text rather than interpreting player names as HTML. In-app previews use bundled templates under the app's security policy. Custom HTML/JavaScript in OBS runs as code you choose to trust; use reviewed templates and keep secrets out of them.

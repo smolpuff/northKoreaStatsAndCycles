@@ -39,7 +39,7 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) {
             if !is_current(&runtime, &item) {
                 continue;
             }
-            match discord::post(&item.event.target, &item.kind, &item.content, || {
+            match discord::post(&item.event.target, &item.body, || {
                 is_current(&runtime, &item)
             }) {
                 Ok(true) => {
@@ -323,6 +323,7 @@ pub async fn test_discord(
                     return Err("Enable this Discord event before testing it".into());
                 }
                 let mut game = streamer_bot::sample_game();
+                game.timestamp = chrono::Utc::now().to_rfc3339();
                 game.game_type = match kind.as_str() {
                     "battleRoyale" => GameType::BattleRoyale,
                     _ => GameType::Race,
@@ -338,13 +339,19 @@ pub async fn test_discord(
                 let snapshot = snapshot(&runtime)?;
                 streamer_bot::add_overlay_data(&mut args, &snapshot, &game, json!([]));
                 args["isTest"] = json!(true);
+                if kind == "cycleComplete" {
+                    args["cycleStandings"] = json!([]);
+                    args["totalRaces"] = json!(1200);
+                }
+                args["timestamp"] = json!(game.timestamp);
                 for content in discord::messages(event, &args)? {
                     let active = || {
                         runtime.lock().is_ok_and(|rt| {
                             rt.snapshot.config.discord.enabled && rt.discord_revision == revision
                         })
                     };
-                    if !discord::post(&event.target, &kind, &content, active)? {
+                    let body = discord::message_body(&kind, &content, &args)?;
+                    if !discord::post(&event.target, &body, active)? {
                         return Err(
                             "Discord test cancelled because the integration was disabled".into(),
                         );

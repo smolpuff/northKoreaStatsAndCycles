@@ -12,7 +12,7 @@ const templates = [
     "Results",
     "Every Race or BR player, smoothly scrolling down and back up. BR adds kills and damage.",
   ],
-  ["cycle-status", "Cycle status", "Large standings table with 20 visible players, completed cycles, positions 1?10 and positions left. Green marks positions collected in the current cycle; counts include all placements. Scrolls through every tracked player."],
+  ["cycle-status", "Cycle status", "Larger standings table with 10 visible players, completed cycles, next-cycle progress, positions 1-10 and positions left. Green marks positions collected in the current cycle; counts include all placements. Scrolls through every tracked player."],
   ["podium", "Podium", "The top three players and their earned points."],
   [
     "world-record",
@@ -130,7 +130,7 @@ export function overlaysPage(
         ${renderGuideStep(4, "Let the data update", "Keep Marbles Stats running. Browser pages check new data every 3 seconds. No Streamer.bot action is needed.", "live-data")}
       </ol>
       <p>Leave the sources' eyes enabled. Results, cycle status, podium, and points stay visible; WR and cycle celebrations appear for events and hide themselves after 10 seconds by default. Open Customize on either celebration card to change its duration and save. Put celebration sources above your other sources in OBS.</p>
-      <details><summary>Blank source?</summary><p>Live sources wait for data; <b>Open preview</b> always shows an animated sample. Results, Podium and Points need a processed match. Use Test for WR or Cycle celebrations to position them in OBS. Keep Marbles Stats running with the watchers enabled. Automatic WR detection from the current CSV is not available yet.</p><p><a href="https://obsproject.com/kb/browser-source" target="_blank" rel="noreferrer">OBS Browser Source help</a></p></details>
+      <details><summary>Blank source?</summary><p>Live sources wait for data; <b>Open preview</b> always shows an animated sample. Results, Podium and Points need a processed match. Use Test for WR or Cycle celebrations to position them in OBS. Keep Marbles Stats running with the watchers enabled. Automatic WR detection uses changed custom-map record metadata matching the completed match.</p><p><a href="https://obsproject.com/kb/browser-source" target="_blank" rel="noreferrer">OBS Browser Source help</a></p></details>
     </div></section>
 
   </div>`;

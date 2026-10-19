@@ -15,6 +15,7 @@ mod twitch_oauth;
 mod twitch_chat;
 mod updater;
 mod streamdeck;
+mod secure_token;
 
 use chrono::Utc;
 use models::*;
@@ -720,8 +721,6 @@ async fn test_lumia(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, co
                 "gameComplete" => (&config.actions.game_complete, streamer_bot::test_args("gameComplete")),
                 "worldRecord" => (&config.actions.world_record, streamer_bot::test_args("worldRecord")),
                 "cycleComplete" => (&config.actions.cycle_complete, streamer_bot::test_args("cycleComplete")),
-                "missionPromotion" => (&config.actions.mission_promotion, streamer_bot::promotion_args(
-                    runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.promotion_interval_minutes, true)),
                 _ => return Err("Unknown Lumia test event".into()),
             };
             lumia::trigger_command(&config, command, args)
@@ -1282,6 +1281,9 @@ fn save_config(
     if !(1..=1440).contains(&config.twitch.promotion_interval_minutes) {
         return Err("Promotion interval must be between 1 and 1440 minutes".into());
     }
+    if !(1..=1440).contains(&config.twitch.promotion_start_delay_minutes) {
+        return Err("Promotion start delay must be between 1 and 1440 minutes".into());
+    }
     {
         let mut rt = runtime
             .lock()
@@ -1364,6 +1366,15 @@ fn prepare_export(snapshot: &AppSnapshot, kind: &str) -> Result<(String, serde_j
     Ok((filename, value))
 }
 
+fn csv_text(value: &str) -> String {
+    // CSV quoting alone does not prevent spreadsheet formula execution.
+    let first = value.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}').chars().next();
+    if matches!(first, Some('=' | '+' | '-' | '@' | '\u{ff1d}' | '\u{ff0b}' | '\u{ff0d}' | '\u{ff20}'))
+        || value.starts_with(['\t', '\r', '\n']) {
+        format!("'{value}")
+    } else { value.to_owned() }
+}
+
 fn prepare_csv_export(snapshot: &AppSnapshot, kind: &str) -> Result<Vec<u8>, String> {
     let mut writer = csv::WriterBuilder::new().terminator(csv::Terminator::CRLF).from_writer(Vec::new());
     if kind == "cycles" {
@@ -1379,6 +1390,7 @@ fn prepare_csv_export(snapshot: &AppSnapshot, kind: &str) -> Result<Vec<u8>, Str
                 player.player_key.clone(), player.completed_cycles().to_string(), races.to_string(), player.total_races_complete.to_string(),
                 points.to_string(), player.cycle_progress().to_string(), snapshot.cycle_last_update.clone().unwrap_or_default()];
             row.extend((0..10).map(|index| player.placement_counts.get(index).copied().unwrap_or(0).to_string()));
+            for index in [0, 2, 3, 9] { row[index] = csv_text(&row[index]); }
             writer.write_record(row).map_err(|e| e.to_string())?;
         }
     } else {
@@ -1393,14 +1405,16 @@ fn prepare_csv_export(snapshot: &AppSnapshot, kind: &str) -> Result<Vec<u8>, Str
                 let br = game.game_type == GameType::BattleRoyale;
                 let record = game.has_world_record && game.world_record_player.as_ref().is_some_and(|name|
                     [&player.player_name, &player.username, &player.display_name].iter().any(|candidate| name.eq_ignore_ascii_case(candidate)));
-                writer.write_record(vec![snapshot.config.seasons.race_name.clone(), game.id.clone(), game.source_snapshot_id.clone().unwrap_or_default(),
+                let mut row = vec![snapshot.config.seasons.race_name.clone(), game.id.clone(), game.source_snapshot_id.clone().unwrap_or_default(),
                     game.timestamp.clone(), game.map_name.clone().unwrap_or_default(), serde_json::to_string(&game.game_type).map_err(|e| e.to_string())?.trim_matches('"').to_string(),
                     game.player_count.to_string(), player.placement.to_string(), player.player_name.clone(), player.username.clone(), player.platform.clone(),
                     player.season_points_earned.to_string(), player.season_points_total.map(|v| v.to_string()).unwrap_or_default(),
                     player.finish_time.map(|v| v.to_string()).unwrap_or_default(), player.eliminated.map(|v| v.to_string()).unwrap_or_default(), record.to_string(),
                     if br { player.raw_data.get("MatchKills").cloned().unwrap_or_default() } else { String::new() },
                     if br { player.raw_data.get("MatchDamageDealt").cloned().unwrap_or_default() } else { String::new() },
-                    serde_json::to_string(&player.raw_data).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
+                    serde_json::to_string(&player.raw_data).map_err(|e| e.to_string())?];
+                for index in [0, 1, 2, 3, 4, 8, 9, 10, 16, 17, 18] { row[index] = csv_text(&row[index]); }
+                writer.write_record(row).map_err(|e| e.to_string())?;
             }
         }
     }
@@ -1677,10 +1691,6 @@ fn test_streamer_bot_action(
             streamer_bot::test_args("worldRecord"),
         ),
         "cycleComplete" => (config.actions.cycle_complete.clone(), streamer_bot::test_args("cycleComplete")),
-        "missionPromotion" => (
-            config.actions.mission_promotion.clone(),
-            streamer_bot::promotion_args(runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.promotion_interval_minutes, true),
-        ),
         _ => return Err("Unknown Streamer.bot test action".into()),
     };
     let result = streamer_bot::trigger_action(&config, &action, args);
@@ -2312,6 +2322,16 @@ pub fn run() {
 
 #[cfg(test)]
 mod pipeline_tests {
+    #[test]
+    fn exported_text_cannot_start_spreadsheet_formulas() {
+        for text in ["=1+1", "+SUM(1,2)", "-SUM(1,2)", "@SUM(1,2)", "  =1", "\u{feff}=1", "\u{ff1d}1+1", "\tvalue", "\rvalue", "\nvalue"] {
+            assert_eq!(csv_text(text), format!("'{text}"));
+        }
+        for text in ["Player", "", "Track 1", "123", "player@example.com"] {
+            assert_eq!(csv_text(text), text);
+        }
+    }
+
     use super::*;
 
     #[test]

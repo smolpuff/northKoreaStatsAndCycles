@@ -13,7 +13,7 @@ pub struct Delivery {
     pub revision: u64,
     pub kind: String,
     pub event: DiscordEvent,
-    pub content: String,
+    pub body: Value,
 }
 
 // Replace only the initial, uncustomized Discord wording from this development pass.
@@ -23,6 +23,12 @@ pub fn upgrade_defaults(config: &mut DiscordConfig) {
         let Some(default) = defaults.events.get(kind) else {
             continue;
         };
+        if kind == "worldRecord" && event.message_template == "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!" {
+            event.message_template = default.message_template.clone();
+        }
+        if kind == "cycleComplete" && event.message_template == "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉" {
+            event.message_template = default.message_template.clone();
+        }
         if matches!(event.message_template.as_str(),
             "**{race} results — {mapName}**\n{placements}" |
             "Congratulations **{cycleplayer}**! Cycle **#{cyclenumber}** completed in {cycleraces} races!" |
@@ -30,12 +36,21 @@ pub fn upgrade_defaults(config: &mut DiscordConfig) {
             "?? Congrats {player} on a cycle! You are great! That's cycle #{cycle}! ??") {
             event.message_template = default.message_template.clone();
         }
-        if event.placement_template == "{placement}. {player} — +{points} pts" {
-            event.placement_template = default.placement_template.clone();
-            if event.placement_separator == "\n" {
-                event.placement_separator = default.placement_separator.clone();
-            }
+        if matches!(event.message_template.as_str(), "🏁 {race} results: {placements}" | "🏁 {race} results:\n{placements}") {
+            event.message_template = default.message_template.clone();
         }
+        if matches!(event.placement_template.as_str(), "{placement}. {player} — +{points} pts" | "{place} {player} +{points}pts") {
+            event.placement_template = default.placement_template.clone();
+        }
+    }
+    // Race and BR share one results setting. Preserve an enabled legacy BR-only setup;
+    // otherwise the existing Race configuration is the shared source.
+    let results = config.events.get("race").filter(|event| event.enabled)
+        .or_else(|| config.events.get("battleRoyale").filter(|event| event.enabled))
+        .or_else(|| config.events.get("race")).cloned();
+    if let Some(results) = results {
+        config.events.insert("race".into(), results.clone());
+        config.events.insert("battleRoyale".into(), results);
     }
 }
 fn credential_target(target: &str) -> Result<String, String> {
@@ -76,9 +91,8 @@ pub fn validate_config(config: &DiscordConfig) -> Result<(), String> {
         if event.message_template.trim().is_empty()
             || event.message_template.encode_utf16().count() > 2000
             || event.placement_template.encode_utf16().count() > 500
-            || event.placement_separator.encode_utf16().count() > 40
         {
-            return Err("Discord messages need text (up to 2000 characters); placement text is limited to 500 and separators to 40".into());
+            return Err("Discord messages need text (up to 2000 characters); placement text is limited to 500".into());
         }
     }
     Ok(())
@@ -194,27 +208,35 @@ fn cooldowns() -> &'static Mutex<HashMap<String, Instant>> {
     static VALUE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
     VALUE.get_or_init(|| Mutex::new(HashMap::new()))
 }
-pub fn message_body(kind: &str, content: &str) -> Result<Value, String> {
+pub fn message_body(kind: &str, content: &str, args: &Value) -> Result<Value, String> {
     let (title, color) = match kind {
-        "race" => ("🏁 Race finished", 0x00efaa_u32),
-        "battleRoyale" => ("⚔️ Battle Royale finished", 0x00efaa_u32),
-        "worldRecord" => ("🏆 World record", 0xffe024_u32),
-        "cycleComplete" => ("🎉 Cycle complete", 0xffe024_u32),
+        "race" | "battleRoyale" => (format!("🏁 {} finished | {} results ({})",
+            if kind == "battleRoyale" { "Battle Royale" } else { "Race" },
+            args["mapName"].as_str().filter(|name| !name.trim().is_empty()).unwrap_or("Unknown map"),
+            args["playerCount"].as_u64().unwrap_or(0)), 0x00efaa_u32),
+        "worldRecord" => ("🏆 World record".into(), 0xffe024_u32),
+        "cycleComplete" => (format!("{} completed a cycle!",
+            args["cycleplayer"].as_str().or_else(|| args["player"].as_str()).unwrap_or("Player")), 0xffe024_u32),
         _ => return Err("Unknown Discord event".into()),
     };
+    // Use the original match time, including for queued/delayed posts.
+    let occurred = args["timestamp"].as_str()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&chrono::Local))
+        .unwrap_or_else(chrono::Local::now);
+    let footer = occurred.format("%Y-%m-%d %H:%M:%S %:z").to_string();
+    let title: String = title.chars().take(120).collect();
     Ok(json!({
         "embeds": [{"title": title, "description": content, "color": color,
-            "footer": {"text": "Marbles Stats"}}],
+            "footer": {"text": footer}}],
         "allowed_mentions": {"parse": []},
     }))
 }
 pub fn post(
     target: &str,
-    kind: &str,
-    content: &str,
+    body: &Value,
     still_enabled: impl Fn() -> bool,
 ) -> Result<bool, String> {
-    let body = message_body(kind, content)?;
     let mut url = saved_url(target)?;
     url.query_pairs_mut().append_pair("wait", "true");
     let mut pacing = cooldowns()
@@ -236,7 +258,7 @@ pub fn post(
         }
         let response = client()?
             .post(url.clone())
-            .json(&body)
+            .json(body)
             .send()
             .map_err(|_| {
                 "Discord request failed or timed out. It was not retried to avoid duplicate posts."
@@ -328,10 +350,20 @@ pub fn messages(event: &DiscordEvent, args: &Value) -> Result<Vec<String>, Strin
         args["player"] = args["cycleplayer"].clone();
         args["cycle"] = args["cyclenumber"].clone();
         args["races"] = args["cycleraces"].clone();
+        let player = args["cycleplayer"].as_str().unwrap_or("");
+        let standing = args["cycleStandings"].as_array().and_then(|standings| standings.iter()
+            .find(|row| row["playerName"].as_str().is_some_and(|name| name.eq_ignore_ascii_case(player))));
+        let total = standing.and_then(|row| row["totalRaces"].as_u64().map(|count| {
+            if row["totalRacesComplete"] == false { format!("at least {count}") }
+            else { count.to_string() }
+        })).or_else(|| args["totalRaces"].as_u64().map(|count| count.to_string()))
+            .unwrap_or_else(|| "unknown".into());
+        args["totalRaces"] = json!(total);
     }
     if let Some(placements) = args["placements"].as_array() {
         let lines: Vec<_> = placements
             .iter()
+            .filter(|player| player["points"].as_i64().is_some_and(|points| points > 0))
             .map(|player| {
                 let mut row = args.clone();
                 for (key, source) in [
@@ -344,6 +376,10 @@ pub fn messages(event: &DiscordEvent, args: &Value) -> Result<Vec<String>, Strin
                 ] {
                     row[key] = player[source].clone();
                 }
+                row["timeSuffix"] = json!(if args["gameType"] == "race" {
+                    player["time"].as_f64().filter(|time| time.is_finite() && *time >= 0.0)
+                        .map(|time| format!(" | {time:.3}s")).unwrap_or_default()
+                } else { String::new() });
                 row["place"] = json!(match player["place"].as_u64() {
                     Some(1) => "🥇".into(),
                     Some(2) => "🥈".into(),
@@ -354,9 +390,12 @@ pub fn messages(event: &DiscordEvent, args: &Value) -> Result<Vec<String>, Strin
                 render(&event.placement_template, &row)
             })
             .collect();
-        args["placements"] = json!(lines.join(&event.placement_separator));
+        args["placements"] = json!(lines.join("\n"));
     }
     let text = render(&event.message_template, &args);
+    if text.trim().is_empty() && event.message_template.trim() == "{placements}" {
+        return Ok(vec![]);
+    }
     if text.trim().is_empty() {
         return Err("Discord message is empty after substituting variables".into());
     }
@@ -396,15 +435,14 @@ pub fn deliveries(
     if !event.enabled {
         return Ok(vec![]);
     }
-    Ok(messages(event, args)?
-        .into_iter()
-        .map(|content| Delivery {
+    messages(event, args)?.into_iter().map(|content| {
+        Ok(Delivery {
             revision: 0,
             kind: kind.into(),
             event: event.clone(),
-            content,
+            body: message_body(kind, &content, args)?,
         })
-        .collect())
+    }).collect()
 }
 
 #[cfg(test)]
@@ -418,7 +456,7 @@ mod tests {
             ("worldRecord", 0xffe024),
             ("cycleComplete", 0xffe024),
         ] {
-            let body = message_body(kind, "Custom message @everyone").unwrap();
+            let body = message_body(kind, "Custom message @everyone", &json!({"mapName":"Test Map","playerCount":38,"cycleplayer":"Winner","timestamp":"2026-10-18T15:31:00Z"})).unwrap();
             assert!(body.get("content").is_none());
             assert_eq!(body["embeds"].as_array().unwrap().len(), 1);
             assert_eq!(body["embeds"][0]["color"], color);
@@ -426,8 +464,104 @@ mod tests {
             assert!(body["embeds"][0]["title"].as_str().unwrap().chars().count() < 256);
             assert_eq!(body["allowed_mentions"]["parse"], json!([]));
         }
-        assert!(message_body("unknown", "hello").is_err());
+        assert!(message_body("unknown", "hello", &json!({})).is_err());
     }
+    #[test]
+    fn result_titles_cycle_titles_dates_and_race_only_times() {
+        let event = DiscordConfig::default().events["race"].clone();
+        let mut args = json!({"mapName":"My Map","playerCount":38,"gameType":"race",
+            "timestamp":"2026-10-18T15:31:00Z","cycleplayer":"Winner",
+            "placements":[{"place":1,"name":"Winner","points":10,"time":42.1234}]});
+        let race = messages(&event, &args).unwrap();
+        assert!(race[0].ends_with("+10pts | 42.123s"));
+        let body = message_body("race", &race[0], &args).unwrap();
+        assert_eq!(body["embeds"][0]["title"], "🏁 Race finished | My Map results (38)");
+        let footer = body["embeds"][0]["footer"]["text"].as_str().unwrap();
+        let parsed = chrono::DateTime::parse_from_str(footer, "%Y-%m-%d %H:%M:%S %:z").unwrap();
+        assert_eq!(parsed.timestamp(), chrono::DateTime::parse_from_rfc3339("2026-10-18T15:31:00Z").unwrap().timestamp());
+        args["gameType"] = json!("battleRoyale");
+        assert_eq!(message_body("battleRoyale", "Results", &args).unwrap()["embeds"][0]["title"], "🏁 Battle Royale finished | My Map results (38)");
+        assert!(!messages(&event, &args).unwrap()[0].contains("42.123"));
+        let body = message_body("cycleComplete", "Original cycle message", &args).unwrap();
+        assert_eq!(body["embeds"][0]["title"], "Winner completed a cycle!");
+        assert_eq!(body["embeds"][0]["description"], "Original cycle message");
+    }
+
+    #[test]
+    fn discord_cycle_uses_player_total_at_completion() {
+        let mut config = DiscordConfig::default();
+        config.events.get_mut("cycleComplete").unwrap().message_template = "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉".into();
+        upgrade_defaults(&mut config);
+        let event = &config.events["cycleComplete"];
+        let mut args = json!({"eventType":"cycleComplete", "cycleplayer":"Winner", "cyclenumber":3,
+            "cycleraces":42, "cycleStandings":[{"playerName":"Winner","totalRaces":1200,"totalRacesComplete":true}]});
+        assert!(messages(event, &args).unwrap()[0].ends_with("Total races: 1200."));
+        args["cycleStandings"][0]["totalRacesComplete"] = json!(false);
+        assert!(messages(event, &args).unwrap()[0].ends_with("Total races: at least 1200."));
+        args["cycleStandings"] = json!([]);
+        assert!(messages(event, &args).unwrap()[0].ends_with("Total races: unknown."));
+    }
+
+    #[test]
+    fn world_record_default_upgrades_without_replacing_custom_text() {
+        let mut config = DiscordConfig::default();
+        config.events.get_mut("worldRecord").unwrap().message_template = "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!".into();
+        upgrade_defaults(&mut config);
+        assert_eq!(config.events["worldRecord"].message_template,
+            "🎉 New World Record on {mapName}!\n{wrplayer} +{wrplayerpoints} points in {wrrecordtime}s!");
+        config.events.get_mut("worldRecord").unwrap().message_template = "My record: {wrplayer}".into();
+        upgrade_defaults(&mut config);
+        assert_eq!(config.events["worldRecord"].message_template, "My record: {wrplayer}");
+    }
+
+    #[test]
+    fn legacy_results_settings_become_one_shared_event() {
+        let mut config = DiscordConfig::default();
+        let br = config.events.get_mut("battleRoyale").unwrap();
+        br.enabled = true;
+        br.message_template = "BR custom: {race}".into();
+        upgrade_defaults(&mut config);
+        assert_eq!(config.events["race"], config.events["battleRoyale"]);
+        assert!(config.events["race"].enabled);
+        assert_eq!(config.events["race"].message_template, "BR custom: {race}");
+
+        config.events.get_mut("race").unwrap().message_template = "Shared: {race}".into();
+        upgrade_defaults(&mut config);
+        assert_eq!(config.events["race"], config.events["battleRoyale"]);
+        assert_eq!(config.events["race"].message_template, "Shared: {race}");
+    }
+
+    #[test]
+    fn results_list_only_positive_point_earners_on_separate_lines() {
+        let mut event = DiscordConfig::default().events["race"].clone();
+        event.message_template = "Results:\n{placements}".into();
+        event.placement_template = "#{placement} {player} +{points}pts".into();
+        let args = json!({"placements": [
+            {"place":1,"name":"Winner","points":10},
+            {"place":2,"name":"Zero","points":0},
+            {"place":3,"name":"Third","points":2},
+            {"place":4,"name":"Negative","points":-1},
+            {"place":5,"name":"Unknown","points":null}
+        ]});
+        assert_eq!(messages(&event, &args).unwrap(),
+            vec!["Results:\n#1 Winner +10pts\n#3 Third +2pts"]);
+        assert_eq!(messages(&event, &json!({"isTest":true,"placements":[
+            {"place":1,"name":"Zero","points":0}
+        ]})).unwrap(), vec!["Results:\n"]);
+    }
+
+    #[test]
+    fn legacy_separator_is_ignored_and_default_heading_gets_its_own_line() {
+        let mut config = DiscordConfig::default();
+        let mut stored = serde_json::to_value(&config).unwrap();
+        stored["events"]["race"]["placementSeparator"] = json!(" | ");
+        stored["events"]["race"]["messageTemplate"] = json!("🏁 {race} results: {placements}");
+        config = serde_json::from_value(stored).unwrap();
+        upgrade_defaults(&mut config);
+        assert_eq!(config.events["race"].message_template, "{placements}");
+        assert!(serde_json::to_value(&config).unwrap()["events"]["race"].get("placementSeparator").is_none());
+    }
+
     #[test]
     fn defaults_are_optional_and_share_one_channel() {
         let config = DiscordConfig::default();

@@ -14,7 +14,8 @@
     "streamdeck:pack": "node scripts/render-streamdeck-previews.mjs && node scripts/bundle-streamdeck.mjs && streamdeck pack streamdeck/com.marblesstats.controls.sdPlugin --output public/streamdeck --force --no-update-check --no-file-list",
     "streamdeck:check": "node scripts/render-streamdeck-previews.mjs && node scripts/bundle-streamdeck.mjs && node scripts/verify-streamdeck.mjs && node scripts/verify-streamdeck-runtime.mjs",
     "format": "prettier --write src/**/*.{ts,css} index.html",
-    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "security:check": "node scripts/verify-security.mjs && node scripts/verify-streamdeck.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0"
