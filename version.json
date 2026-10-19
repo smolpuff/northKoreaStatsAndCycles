@@ -1,10 +1,11 @@
 {
-  "version": "0.2.9",
+  "version": "0.2.10",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Add Stream Deck integration with physical RaceStats and RaceCycles start/stop keys, live status and automatic reconnection.",
-    "Include installers for Marbles Stats Controls and the full standalone MoS DropGate v0.4.3 Windows plugin. Detect installed versions and offer Install, Update or Reinstall.",
-    "Use matching sidebar artwork, state gradients, readable labels and compact plugin cards with larger previews.",
-    "MoS DropGate keys show the current target channel, follow outgoing raids when enabled, and display an X for three seconds after an offline drop attempt."
+    "Improve overlay customization, cycle progress displays and settings accordion behavior.",
+    "Improve Discord message formatting, integration controls and compact layouts.",
+    "Add a configurable Twitch promotion start delay, separate from the repeat interval.",
+    "Harden native command access, credential handling and automatic update verification.",
+    "Bundle the tested DropGate custom-icon picker and live/offline color controls, matching the standalone plugin."
   ]
 }
