@@ -14,9 +14,9 @@
       {
         "title": "Marbles Stats",
         "width": 1000,
-        "height": 760,
+        "height": 740,
         "minWidth": 1000,
-        "minHeight": 560,
+        "minHeight": 740,
         "backgroundColor": "#040812"
       }
     ],

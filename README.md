@@ -12,8 +12,10 @@ Track **Marbles on Stream** race stats and cycles automatically from your game r
 ## Features
 
 - **RaceStats** — Race and Battle Royale results, points, and leaderboards.
+- **Session tools** — Import and Export at the top right of RaceStats, followed by the Latest Results event picker, with player search in its results header. Cycles Import and Export stay together at the right of its watcher row. RaceStats Import is a disabled placeholder. Cycles supports Marble Cycle session downloads up to 512 MB.
 - **RaceCycles** — track placements 1–10, cycle progress, and completion history.
 - **Overlays** — customizable results, podiums, cycle progress, and celebrations.
+- **Viewer commands** - optional Twitch `!mycycles` for cycle progress and `!mystats` for session participation/points and saved all-time totals; shared reply cooldowns.
 - **Integrations** — Twitch chat, Discord, Streamer.bot, and Lumia Stream.
 - **Stream Deck** — tracker controls and bundled MoS DropGate with custom icons and colors.
 

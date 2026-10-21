@@ -1274,11 +1274,6 @@ th,
   font-size: 12px;
 }
 
-#cycle-filter-count, #race-filter-count {
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .summary-row {
   display: flex;
   align-items: center;

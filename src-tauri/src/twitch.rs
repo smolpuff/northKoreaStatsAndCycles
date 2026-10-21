@@ -346,7 +346,7 @@ pub(crate) fn chat_credential() -> Result<StoredTwitchCredential, String> {
     let credential = validate_saved()?;
     let validation = validate_access_token(&http_client()?, &credential.access_token)?;
     if !validation.scopes.iter().any(|scope| scope == "user:read:chat") {
-        return Err("Disconnect and reconnect Twitch with !mycycle enabled to allow reading chat".into());
+        return Err("Disconnect and reconnect Twitch with a viewer command enabled to allow reading chat".into());
     }
     Ok(credential)
 }

@@ -163,6 +163,8 @@ impl Default for DiscordConfig {
 pub struct TwitchConfig {
     #[serde(default)]
     pub my_cycle_command: bool,
+    #[serde(default)]
+    pub my_stats_command: bool,
     #[serde(default = "default_promotion_enabled")]
     pub promote_mission_app: bool,
     #[serde(default = "default_promotion_interval")]
@@ -208,6 +210,7 @@ impl Default for TwitchConfig {
     fn default() -> Self {
         Self {
             my_cycle_command: false,
+            my_stats_command: false,
             promote_mission_app: default_promotion_enabled(),
             promotion_interval_minutes: default_promotion_interval(),
             promotion_start_delay_minutes: default_promotion_start_delay(),

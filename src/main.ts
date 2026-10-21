@@ -75,6 +75,7 @@ let state: Snapshot = {
     },
     twitch: {
       myCycleCommand: false,
+      myStatsCommand: false,
       promoteMissionApp: false,
       promotionIntervalMinutes: 60,
       promotionStartDelayMinutes: 30,
@@ -451,13 +452,10 @@ function renderMainWindow(): void {
     raceInput.value = raceSearch;
     const filter = () => {
       raceSearch = raceInput.value;
-      let matched = 0;
       const rows = document.querySelectorAll<HTMLTableRowElement>(".race-results tbody tr, .battle-royale-results tbody tr");
       rows.forEach(row => {
         row.hidden = !row.querySelector(".player")!.textContent!.toLocaleLowerCase().includes(raceSearch.trim().toLocaleLowerCase());
-        if (!row.hidden) matched++;
       });
-      document.querySelector("#race-filter-count")!.textContent = `${matched} of ${rows.length} racers`;
     };
     raceInput.addEventListener("input", filter);
     filter();
@@ -487,12 +485,9 @@ function renderMainWindow(): void {
     search.value = cycleSearch;
     const filterRows = () => {
       cycleSearch = search.value;
-      let matched = 0;
       document.querySelectorAll<HTMLTableRowElement>(".cycle-table tbody tr").forEach(row => {
         row.hidden = !row.querySelector(".cycle-player")!.textContent!.toLocaleLowerCase().includes(cycleSearch.trim().toLocaleLowerCase());
-        if (!row.hidden) matched++;
       });
-      document.querySelector("#cycle-filter-count")!.textContent = `${matched} of ${state.raceCycles.length} racers`;
     };
     search.addEventListener("input", filterRows);
     filterRows();
@@ -673,6 +668,7 @@ function readSettingsForm(): Config {
       },
     },
     twitch: {
+      myStatsCommand: document.querySelector<HTMLInputElement>("#twitch-my-stats-command")?.checked ?? state.config.twitch.myStatsCommand ?? false,
       myCycleCommand: document.querySelector<HTMLInputElement>("#twitch-my-cycle-command")?.checked ?? state.config.twitch.myCycleCommand ?? false,
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
       promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? false,

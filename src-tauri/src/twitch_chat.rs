@@ -1,6 +1,10 @@
 //! Optional EventSub listener. Reads only the connected broadcaster's channel;
 //! replies use the existing Helix sender and never enter the scoring pipeline.
-use crate::{emit_snapshot, log, models::RaceCyclePlayer, twitch, SharedRuntime};
+use crate::{
+    emit_snapshot, log,
+    models::{GameResult, GameType, RaceCyclePlayer, TwitchConfig},
+    twitch, SharedRuntime,
+};
 use serde_json::Value;
 use std::{
     collections::{HashMap, VecDeque},
@@ -41,6 +45,56 @@ pub fn format_reply(login: &str, players: &[RaceCyclePlayer]) -> String {
         player.completed_cycles(), positions.len())
 }
 
+// Use committed RaceStats results, never cumulative CSV season totals or cycle imports.
+fn stats_totals(login: &str, games: &[GameResult]) -> (u64, u64, i64) {
+    let mut stream_races = 0;
+    let mut races = 0;
+    let mut points = 0i64;
+    for game in games {
+        let race = game.game_type == GameType::Race;
+        if race {
+            stream_races += 1;
+        }
+        if let Some(player) = game.results.iter().find(|player| {
+            player.platform.eq_ignore_ascii_case("twitch")
+                && player.username.eq_ignore_ascii_case(login)
+        }) {
+            if race {
+                races += 1;
+            }
+            points = points.saturating_add(player.season_points_earned);
+        }
+    }
+    (races, stream_races, points)
+}
+
+fn format_stats_reply(login: &str, session: &[GameResult], history: &[GameResult]) -> String {
+    let (races, stream_races, points) = stats_totals(login, session);
+    let (total_races, _, total_points) = stats_totals(login, history);
+    format!("@{login} | This session: {races} of {stream_races} stream races, {points} points | All-time tracked: {total_races} races, {total_points} points")
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ViewerCommand {
+    Cycles,
+    Stats,
+}
+
+impl ViewerCommand {
+    fn enabled(self, config: &TwitchConfig) -> bool {
+        match self {
+            Self::Cycles => config.my_cycle_command,
+            Self::Stats => config.my_stats_command,
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Self::Cycles => "!mycycles",
+            Self::Stats => "!mystats",
+        }
+    }
+}
+
 #[derive(Default)]
 struct Commands {
     seen: VecDeque<String>,
@@ -76,7 +130,10 @@ impl Commands {
     }
 }
 
-fn command<'a>(value: &'a Value, channel: &str) -> Option<(&'a str, &'a str, &'a str)> {
+fn command<'a>(
+    value: &'a Value,
+    channel: &str,
+) -> Option<(&'a str, &'a str, &'a str, ViewerCommand)> {
     if value["metadata"]["subscription_type"] != "channel.chat.message" {
         return None;
     }
@@ -100,13 +157,12 @@ fn command<'a>(value: &'a Value, channel: &str) -> Option<(&'a str, &'a str, &'a
     {
         return None;
     }
-    if !event["message"]["text"]
-        .as_str()?
-        .trim()
-        .eq_ignore_ascii_case("!mycycle")
-    {
-        return None;
-    }
+    let text = event["message"]["text"].as_str()?.trim();
+    let kind = match text.to_ascii_lowercase().as_str() {
+        "!mycycle" | "!mycycles" => ViewerCommand::Cycles,
+        "!mystats" => ViewerCommand::Stats,
+        _ => return None,
+    };
     let login = event["chatter_user_login"].as_str()?;
     if login.is_empty()
         || login.len() > 25
@@ -120,7 +176,7 @@ fn command<'a>(value: &'a Value, channel: &str) -> Option<(&'a str, &'a str, &'a
     if user.is_empty() {
         return None;
     }
-    Some((event["message_id"].as_str()?, user, login))
+    Some((event["message_id"].as_str()?, user, login, kind))
 }
 
 fn reconnect_url(address: &str) -> bool {
@@ -180,7 +236,8 @@ fn connect(address: &str) -> Result<Socket, String> {
 fn enabled(runtime: &SharedRuntime, login: Option<&str>) -> bool {
     runtime.lock().is_ok_and(|rt| {
         !rt.connection_checks_stopped
-            && rt.snapshot.config.twitch.my_cycle_command
+            && (rt.snapshot.config.twitch.my_cycle_command
+                || rt.snapshot.config.twitch.my_stats_command)
             && rt.snapshot.twitch_status == "Connected"
             && login.is_none_or(|login| rt.snapshot.twitch_username.as_deref() == Some(login))
     })
@@ -278,7 +335,7 @@ fn listen(
                     runtime,
                     app,
                     &format!(
-                        "Listening in #{} — viewers can type !mycycle",
+                        "Listening in #{} — enabled viewer commands are ready",
                         credential.login
                     ),
                 );
@@ -296,15 +353,26 @@ fn listen(
                 )
             }
             "notification" if subscribed => {
-                if let Some((id, user, login)) = command(&value, &credential.user_id) {
-                    if !commands.accept(id, user, Instant::now()) {
-                        continue;
-                    }
+                if let Some((id, user, login, kind)) = command(&value, &credential.user_id) {
                     let reply = {
                         let rt = runtime
                             .lock()
                             .map_err(|_| "Application state unavailable")?;
-                        format_reply(login, &rt.race_state.race_cycles)
+                        if !kind.enabled(&rt.snapshot.config.twitch)
+                            || !commands.accept(id, user, Instant::now())
+                        {
+                            continue;
+                        }
+                        match kind {
+                            ViewerCommand::Cycles => {
+                                format_reply(login, &rt.race_state.race_cycles)
+                            }
+                            ViewerCommand::Stats => format_stats_reply(
+                                login,
+                                &rt.snapshot.session_results,
+                                &rt.snapshot.recent_results,
+                            ),
+                        }
                     };
                     // Fetch current credentials before sending (the token may have rotated).
                     let current = twitch::validate_saved()?;
@@ -313,16 +381,30 @@ fn listen(
                     {
                         return Ok(());
                     }
+                    if !runtime
+                        .lock()
+                        .is_ok_and(|rt| kind.enabled(&rt.snapshot.config.twitch))
+                    {
+                        continue;
+                    }
                     match twitch::send_chat_message(&current, &reply) {
-                        Ok(()) => log(runtime, app, "info", "[Twitch] !mycycle reply sent"),
+                        Ok(()) => log(
+                            runtime,
+                            app,
+                            "info",
+                            format!("[Twitch] {} reply sent", kind.name()),
+                        ),
                         Err(error) => {
                             log(
                                 runtime,
                                 app,
                                 "warning",
-                                format!("[Twitch] !mycycle reply failed: {error}"),
+                                format!("[Twitch] {} reply failed: {error}", kind.name()),
                             );
-                            return Err("Twitch could not send !mycycle reply; reconnecting".into());
+                            return Err(format!(
+                                "Twitch could not send {} reply; reconnecting",
+                                kind.name()
+                            ));
                         }
                     }
                 }
@@ -343,7 +425,8 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) {
             let (stopped, configured) = match runtime.lock() {
                 Ok(rt) => (
                     rt.connection_checks_stopped,
-                    rt.snapshot.config.twitch.my_cycle_command,
+                    rt.snapshot.config.twitch.my_cycle_command
+                        || rt.snapshot.config.twitch.my_stats_command,
                 ),
                 Err(_) => return,
             };
@@ -353,7 +436,7 @@ pub fn start(runtime: &SharedRuntime, app: &tauri::AppHandle) {
             if !configured {
                 status(&runtime, &app, "Chat listener disabled");
             } else if !enabled(&runtime, None) {
-                status(&runtime, &app, "Connect Twitch to listen for !mycycle");
+                status(&runtime, &app, "Connect Twitch to use viewer commands");
             } else {
                 status(&runtime, &app, "Connecting to Twitch chat…");
                 if let Err(error) = listen(&runtime, &app, &mut commands) {
@@ -434,7 +517,10 @@ mod tests {
     #[test]
     fn accepts_only_exact_command_from_connected_channel() {
         let mut value = event();
-        assert_eq!(command(&value, "123"), Some(("message-1", "456", "alice")));
+        assert_eq!(
+            command(&value, "123"),
+            Some(("message-1", "456", "alice", ViewerCommand::Cycles))
+        );
         assert!(command(&value, "789").is_none());
         value["payload"]["event"]["message"]["text"] = "!mycycle someone_else".into();
         assert!(command(&value, "123").is_none());
@@ -442,6 +528,60 @@ mod tests {
         value["payload"]["event"]["source_broadcaster_user_id"] = "789".into();
         assert!(command(&value, "123").is_none());
     }
+    #[test]
+    fn both_commands_and_alias_share_cooldown_and_dedup() {
+        let mut commands = Commands::default();
+        let now = Instant::now();
+        let mut value = event();
+        for (index, text, expected) in [
+            (0, "!mycycles", ViewerCommand::Cycles),
+            (1, " !MYSTATS ", ViewerCommand::Stats),
+            (2, "!mycycle", ViewerCommand::Cycles),
+        ] {
+            value["payload"]["event"]["message"]["text"] = text.into();
+            value["payload"]["event"]["message_id"] = format!("message-{index}").into();
+            let (id, user, _, kind) = command(&value, "123").unwrap();
+            assert_eq!(kind, expected);
+            assert_eq!(commands.accept(id, user, now), index == 0);
+        }
+        value["payload"]["event"]["message"]["text"] = "!mystats someone_else".into();
+        assert!(command(&value, "123").is_none());
+        let mut config = TwitchConfig::default();
+        config.my_stats_command = true;
+        assert!(ViewerCommand::Stats.enabled(&config));
+        assert!(!ViewerCommand::Cycles.enabled(&config));
+    }
+
+    fn stats_game(id: &str, kind: &str, login: &str, platform: &str, points: i64) -> GameResult {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "timestamp": "2026-10-19T12:00:00Z", "gameType": kind,
+            "playerCount": 1, "hasWorldRecord": false,
+            "results": [{ "playerName": "Different display name", "username": login,
+                "displayName": "Different display name", "platform": platform,
+                "placement": 1, "seasonPointsEarned": points, "seasonPointsTotal": 9999,
+                "rawData": {} }]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn stats_use_session_participation_and_saved_earnings_by_twitch_login() {
+        let race = stats_game("race", "race", "ALICE", "Twitch", 10);
+        let other = stats_game("other", "race", "alice", "YouTube", 90);
+        let br = stats_game("br", "battleRoyale", "alice", "Twitch", 7);
+        let zero = stats_game("zero", "race", "alice", "Twitch", 0);
+        let older = stats_game("older", "race", "alice", "Twitch", 5);
+        let session = vec![race, other, br, zero];
+        let mut history = session.clone();
+        history.push(older);
+        assert_eq!(format_stats_reply("alice", &session, &history),
+            "@alice | This session: 2 of 3 stream races, 17 points | All-time tracked: 3 races, 22 points");
+        assert_eq!(format_stats_reply("newviewer", &session, &history),
+            "@newviewer | This session: 0 of 3 stream races, 0 points | All-time tracked: 0 races, 0 points");
+        assert_eq!(format_stats_reply("alice", &[], &history),
+            "@alice | This session: 0 of 0 stream races, 0 points | All-time tracked: 3 races, 22 points");
+    }
+
     #[test]
     fn reconnect_accepts_only_twitch_wss() {
         assert!(reconnect_url(ENDPOINT));
@@ -465,8 +605,14 @@ mod tests {
         let config: crate::models::TwitchConfig =
             serde_json::from_str(r#"{"postResults":true}"#).unwrap();
         assert!(!config.my_cycle_command);
+        assert!(!config.my_stats_command);
         let enabled: crate::models::TwitchConfig =
             serde_json::from_str(r#"{"postResults":true,"myCycleCommand":true}"#).unwrap();
         assert!(enabled.my_cycle_command);
+        assert!(!enabled.my_stats_command);
+        let stats: TwitchConfig =
+            serde_json::from_str(r#"{"postResults":true,"myStatsCommand":true}"#).unwrap();
+        assert!(stats.my_stats_command);
+        assert!(!stats.my_cycle_command);
     }
 }

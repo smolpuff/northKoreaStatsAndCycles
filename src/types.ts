@@ -95,6 +95,7 @@ export interface Config {
   };
   twitch: {
     myCycleCommand?: boolean;
+    myStatsCommand?: boolean;
     promoteMissionApp?: boolean;
     promotionIntervalMinutes?: number;
     promotionStartDelayMinutes?: number;

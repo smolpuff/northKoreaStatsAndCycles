@@ -1487,7 +1487,8 @@ async fn connect_twitch(
 
     let auth_runtime = shared.clone();
     let auth_app = app.clone();
-    let read_chat = shared.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.my_cycle_command;
+    let read_chat = shared.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.clone();
+    let read_chat = read_chat.my_cycle_command || read_chat.my_stats_command;
     let result = tauri::async_runtime::spawn_blocking(move || twitch_oauth::authorize(read_chat, |message| {
         set_twitch_status(&auth_runtime, "Authorizing", Some(message.to_owned()), None);
         emit_snapshot(&auth_runtime, &auth_app);

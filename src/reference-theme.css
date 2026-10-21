@@ -4914,6 +4914,90 @@ dialog[open].dialog-closing::backdrop {
   flex: 0 1 140px;
 }
 
+/* RaceStats toolbar and result picker share the watcher control height. */
+.race-session-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-left: auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.race-results-actions > .icon-input { height: 30px; }
+
+.race-results-actions .icon-input > input {
+  height: 28px;
+  font-size: 12px;
+}
+
+.race-session-tools .compact-button,
+.cycle-session-tools .compact-button,
+.race-results-actions :is(.compact-button, .theme-select) {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.race-session-tools .compact-button svg,
+.race-session-tools [data-export]::before,
+.cycle-session-tools [data-export]::before,
+.race-results-actions #clear-race-results::before {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.race-results-actions {
+  min-width: 0;
+  gap: 10px;
+}
+
+.tracking-page-head > .tracking-controls {
+  align-items: center;
+  gap: 8px;
+}
+
+.cycle-session-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.tracker-transfer-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex: none;
+  gap: 8px;
+}
+
+.race-session-tools .previous-results-control { margin-left: 0; }
+
+.race-session-tools .theme-select {
+  min-width: 0;
+  width: 180px;
+  max-width: 100%;
+}
+
+.race-session-tools .race-import-placeholder:disabled {
+  opacity: .35;
+  background: transparent;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .overview-page .results-header { flex-wrap: wrap; }
+  .race-results-actions { width: 100%; flex-wrap: wrap; }
+  .race-session-tools .previous-results-control { min-width: 0; }
+  .race-session-tools .theme-select { max-width: 100%; }
+}
+
 .results-name>.icon-input {
   width: 200px;
   max-width: 100%;
@@ -5607,3 +5691,34 @@ dialog[open].dialog-closing::backdrop {
 
 .player > span:has(.world-record-badge) { display: flex; align-items: center; gap: 0; }
 .player .world-record-badge { flex: none; }
+
+/* Keep tracker rows consistent across standalone, feedback and select controls. */
+:is(.overview-page, .cycles-view) .tracking-controls {
+  align-items: center;
+}
+
+:is(.overview-page, .cycles-view) .tracking-controls :is(#watch-toggle, .compact-button, .theme-select) {
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 0 10px;
+  border-width: 1px;
+  border-radius: var(--reference-radius-control);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  gap: 8px;
+  vertical-align: middle;
+}
+
+:is(.overview-page, .cycles-view) .tracking-controls :is(#watch-toggle, .compact-button) svg,
+:is(.overview-page, .cycles-view) .tracking-controls [data-export]::before {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.overview-page .tracking-controls .theme-select { padding-right: 30px; }

@@ -447,10 +447,18 @@ function watcherControls(
   </div>`;
 }
 
-function isRecordPlayer(game: GameResult, result: GameResult["results"][number]): boolean {
+function isRecordPlayer(
+  game: GameResult,
+  result: GameResult["results"][number],
+): boolean {
   const recordName = game.worldRecordPlayer?.trim().toLowerCase();
-  return !!game.hasWorldRecord && !!recordName &&
-    [result.playerName, result.username, result.displayName].some(name => name?.trim().toLowerCase() === recordName);
+  return (
+    !!game.hasWorldRecord &&
+    !!recordName &&
+    [result.playerName, result.username, result.displayName].some(
+      (name) => name?.trim().toLowerCase() === recordName,
+    )
+  );
 }
 
 function resultRow(
@@ -459,13 +467,19 @@ function resultRow(
   compact = false,
   worldRecord = false,
 ): string {
-  const playerColor = /^(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(result.nameColorHex ?? "") ? result.nameColorHex! : "94a3b8";
+  const playerColor = /^(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(
+    result.nameColorHex ?? "",
+  )
+    ? result.nameColorHex!
+    : "94a3b8";
   const eliminated =
     result.eliminated == null ? "—" : result.eliminated ? "Yes" : "No";
   const royaleValue = (field: string) =>
     escapeHtml(result.rawData?.[field]?.trim() || "—");
   const dead = battleRoyale && result.placement !== 1;
-  const rowClass = (dead ? "royale-dead" : `p${result.placement}`) + (worldRecord ? " world-record-row" : "");
+  const rowClass =
+    (dead ? "royale-dead" : `p${result.placement}`) +
+    (worldRecord ? " world-record-row" : "");
 
   return `
     <tr class="${rowClass}">
@@ -547,7 +561,14 @@ function resultsTable(
         </thead>
         <tbody>
           ${sortResults(game, sort)
-            .map((result) => resultRow(result, battleRoyale, false, isRecordPlayer(game, result)))
+            .map((result) =>
+              resultRow(
+                result,
+                battleRoyale,
+                false,
+                isRecordPlayer(game, result),
+              ),
+            )
             .join("")}
         </tbody>
       </table>
@@ -590,29 +611,32 @@ function overviewPage(
         <div class="head-actions tracking-controls">
           ${watcherControls(state, busy, "stats")}
           ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="stats" title="Reprocess the latest Race or Battle Royale file for RaceStats only"', "cycles")}
-          <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest Results</option>${[
-            ...state.recentResults,
-          ]
-            .reverse()
-            .filter((game) => game.id !== state.latestResult?.id)
-            .map(
-              (game) =>
-                `<option value="${escapeHtml(game.id)}" ${selectedRaceId === game.id ? "selected" : ""}>${escapeHtml(formatDate(game.timestamp))} &middot; ${escapeHtml(game.mapName ?? "Unknown track")}</option>`,
-            )
-            .join("")}</select></div>
+          <div class="race-session-tools">
+            <div class="tracker-transfer-actions">
+            <button class="compact-button race-import-placeholder" type="button" disabled title="RaceStats import is not available yet">${icons.download} Import</button>
+            <button data-export="session" class="compact-button" type="button">Export</button>
+            </div>
+            <div class="previous-results-control"><select id="previous-race-results" class="theme-select" aria-label="Previous race results"><option value="">Latest Results</option>${[
+              ...state.recentResults,
+            ]
+              .reverse()
+              .filter((game) => game.id !== state.latestResult?.id)
+              .map(
+                (game) =>
+                  `<option value="${escapeHtml(game.id)}" ${selectedRaceId === game.id ? "selected" : ""}>${escapeHtml(formatDate(game.timestamp))} &middot; ${escapeHtml(game.mapName ?? "Unknown track")}</option>`,
+              )
+              .join("")}</select></div>
+          </div>
         </div>
       </div>
 
       <section class="panel results-panel">
         <header class="results-header">
           ${resultsName(state.config.seasons.raceName || fileName, editingName)}
-          <div class="results-actions">
+          <div class="results-actions race-results-actions">
             ${iconInput(icons.search, `<input id="race-search" class="cycle-search" type="search" placeholder="Search players" aria-label="Search players" />`)}
-            <span id="race-filter-count" aria-live="polite"></span>
-            <div class="results-actions-group">
-              <button data-export="session" class="compact-button" type="button">Export session</button>
+
               <button id="clear-race-results" class="compact-button btn-error" type="button" ${state.latestResult || state.sessionResults.length || state.totalRaceCount || state.totalBattleRoyaleCount || state.seasonPointsEarned ? "" : "disabled"}>Clear Results</button>
-            </div>
           </div>
         </header>
         <div class="panel-body">${resultsTable(displayedGame, resultsSort)}</div>
@@ -930,18 +954,6 @@ function settingsPage(
       </details>
     </section>
 
-    <section class="twitch-settings-section" data-feature-section="twitch-my-cycle-command">
-      <div class="toggle-row twitch-feature-heading">
-        <i>${icons.trophy}</i>
-        <span><b>Viewer command: !mycycle</b><small>Listens in the connected Twitch account's chat for !mycycles. Total races, completed cycles, progress and missing placements.</small></span>
-        <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycle" ${twitch.myCycleCommand ? "checked" : ""} />
-      </div>
-      <div class="feature-content">
-        <div class="twitch-message-preview" role="status"><span>Chat listener</span><p>${escapeHtml(twitch.myCycleCommand ? state.twitchChatMessage || "Connecting to Twitch chat…" : "Chat listener disabled")}</p></div>
-        <div class="twitch-message-preview"><span>Preview</span><p>Cycle data for @viewer - Total Races: 577. Completed Cycles: 10. Current Progress: 8/10. Need: 2, 4</p></div>
-        <small class="twitch-feature-note">One reply per viewer every 30 seconds, up to five command replies per 30 seconds. Imported data with incomplete race totals is marked “at least”.</small>
-      </div>
-    </section>
     <section class="twitch-settings-section" data-feature-section="twitch-post-world-records">
       <div class="toggle-row twitch-feature-heading">
         <i>${icons.stopwatch}</i>
@@ -959,6 +971,21 @@ function settingsPage(
         <div class="twitch-message-actions">${feedbackButton("twitch-world-record", "Test world record", `data-twitch-test="worldRecord" ${twitchConnected ? "" : "disabled"}`, "test")}${feedbackButton("save-twitch-world-record", "Save", "data-twitch-save", "file")}<button type="button" class="overlay-inline-link" data-open-integration-help="twitch">Message help</button></div>
       </div>
       </details>
+    </section>
+
+    <section class="twitch-settings-section" data-feature-section="twitch-my-cycle-command">
+      <div class="toggle-row twitch-feature-heading">
+        <i>${icons.trophy}</i>
+        <span><b>Viewer command: !mycycles</b><small>Show your cycle progress in chat.</small></span>
+        <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycles" ${twitch.myCycleCommand ? "checked" : ""} />
+      </div>
+    </section>
+    <section class="twitch-settings-section" data-feature-section="twitch-my-stats-command">
+      <div class="toggle-row twitch-feature-heading">
+        <i>${icons.trophy}</i>
+        <span><b>Viewer command: !mystats</b><small>Show your session and total race stats in chat.</small></span>
+        <input id="twitch-my-stats-command" type="checkbox" role="switch" aria-label="Enable !mystats" ${twitch.myStatsCommand ? "checked" : ""} />
+      </div>
     </section>
   </div>
 
@@ -1126,9 +1153,12 @@ function raceCyclesPage(
       ${stat("Last updated", state.cycleLastUpdate ? formatTime(state.cycleLastUpdate) : "Never")}
     </div>
 
-      <div class="tracking-controls">${watcherControls(state, busy, "cycles")}
+      <div class="tracking-controls cycle-tracking-controls">${watcherControls(state, busy, "cycles")}
           ${feedbackButton("reprocess-latest", "Reprocess latest file", 'data-reprocess-latest="cycles" title="Reprocess the latest file for Cycles data only"', "cycles")}
-        ${feedbackButton("import-marble-cycle", "Import from MarblesCycles", "data-import-marble-cycle", "download")}
+        <div class="cycle-session-tools tracker-transfer-actions">
+          ${feedbackButton("import-marble-cycle", "Import", 'data-import-marble-cycle title="Import from MarblesCycles"', "download")}
+          <button data-export="cycles" class="compact-button" title="Export entire cycles list">Export</button>
+        </div>
       </div>
     </div>
 
@@ -1137,9 +1167,7 @@ function raceCyclesPage(
         ${resultsName(state.config.seasons.cycleName || "Cycle progress", editingName)}
         <div class="results-actions">
           ${iconInput(icons.search, `<input id="cycle-search" class="cycle-search" type="search" placeholder="Search players" aria-label="Search players" />`)}
-          <span id="cycle-filter-count" aria-live="polite"></span>
           <div class="results-actions-group">
-            <button data-export="cycles" class="compact-button" title="Export entire cycles list">Export</button>
             <button id="clear-race-cycles" class="compact-button btn-error" type="button" ${players.length || state.totalCycleRaceCount ? "" : "disabled"}>Clear Results</button>
           </div>
         </div>
@@ -1224,7 +1252,14 @@ function homePage(state: Snapshot, busy: boolean): string {
                         (player): player is GameResult["results"][number] =>
                           player != null,
                       )
-                      .map((player) => resultRow(player, true, true, isRecordPlayer(game!, player)))
+                      .map((player) =>
+                        resultRow(
+                          player,
+                          true,
+                          true,
+                          isRecordPlayer(game!, player),
+                        ),
+                      )
                       .join("")
                   : podium
                       .map(
