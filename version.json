@@ -2,10 +2,11 @@
   "version": "0.2.10",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Improve overlay customization, cycle progress displays and settings accordion behavior.",
-    "Improve Discord message formatting, integration controls and compact layouts.",
-    "Add a configurable Twitch promotion start delay, separate from the repeat interval.",
-    "Harden native command access, credential handling and automatic update verification.",
-    "Bundle the tested DropGate custom-icon picker and live/offline color controls, matching the standalone plugin."
+    "Always import Marble Cycle BR wins as cycle first places. Support session downloads up to 100 MB with a three-minute timeout.",
+    "Bundle the latest local Windows DropGate v0.4.4.6, including the separate mosCompGate action, and detect older installed plugin versions.",
+    "Keep automatic RaceStats start, automatic RaceCycles start, and Start minimized off by default. Enable update checks and mission app promo messages by default while preserving saved choices.",
+    "Add optional Twitch !mystats replies for session and retained all-time stats. Support !mycycles with !mycycle as an alias and shared reply cooldowns.",
+    "Improve tracker toolbar layout, keep Import and Export together, simplify player search, and use a 740 px minimum window height.",
+    "Verify BR player names, kills, damage and numeric sorting; fix a security-check false positive without allowing shell access."
   ]
 }

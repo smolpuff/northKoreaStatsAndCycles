@@ -1939,7 +1939,7 @@ struct MarbleImportReport { snapshot: AppSnapshot, added: usize, cycle_races: us
 
 #[tauri::command]
 async fn import_marble_cycle_results(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, url: String,
-    games: Vec<GameResult>, seasons: SeasonConfig, include_br_wins: bool) -> Result<MarbleImportReport, String> {
+    games: Vec<GameResult>, seasons: SeasonConfig) -> Result<MarbleImportReport, String> {
     let runtime = runtime.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let url = marble_cycle::session_url(&url)?;
@@ -1959,7 +1959,7 @@ async fn import_marble_cycle_results(app: tauri::AppHandle, runtime: State<'_, S
         }
         for game in &mut games {
             if game.game_type == GameType::BattleRoyale {
-                for result in &mut game.results { result.raw_data.insert("MarbleCycleBrWinsAsFirst".into(), include_br_wins.to_string()); }
+                for result in &mut game.results { result.raw_data.insert("MarbleCycleBrWinsAsFirst".into(), "true".into()); }
             }
         }
         let processing = runtime.lock().map_err(|_| "Application state unavailable")?.processing.clone();

@@ -16,8 +16,8 @@ export function streamDeckPage(): string {
       <section class="panel settings-panel streamer-panel streamdeck-plugin-card"><div class="panel-body">
         <div class="streamdeck-plugin-content">
         <div class="twitch-layout-heading streamer-event-heading"><i>${icons.twitch}</i><h2>MoS DropGate</h2><p>Customizable MoS Play button that will not send your msg if the stream is offline.</p><p><strong> Includes optional follow raids.</strong></p></div>
-        <div class="streamdeck-plugin-install"><div class="integration-connection-controls">${feedbackButton("streamdeck-dropgate-install", "Install MoS Drop plugin", 'data-install-dropgate-plugin data-streamdeck-plugin="dropgate" data-plugin-version="0.4.4" data-plugin-name="MoS Drop plugin"', "file")}</div>
-        <span class="streamdeck-plugin-meta">v0.4.4 &middot; Stream Deck 7.0+ &middot; Windows</span></div>
+        <div class="streamdeck-plugin-install"><div class="integration-connection-controls">${feedbackButton("streamdeck-dropgate-install", "Install MoS Drop plugin", 'data-install-dropgate-plugin data-streamdeck-plugin="dropgate" data-plugin-version="0.4.4.6" data-plugin-name="MoS Drop plugin"', "file")}</div>
+        <span class="streamdeck-plugin-meta">v0.4.4.6 &middot; Stream Deck 7.0+ &middot; Windows</span></div>
         </div>
         <div class="streamdeck-plugin-preview"><img class="streamdeck-plugin-sample" src="/streamdeck/previews/mosdropgate-default.svg" width="96" height="96" alt="Sample of the MoS Drop Gate key"></div>
       </div></section>

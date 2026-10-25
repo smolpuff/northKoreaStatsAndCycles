@@ -22,6 +22,15 @@ assert.deepEqual(capability.windows, ["main"]);
 assert(!capability.remote, "No remote origins may invoke native commands");
 assert(capability.permissions.includes("main-window-commands"));
 const backend = read("src-tauri/src/lib.rs");
+const cycleImport = backend.split("async fn import_marble_cycle_results(")[1].split("\nfn reset_stats_totals(")[0];
+assert(!cycleImport.includes("include_br_wins"), "Historical BR wins must always import as cycle first places");
+assert(cycleImport.includes('result.raw_data.insert("MarbleCycleBrWinsAsFirst".into(), "true".into())'));
+const cycleDownload = read("src-tauri/src/marble_cycle.rs");
+assert(cycleDownload.includes("const MAX_SESSION_BYTES: u64 = 100 * 1024 * 1024;"));
+assert(cycleDownload.includes("response.take(MAX_SESSION_BYTES + 1)"));
+assert(cycleDownload.includes("bytes.len() as u64 > MAX_SESSION_BYTES"));
+assert(cycleDownload.includes("Session exceeds the 100 MB import limit"));
+assert(!read("src/marble-cycle-import.ts").includes("data-br-wins"), "BR-win inclusion has no opt-out checkbox");
 const registered = backend.split(".invoke_handler(tauri::generate_handler![")[1].split("])")[0].trim().split(/,\s*/).filter(Boolean).map(name => name.trim().split("::").at(-1)).sort();
 const permissions = read("src-tauri/permissions/main-window.toml");
 const granted = [...permissions.split("commands.allow = [")[1].split("]")[0].matchAll(/"([a-z_]+)"/g)].map(match => match[1]).sort();
@@ -45,7 +54,7 @@ for (const name of ["twitch.rs", "lumia.rs", "discord_credentials.rs"]) {
 }
 assert(read("src-tauri/src/streamer_bot.rs").includes("redirect(reqwest::redirect::Policy::none())"), "Local action requests must not redirect elsewhere");
 const dropgate = fs.readFileSync("public/streamdeck/com.mosdropgate.plugin.streamDeckPlugin");
-assert.equal(crypto.createHash("sha256").update(dropgate).digest("hex"), "139f4ef564d76491a4282d8343c61edff94eb26f7e79eb82c9aea28a1ef30463", "A new bundled Drop Gate package needs its own source/provenance review");
+assert.equal(crypto.createHash("sha256").update(dropgate).digest("hex"), "ad384d1bce511a518d7875906bd739e526231de538ba32b5a4e1b02ce3889863", "A new bundled Drop Gate package needs its own source/provenance review");
 for (const file of ["checks.yml", "release.yml"]) {
   const workflow = read(".github/workflows/" + file);
   for (const match of workflow.matchAll(/uses:\s+([^\s#]+)/g)) assert(/@[a-f0-9]{40}$/.test(match[1]), "Third-party actions must be pinned to immutable commits");

@@ -1,7 +1,7 @@
 use std::{io::Read, time::Duration};
 use crate::models::*;
 
-const MAX_SESSION_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_SESSION_BYTES: u64 = 100 * 1024 * 1024;
 
 fn same_race(left: &GameResult, right: &GameResult) -> bool {
     // Different source race IDs remain different events, even when all results match.
@@ -229,7 +229,7 @@ pub fn fetch(value: &str) -> Result<String, String> {
     if response.status().is_redirection() { return Err("The session redirected instead of returning race data".into()); }
     let mut bytes = Vec::new();
     response.take(MAX_SESSION_BYTES + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > MAX_SESSION_BYTES { return Err("Session exceeds the 512 MB import limit".into()); }
+    if bytes.len() as u64 > MAX_SESSION_BYTES { return Err("Session exceeds the 100 MB import limit".into()); }
     String::from_utf8(bytes).map_err(|_| "Session was not valid UTF-8".into())
 }
 

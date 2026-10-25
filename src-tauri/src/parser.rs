@@ -439,6 +439,7 @@ mod tests {
                 .map(String::as_str),
             Some("2")
         );
+        assert_eq!(game.results[0].raw_data.get("MatchDamageDealt").map(String::as_str), Some("89"));
         assert!(!game.has_world_record);
         assert_eq!(parse_file(&results).unwrap().id, game.id);
         // Earned points belong to the match; cumulative season totals do not.

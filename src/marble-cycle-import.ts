@@ -15,8 +15,7 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
   dialog.innerHTML = `<header><h2 id="marble-cycle-import-title">Import Marble Cycle history</h2><button type="button" class="compact-button modal-close" aria-label="Close">${icons.close}</button></header>
     <p data-target></p>
     <label class="field">Session URL<input type="url" placeholder="https://marblecycle.com/session/…" aria-label="Marble Cycle session URL" /></label>
-    <label class="backup-choice" data-br-option><input type="checkbox" data-br-wins /> Count BR wins as Cycles 1st places</label>
-    <p class="muted" data-br-note>MarblesCycles counts BR results. This option adds BR wins as 1st places.</p>
+    <p class="muted">BR wins always count as Cycles 1st places without increasing Race counts. Session downloads support up to 100 MB.</p>
     <p data-status role="status" aria-live="polite">Enter a session URL to import all its historical results.</p>
     <div class="app-update-progress-track" data-import-progress hidden><progress max="100" value="0" aria-label="Import progress"></progress><span data-update-progress-fill aria-hidden="true" style="width:0%"></span></div>
     <p class="muted">Cycles only. All pages included; original dates and tracks unavailable. Existing placements carry forward.</p>
@@ -26,7 +25,6 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
   const done = dialog.querySelector<HTMLButtonElement>("[data-done]")!;
   done.addEventListener("click", () => dialog.close());
   const input = dialog.querySelector<HTMLInputElement>("input[type=url]")!;
-  const brWins = dialog.querySelector<HTMLInputElement>("[data-br-wins]")!;
   const status = dialog.querySelector<HTMLElement>("[data-status]")!;
   const commit = dialog.querySelector<HTMLButtonElement>("[data-import]")!;
   const close = dialog.querySelector<HTMLButtonElement>(".modal-close")!;
@@ -50,7 +48,7 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
   };
   const setBusy = (value: boolean) => {
     busy = value;
-    input.disabled = brWins.disabled = done.disabled = close.disabled = value;
+    input.disabled = done.disabled = close.disabled = value;
     commit.disabled = value || !sessionUrl();
   };
   close.addEventListener("click", () => dialog.close());
@@ -74,14 +72,13 @@ export function openMarbleCycleImport(state: Snapshot, update: (snapshot: Snapsh
         showProgress(event.payload.percent);
         status.textContent = `${event.payload.phase}: ${event.payload.current} / ${event.payload.total} (${event.payload.percent}%)`;
       });
-      const report = await invoke<{ snapshot: Snapshot; added: number; cycleRaces: number; skipped: number }>("import_marble_cycle_results", { url: loadedUrl, games: page.games, seasons, includeBrWins: brWins.checked });
+      const report = await invoke<{ snapshot: Snapshot; added: number; cycleRaces: number; skipped: number }>("import_marble_cycle_results", { url: loadedUrl, games: page.games, seasons });
       update(report.snapshot);
       const summary = `Added ${report.cycleRaces} races. Total: ${report.snapshot.totalCycleRaceCount} races · ${report.snapshot.raceCycles.length} players · ${report.snapshot.raceCycles.reduce((sum, player) => sum + player.cycles, 0)} cycles.`;
       status.hidden = true;
       dialog.querySelector<HTMLElement>("[data-success]")!.hidden = false;
       dialog.querySelector<HTMLElement>("[data-summary]")!.textContent = summary;
       input.closest<HTMLElement>(".field")!.hidden = true;
-      dialog.querySelector<HTMLElement>("[data-br-option]")!.hidden = true;
       dialog.querySelectorAll<HTMLElement>(".muted").forEach(element => { element.hidden = true; });
       commit.hidden = true;
       done.textContent = "Close";

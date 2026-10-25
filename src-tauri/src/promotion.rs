@@ -107,10 +107,16 @@ mod tests {
     }
 
     #[test]
-    fn old_config_defaults_promotion_off_and_preserves_explicit_choices() {
+    fn old_config_defaults_promotion_on_and_preserves_explicit_choices() {
         let config: TwitchConfig = serde_json::from_str(r#"{"postResults":true}"#).unwrap();
-        assert!(!config.promote_mission_app);
-        assert!(!TwitchConfig::default().promote_mission_app);
+        assert!(config.promote_mission_app);
+        assert!(TwitchConfig::default().promote_mission_app);
+        let defaults = crate::models::AppConfig::default_for("LastSeasonRace.csv".into());
+        assert!(!defaults.csv.auto_start_watcher);
+        assert!(!defaults.csv.auto_start_cycles);
+        assert!(!defaults.start_minimized);
+        assert!(defaults.auto_update_check_enabled);
+        assert!(defaults.twitch.promote_mission_app);
         assert_eq!(config.promotion_interval_minutes, 60);
         assert_eq!(config.promotion_start_delay_minutes, 30);
         let custom: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promotionStartDelayMinutes":15}"#).unwrap();

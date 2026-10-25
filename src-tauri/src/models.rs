@@ -200,7 +200,7 @@ pub fn default_race_separator() -> String { " | ".into() }
 
 pub fn default_promotion_interval() -> u64 { 60 }
 pub fn default_promotion_start_delay() -> u64 { 30 }
-pub fn default_promotion_enabled() -> bool { false }
+pub fn default_promotion_enabled() -> bool { true }
 
 pub fn default_promotion_message() -> String {
     "🚀 Korea's MoS Missions App - *Full Missions Automation. 100% free. Resets, rentals, cooldowns, mission mode, auto mode, built-in burner wallet for txs. Win, Mac, Linux 🔗 https://www.missions.lol".into()

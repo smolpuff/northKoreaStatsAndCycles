@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 // This checks our authentication code; it is not a malware detector or OS sandbox.
 for (const name of ["twitch.rs", "twitch_oauth.rs", "twitch_chat.rs", "lumia.rs", "discord_credentials.rs"]) {
   const source = fs.readFileSync(path.join("src-tauri/src", name), "utf8").split("#[cfg(test)]")[0];
-  assert(!/CryptUnprotectData|ProtectedData|CredEnumerate|VaultEnumerate|VaultGetItem|powershell|pwsh|Command::|std::process|std::fs|fs::read/i.test(source), `${name} must not decrypt credential files, enumerate credentials or launch a shell`);
+  assert(!/CryptUnprotectData|ProtectedData|CredEnumerate|VaultEnumerate|VaultGetItem|powershell|pwsh|\bCommand::|std::process|std::fs|fs::read/i.test(source), `${name} must not decrypt credential files, enumerate credentials or launch a shell`);
 }
 for (const [name, target] of [["twitch.rs", "MarblesStats/TwitchOAuth"], ["lumia.rs", "MarblesStats/LumiaStream"]]) {
   const source = fs.readFileSync(path.join("src-tauri/src", name), "utf8");
