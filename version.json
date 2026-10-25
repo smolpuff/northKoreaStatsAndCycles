@@ -1,5 +1,5 @@
 {
-  "version": "0.2.10",
+  "version": "0.2.11",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
     "Always import Marble Cycle BR wins as cycle first places. Support session downloads up to 100 MB with a three-minute timeout.",
