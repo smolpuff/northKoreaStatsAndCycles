@@ -113,6 +113,7 @@ for (const name of Object.keys(fixtures)) {
   buttonFeedback.clear();
   for (const button of document.querySelectorAll("[data-twitch-save], [data-discord-save]")) {
     if (button.matches(":disabled") || button.closest("[inert]")) continue;
+    const details = button.closest("details"); if (details) details.open = true;
     count = writes.length; button.click(); await finish(); await tick();
     check(writes.length === count + 1, "Inline Save must persist: " + button.dataset.feedbackKey);
     buttonFeedback.clear();
@@ -122,6 +123,10 @@ page("twitch");
 for (const id of ["twitch-my-cycle-command", "twitch-my-stats-command"]) {
   const input = document.getElementById(id);
   if (!input.checked) { toggle(id); await finish(); }
+}
+for (const id of ["twitch-my-cycle-alias", "twitch-my-stats-alias"]) {
+  const field = document.getElementById(id);
+  check(field.closest("details.twitch-message-customization") && !field.closest(".feature-content").querySelector("small"), "Secondary command belongs in Customize without helper text");
 }
 document.getElementById("twitch-my-cycle-alias").value = "!progress";
 document.getElementById("twitch-my-stats-alias").value = "!points";

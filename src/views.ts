@@ -303,6 +303,8 @@ const twitchMessageDefaults: Record<string, string> = {
   "twitch-cycle-message":
     "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
   "twitch-world-record-message": defaultWorldRecordMessage,
+  "twitch-my-cycle-alias": "!mycycle",
+  "twitch-my-stats-alias": "!mystat",
 };
 
 export function twitchMessageIsCustomized(
@@ -312,6 +314,7 @@ export function twitchMessageIsCustomized(
   const fallback = twitchMessageDefaults[field];
   if (fallback === undefined) return false;
   const text = message.trim();
+  if (field === "twitch-my-cycle-alias" || field === "twitch-my-stats-alias") return text !== fallback;
   return (
     (text || (field === "twitch-message-prefix" ? "" : fallback)) !== fallback
   );
@@ -989,7 +992,13 @@ function settingsPage(
         <span><b>Viewer command: !mycycles</b><small>Show your cycle progress in chat.</small></span>
         <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycles" ${twitch.myCycleCommand ? "checked" : ""} />
       </div>
-      <div class="feature-content"><label class="field"><span>Secondary command</span><input id="twitch-my-cycle-alias" maxlength="33" value="${escapeHtml(twitch.myCycleCommandAlias ?? "!mycycle")}" placeholder="!mycycle" spellcheck="false" /><small>Optional: use ! followed by letters, numbers or underscores. Leave blank to disable the secondary command. Save settings to apply.</small></label></div>
+      <details class="twitch-message-customization">
+        ${twitchCustomizationSummary("twitch-my-cycle-alias", twitch.myCycleCommandAlias ?? "!mycycle")}
+        <div class="feature-content">
+          <label class="field"><span>Secondary command:</span><input id="twitch-my-cycle-alias" maxlength="33" value="${escapeHtml(twitch.myCycleCommandAlias ?? "!mycycle")}" placeholder="!mycycle" spellcheck="false" /></label>
+          <div class="twitch-message-actions">${feedbackButton("save-twitch-cycle-alias", "Save", "data-twitch-save", "file")}</div>
+        </div>
+      </details>
     </section>
     <section class="twitch-settings-section" data-feature-section="twitch-my-stats-command">
       <div class="toggle-row twitch-feature-heading">
@@ -997,7 +1006,13 @@ function settingsPage(
         <span><b>Viewer command: !mystats</b><small>Show your session and total race stats in chat.</small></span>
         <input id="twitch-my-stats-command" type="checkbox" role="switch" aria-label="Enable !mystats" ${twitch.myStatsCommand ? "checked" : ""} />
       </div>
-      <div class="feature-content"><label class="field"><span>Secondary command</span><input id="twitch-my-stats-alias" maxlength="33" value="${escapeHtml(twitch.myStatsCommandAlias ?? "!mystat")}" placeholder="!mystat" spellcheck="false" /><small>Optional: use ! followed by letters, numbers or underscores. Leave blank to disable the secondary command. Save settings to apply.</small></label></div>
+      <details class="twitch-message-customization">
+        ${twitchCustomizationSummary("twitch-my-stats-alias", twitch.myStatsCommandAlias ?? "!mystat")}
+        <div class="feature-content">
+          <label class="field"><span>Secondary command:</span><input id="twitch-my-stats-alias" maxlength="33" value="${escapeHtml(twitch.myStatsCommandAlias ?? "!mystat")}" placeholder="!mystat" spellcheck="false" /></label>
+          <div class="twitch-message-actions">${feedbackButton("save-twitch-stats-alias", "Save", "data-twitch-save", "file")}</div>
+        </div>
+      </details>
     </section>
   </div>
 
