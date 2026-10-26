@@ -35,7 +35,7 @@ See the [overlay guide](public/overlays/README.md), [Stream Deck guide](streamde
 
 ## Development
 
-Built with Tauri 2, Rust, TypeScript, and Vite. Requires Node.js, Rust, and Windows build tools.
+Built with Tauri 2, Rust, TypeScript, and Vite. Requires Node.js 26.12.1 or newer, Rust, and Windows build tools. `.node-version` and `.nvmrc` pin 26.12.1, including the October 2026 Brotli security fix; both CI workflows use that pin.
 
 ```sh
 npm install
@@ -49,3 +49,15 @@ npm run dev
 Development uses `dev`; releases use `main`.
 
 Default settings: automatic RaceStats start, automatic RaceCycles start, and Start minimized are off. Automatic update checks and mission app promotional chat messages are on. Promotional messages require Twitch to be connected and wait 30 minutes before the first post, then repeat every 60 minutes. Saved settings retain your choices.
+
+Saved stats remain JSON. Startup loads them in the background while the window shows its loading screen. Unused historical leaderboard copies are omitted; game results, player earnings and current totals remain available. The first successful compacted save keeps the original as `race-state-before-history-compaction.json` in the app data folder.
+
+All JSON settings, records, history, backups and JSON exports use compact formatting and buffered atomic writes. Overlay data and alert files use the same save path; unchanged overlay packets are not rewritten. CSV exports retain spreadsheet escaping and CRLF rows.
+
+Mission app promotion text is editable under Settings > Options; use `{url}` for the Mission App link and check the live preview before saving. Compact timing controls sit above the equal-width editor and preview. Twitch Race/BR result headers include the map name by default.
+
+Use the **smile icon** button beside Twitch message fields to search your own channel's custom Twitch emotes and insert one at the cursor. This also works in mission promotion messages. Uses your existing Twitch login without an additional emote permission; unsaved message drafts are preserved.
+
+Twitch emote pickers are available only for Twitch chat messages, including the optional mission promotion labeled **Promote Korea's Mission App on stream**. Promotion sends Twitch chat only. All Twitch player placeholders automatically use `@username`; existing `@{player}` templates also produce a single mention. Race/BR posts use **Each placement** for every position; older separate podium overrides are ignored. Discord, Lumia, Streamer.bot and overlays retain their own formats.
+
+RaceStats and RaceCycles controls show pending feedback independently. Live Log shows newest entries first with compact timestamps, scanned filenames, Race/BR winners and cycle completions. The window uses a transparent custom title bar with minimize, maximize/restore and close controls. Lumia shows setup guidance and **Configure Lumia** until an API token is saved securely; **Remove API token** appears only after setup. The MoS DropGate preview bundles the real `rmrfkoHeart` emote for offline display.

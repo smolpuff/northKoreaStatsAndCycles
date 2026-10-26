@@ -1,3 +1,4 @@
+import "./window-chrome";
 import { invoke } from "@tauri-apps/api/core";
 import { captureSwitchFrames, restoreSwitchFrames } from "./switch-motion";
 import { installSidebarGroups } from "./sidebar-groups";
@@ -5,12 +6,16 @@ import { refreshStreamDeckInstallStatus } from "./streamdeck-install-status";
 import { listen } from "@tauri-apps/api/event";
 import type { Config, LogEntry, Snapshot } from "./types";
 import { openMarbleCycleImport } from "./marble-cycle-import";
+import { installTwitchEmotePickers } from "./twitch-emote-picker";
 import {
   escapeHtml,
   playerHistoryContent,
   cycleMessagePreview,
   worldRecordMessagePreview,
   defaultWorldRecordMessage,
+  defaultPromotionMessage,
+  defaultRaceIntro,
+  promotionMessagePreview,
   twitchMessageIsCustomized,
   raceMessageIsCustomized,
   renderApplication,
@@ -79,11 +84,12 @@ let state: Snapshot = {
       promoteMissionApp: true,
       promotionIntervalMinutes: 60,
       promotionStartDelayMinutes: 30,
+      promotionMessageTemplate: defaultPromotionMessage,
       postWorldRecords: false,
       worldRecordMessageTemplate: defaultWorldRecordMessage,
       postResults: true,
       postCycleResults: false,
-      messagePrefix: "🏁 Race results:",
+      messagePrefix: defaultRaceIntro,
       cycleMessageTemplate:
         "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
     },
@@ -112,7 +118,7 @@ let overlayDirectory = "";
 let overlaySetupError = "";
 let renderedPage: string | undefined;
 let pageTransitionStarted = 0;
-let watcherCommandIsRunning = true;
+const trackerCommands = { stats: true, cycles: true };
 let logFilter = "all";
 let cycleSearch = "";
 let raceSearch = "";
@@ -130,8 +136,7 @@ function bindLogPage(): void {
     render();
   });
 
-  const logList = document.querySelector("#log-list");
-  logList?.scrollTo(0, logList.scrollHeight);
+  // Newest entries render first, including after live updates.
 }
 
 type ButtonFeedback = { phase: "busy" | "success" | "error"; width: number; label?: string; error?: string; expiresAt?: number };
@@ -208,7 +213,7 @@ function renderMainWindow(): void {
   // Status events and button feedback must not reload playing preview iframes.
   if (currentPage === "overlays" && renderedPage === currentPage && root.querySelector(".overlays-page")?.getAttribute("data-directory") === overlayDirectory) {
     const next = document.createElement("template");
-    next.innerHTML = renderApplication(state, currentPage, watcherCommandIsRunning, logFilter, raceCycleSort, editingName, resultsSort, overlayDirectory, selectedRaceId);
+    next.innerHTML = renderApplication(state, currentPage, trackerCommands, logFilter, raceCycleSort, editingName, resultsSort, overlayDirectory, selectedRaceId);
     const footer = root.querySelector(".sidebar-foot");
     const updatedFooter = next.content.querySelector(".sidebar-foot");
     if (footer && updatedFooter) footer.replaceWith(updatedFooter);
@@ -245,7 +250,7 @@ function renderMainWindow(): void {
   root.innerHTML = renderApplication(
     viewState,
     currentPage,
-    watcherCommandIsRunning,
+    trackerCommands,
     logFilter,
     raceCycleSort,
     editingName,
@@ -395,6 +400,7 @@ function renderMainWindow(): void {
   });
 
   if (["settings", "streamer", "twitch", "lumia", "discord"].includes(currentPage)) {
+    if (currentPage === "twitch" || currentPage === "settings") installTwitchEmotePickers(state, snapshot => { state = snapshot; render(); });
     bindSettingsForm();
     applyButtonFeedback();
   }
@@ -595,10 +601,10 @@ function render(): void {
 }
 
 async function toggleWatcher(kind: "stats" | "cycles" = currentPage === "racecycles" ? "cycles" : "stats"): Promise<void> {
-  if (watcherCommandIsRunning) return;
+  if (trackerCommands[kind]) return;
   const enabled = !trackingIsActive(state, kind);
 
-  watcherCommandIsRunning = true;
+  trackerCommands[kind] = true;
   render();
 
   try {
@@ -606,7 +612,7 @@ async function toggleWatcher(kind: "stats" | "cycles" = currentPage === "racecyc
   } catch (error) {
     alert(String(error));
   } finally {
-    watcherCommandIsRunning = false;
+    trackerCommands[kind] = false;
     render();
   }
 }
@@ -674,6 +680,7 @@ function readSettingsForm(): Config {
       promoteMissionApp: document.querySelector<HTMLInputElement>("#promote-mission-app")?.checked ?? state.config.twitch.promoteMissionApp ?? true,
       promotionIntervalMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-interval")?.value ?? state.config.twitch.promotionIntervalMinutes ?? 60)) || 60)),
       promotionStartDelayMinutes: Math.max(1, Math.min(1440, Math.floor(Number(document.querySelector<HTMLInputElement>("#promotion-start-delay")?.value ?? state.config.twitch.promotionStartDelayMinutes ?? 30)) || 30)),
+      promotionMessageTemplate: document.querySelector<HTMLTextAreaElement>("#promotion-message")?.value ?? state.config.twitch.promotionMessageTemplate ?? defaultPromotionMessage,
       worldRecordMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message")?.value ?? state.config.twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage,
       postCycleResults: document.querySelector<HTMLInputElement>("#twitch-post-cycles")?.checked ?? state.config.twitch.postCycleResults,
 
@@ -682,7 +689,7 @@ function readSettingsForm(): Config {
       raceMessageTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-race-message")?.value ?? state.config.twitch.raceMessageTemplate ?? "",
       raceEntryTemplate: document.querySelector<HTMLTextAreaElement>("#twitch-race-entry")?.value ?? state.config.twitch.raceEntryTemplate ?? "",
       raceEntrySeparator: document.querySelector<HTMLInputElement>("#twitch-race-separator")?.value ?? state.config.twitch.raceEntrySeparator ?? " | ",
-      racePodiumTemplates: [1, 2, 3].map(place => document.querySelector<HTMLTextAreaElement>("#twitch-race-place-" + place)?.value ?? state.config.twitch.racePodiumTemplates?.[place - 1] ?? ""),
+      racePodiumTemplates: [],
       messagePrefix:
         twitchMessagePrefix?.value ?? state.config.twitch.messagePrefix,
       cycleMessageTemplate:
@@ -763,7 +770,7 @@ function bindSettingsForm(): void {
     input.addEventListener("input", update);
     update();
   });
-  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#twitch-message-prefix, #twitch-race-message, #twitch-race-entry, #twitch-race-separator, [id^='twitch-race-place-']").forEach(input => {
+  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#twitch-message-prefix, #twitch-race-message, #twitch-race-entry, #twitch-race-separator").forEach(input => {
     input.addEventListener("input", () => {
       const config = readSettingsForm().twitch;
       const preview = document.querySelector<HTMLElement>("#twitch-message-preview");
@@ -771,6 +778,11 @@ function bindSettingsForm(): void {
       const customized = input.closest(".twitch-message-customization")?.querySelector<HTMLElement>("[data-customized-for]");
       if (customized) customized.hidden = !raceMessageIsCustomized(config);
     });
+  });
+  const promotionMessage = document.querySelector<HTMLTextAreaElement>("#promotion-message");
+  promotionMessage?.addEventListener("input", () => {
+    const preview = document.querySelector<HTMLElement>("#promotion-message-preview");
+    if (preview) preview.textContent = promotionMessagePreview(promotionMessage.value);
   });
   const recordMessage = document.querySelector<HTMLTextAreaElement>("#twitch-world-record-message");
   const recordPreview = document.querySelector<HTMLElement>("#twitch-world-record-preview");
@@ -908,7 +920,9 @@ async function initialize(): Promise<void> {
   }
 
   state = await invoke<Snapshot>("get_app_snapshot");
-  watcherCommandIsRunning = false;
+  root.inert = false;
+  root.removeAttribute("aria-busy");
+  trackerCommands.stats = trackerCommands.cycles = false;
 
   // Render before event registration and watcher startup. Neither is allowed to
   // hold the dashboard hostage during application launch.
@@ -974,12 +988,15 @@ async function initialize(): Promise<void> {
 
 }
 
-// Paint the complete application immediately. Backend hydration happens after
-// the user can already see and resize the window.
+// Keep the lightweight loading shell visible until saved data is ready.
+// Never bind dashboard controls to empty placeholder stats during startup.
 installSidebarTooltips(() => sidebarCollapsed);
-render();
 
+root.inert = true;
+root.setAttribute("aria-busy", "true");
 initialize().catch((error) => {
+  root.inert = false;
+  root.removeAttribute("aria-busy");
   document.title = "Marbles Stats — Startup Error";
   root.innerHTML = `
     <div class="fatal">

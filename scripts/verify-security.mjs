@@ -13,6 +13,8 @@ const config = JSON.parse(read("src-tauri/tauri.conf.json"));
 for (const key of ["csp", "devCsp"]) {
   const directives = new Map(config.app.security[key].split(";").map(text => text.trim().split(/\s+/)).filter(parts => parts[0]).map(([key,...sources]) => [key,sources]));
   assert.deepEqual(directives.get("script-src"), ["'self'"], "Frontend scripts must stay local, with no inline/eval/network allowance");
+  assert.deepEqual(directives.get("style-src-attr"), ["'unsafe-inline'"], "Dynamic UI styles need their own directive so Tauri's packaged style nonces cannot block icon colors and layout");
+  assert.deepEqual(directives.get("img-src"), ["'self'", "data:", "blob:", "https://static-cdn.jtvnw.net"], "Remote images are limited to Twitch's emote CDN");
   for (const key of ["object-src", "base-uri", "form-action"]) assert.deepEqual(directives.get(key), ["'none'"]);
   assert.deepEqual(directives.get("frame-src"), ["'self'"]);
   for (const sources of directives.values()) assert(!sources.includes("*"), "No unrestricted CSP origins");

@@ -47,15 +47,12 @@ pub fn ensure(directory: &Path) -> Result<(), String> {
             fs::read(&path).ok().is_some_and(|bytes| hex::encode(Sha256::digest(&bytes)) == *old)
         });
         if !path.exists() || (unchanged_default && previous.get(*name) != Some(&hash)) {
-            fs::write(&path, content).map_err(|error| format!("Unable to create {name}: {error}"))?;
+            storage::Storage::new(directory.to_path_buf())?.write_bytes(name, content.as_bytes())?;
         }
         defaults.insert((*name).to_string(), hash);
     }
-    let manifest = serde_json::to_vec_pretty(&defaults).map_err(|error| error.to_string())?;
-    if fs::read(&manifest_path).ok().as_deref() != Some(manifest.as_slice()) {
-        let temporary = directory.join("template-defaults.json.tmp");
-        fs::write(&temporary, manifest).map_err(|error| error.to_string())?;
-        storage::replace_file(&temporary, &manifest_path).map_err(|error| error.to_string())?;
+    if previous != defaults || !manifest_path.exists() {
+        storage::Storage::new(directory.to_path_buf())?.write("template-defaults.json", &defaults)?;
     }
     Ok(())
 }
@@ -97,9 +94,7 @@ pub fn save_duration(directory: &Path, kind: &str, seconds: u32) -> Result<Durat
         let path = directory.join(name);
         let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
         if let Some(start) = text.find("window.MarblesOverlay.update(") {
-            let temporary = path.with_extension("js.tmp");
-            fs::write(&temporary, format!("{}{}", prefix, &text[start..])).map_err(|error| error.to_string())?;
-            storage::replace_file(&temporary, &path).map_err(|error| error.to_string())?;
+            write_overlay_parts(directory, name, &prefix, &text[start..])?;
         }
     }
     Ok(settings)
@@ -153,9 +148,7 @@ fn refresh_customizations(directory: &Path) -> Result<(), String> {
         let path = directory.join(name);
         let text = fs::read_to_string(&path).map_err(|error| error.to_string())?;
         if let Some(start) = text.find("window.MarblesOverlay.update(") {
-            let temporary = path.with_extension("js.tmp");
-            fs::write(&temporary, format!("{}{}", prefix, &text[start..])).map_err(|error| error.to_string())?;
-            storage::replace_file(&temporary, &path).map_err(|error| error.to_string())?;
+            write_overlay_parts(directory, name, &prefix, &text[start..])?;
         }
     }
     Ok(())
@@ -201,16 +194,23 @@ pub fn reset_options(directory: &Path, kind: &str) -> Result<(), String> {
     refresh_customizations(directory)
 }
 
+fn write_overlay_parts(directory: &Path, name: &str, prefix: &str, body: &str) -> Result<(), String> {
+    storage::Storage::new(directory.to_path_buf())?.write_with(name, |writer| {
+        writer.write_all(prefix.as_bytes()).and_then(|_| writer.write_all(body.as_bytes()))
+            .map_err(|error| error.to_string())
+    })
+}
+
 pub struct Writer {
     pub directory: PathBuf,
-    last_packet: String,
+    last_packet: Option<Value>,
     initialized: bool,
     pub last_error: Option<String>,
 }
 impl Writer {
-    pub fn invalidate(&mut self) { self.last_packet.clear(); }
+    pub fn invalidate(&mut self) { self.last_packet = None; }
     pub fn new(directory: PathBuf) -> Self {
-        Self { directory, last_packet: String::new(), initialized: false, last_error: None }
+        Self { directory, last_packet: None, initialized: false, last_error: None }
     }
     fn prepare(&mut self) -> Result<(), String> {
         if !self.initialized { ensure(&self.directory)?; self.initialized = true; }
@@ -218,19 +218,23 @@ impl Writer {
     }
     fn write(&mut self, name: &str, data: &Value) -> Result<(), String> {
         self.prepare()?;
-        let text = format!("{}window.MarblesOverlay.update({});", options_prefix(&self.directory)?, data);
-        let destination = self.directory.join(name);
-        let temporary = destination.with_extension("js.tmp");
-        fs::write(&temporary, text).map_err(|error| error.to_string())?;
-        storage::replace_file(&temporary, &destination).map_err(|error| error.to_string())
+        let prefix = options_prefix(&self.directory)?;
+        storage::Storage::new(self.directory.clone())?.write_with(name, |writer| {
+            writer.write_all(prefix.as_bytes()).and_then(|_| writer.write_all(b"window.MarblesOverlay.update("))
+                .map_err(|error| error.to_string())?;
+            serde_json::to_writer(&mut *writer, data).map_err(|error| error.to_string())?;
+            writer.write_all(b");").map_err(|error| error.to_string())
+        })
     }
     pub fn update(&mut self, snapshot: &AppSnapshot) -> Result<(), String> {
         self.prepare()?;
         let data = streamer_bot::overlay_data(snapshot, snapshot.latest_result.as_ref(), &json!({"eventType":"stateUpdate"}), json!([]));
-        let packet = data.to_string();
-        if packet != self.last_packet || !self.directory.join("overlay-data.js").exists() {
+        self.update_packet(data)
+    }
+    fn update_packet(&mut self, data: Value) -> Result<(), String> {
+        if self.last_packet.as_ref() != Some(&data) || !self.directory.join("overlay-data.js").exists() {
             self.write("overlay-data.js", &data)?;
-            self.last_packet = packet;
+            self.last_packet = Some(data);
         }
         Ok(())
     }
@@ -263,6 +267,30 @@ impl Writer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlay_packets_stream_once_skip_unchanged_and_refresh_after_invalidation() {
+        let directory = std::env::temp_dir().join(format!("marbles-overlay-storage-{}-{}",
+            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let mut writer = Writer::new(directory.clone());
+        let packet = json!({"players": [{"name":"Player", "kills":0, "damage":89}], "points":42});
+        writer.update_packet(packet.clone()).unwrap();
+        let destination = directory.join("overlay-data.js");
+        let first = fs::read_to_string(&destination).unwrap();
+        let body = first.split_once("window.MarblesOverlay.update(").unwrap().1.strip_suffix(");").unwrap();
+        assert_eq!(serde_json::from_str::<Value>(body).unwrap(), packet);
+        assert!(first.contains("window.MarblesOverlayOptions ="));
+        fs::write(&destination, "unchanged packet must not rewrite this marker").unwrap();
+        writer.update_packet(packet.clone()).unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "unchanged packet must not rewrite this marker");
+        writer.invalidate();
+        writer.update_packet(packet.clone()).unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), first);
+        fs::remove_file(&destination).unwrap();
+        writer.update_packet(packet).unwrap();
+        assert_eq!(fs::read_to_string(&destination).unwrap(), first);
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn saved_overlay_options_accept_legacy_fonts_and_round_trip_font_size() {

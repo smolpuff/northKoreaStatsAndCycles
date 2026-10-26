@@ -16,6 +16,7 @@ commands.allow = [
   "save_config",
   "save_theme",
   "connect_twitch",
+  "list_twitch_emotes",
   "validate_twitch_session",
   "disconnect_twitch",
   "test_twitch_message",

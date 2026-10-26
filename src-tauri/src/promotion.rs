@@ -123,8 +123,11 @@ mod tests {
         assert_eq!(custom.promotion_start_delay_minutes, 15);
         let roundtrip: TwitchConfig = serde_json::from_str(&serde_json::to_string(&custom).unwrap()).unwrap();
         assert_eq!(roundtrip.promotion_start_delay_minutes, 15);
-        assert!(crate::models::default_promotion_message().contains("Korea's MoS Missions App"));
-        assert!(crate::models::default_promotion_message().contains("https://www.missions.lol"));
+        assert!(crate::models::default_promotion_message().contains("Korea's Mission Manager"));
+        assert!(config.promotion_message_template.contains("{url}"));
+        assert!(crate::twitch::format_promotion_message(&config.promotion_message_template).contains(crate::models::MISSION_APP_URL));
+        let customized: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promotionMessageTemplate":"Try it: {url}"}"#).unwrap();
+        assert_eq!(customized.promotion_message_template, "Try it: {url}");
         let disabled: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promoteMissionApp":false}"#).unwrap();
         assert!(!disabled.promote_mission_app);
         let enabled: TwitchConfig = serde_json::from_str(r#"{"postResults":true,"promoteMissionApp":true}"#).unwrap();

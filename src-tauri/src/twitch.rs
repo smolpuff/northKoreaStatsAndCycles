@@ -1,7 +1,7 @@
 use crate::models::{GameResult, GameType, TwitchConfig};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use std::{sync::Mutex, time::Duration};
+use std::{io::Read, sync::Mutex, time::Duration};
 
 const CREDENTIAL_TARGET: &str = "MarblesStats/TwitchOAuth";
 const REQUIRED_SCOPE: &str = "user:write:chat";
@@ -171,9 +171,63 @@ pub fn send_promotion(config: &TwitchConfig) -> Result<(), String> {
         return Err("Enable mission app promotion before testing it".into());
     }
     let credential = validate_saved()?;
-    let template = crate::models::default_promotion_message();
-    let message = template.trim().replace(['\r', '\n'], " ").chars().take(MAX_CHAT_MESSAGE_CHARS).collect::<String>();
+    let message = format_promotion_message(&config.promotion_message_template);
     send_chat_message(&credential, &message)
+}
+
+pub fn format_promotion_message(template: &str) -> String {
+    let fallback = crate::models::default_promotion_message();
+    let template = if template.trim().is_empty() { fallback.as_str() } else { template.trim() };
+    template.replace("{url}", crate::models::MISSION_APP_URL).replace(['\r', '\n'], " ")
+        .chars().take(MAX_CHAT_MESSAGE_CHARS).collect()
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TwitchEmote { pub id: String, pub name: String, pub image_url: String }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TwitchEmoteList { pub login: String, pub needs_authorization: bool, pub emotes: Vec<TwitchEmote> }
+
+#[derive(Deserialize)]
+struct EmoteItem { id: String, name: String, format: Vec<String>, scale: Vec<String>, theme_mode: Vec<String> }
+#[derive(Deserialize)]
+struct EmotePage { data: Vec<EmoteItem> }
+
+fn picker_emote(item: EmoteItem) -> Option<TwitchEmote> {
+    if item.id.is_empty() || item.id.len() > 128
+        || !item.id.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-'))
+        || item.name.is_empty() || item.name.chars().count() > 100 || item.name.chars().any(|c| c.is_control() || c.is_whitespace()) { return None; }
+    let format = ["static", "animated"].into_iter().find(|value| item.format.iter().any(|f| f.as_str() == *value))?;
+    let scale = ["2.0", "1.0", "3.0"].into_iter().find(|value| item.scale.iter().any(|s| s.as_str() == *value))?;
+    let theme = ["dark", "light"].into_iter().find(|value| item.theme_mode.iter().any(|t| t.as_str() == *value))?;
+    let image_url = format!("https://static-cdn.jtvnw.net/emoticons/v2/{}/{format}/{theme}/{scale}", item.id);
+    Some(TwitchEmote { id: item.id, name: item.name, image_url })
+}
+
+pub fn list_emotes() -> Result<TwitchEmoteList, String> {
+    let credential = validate_saved()?;
+    let client = http_client()?;
+    // List only emotes created for the signed-in broadcaster's own channel.
+    let mut url = reqwest::Url::parse("https://api.twitch.tv/helix/chat/emotes")
+        .map_err(|_| "Invalid Twitch emote endpoint")?;
+    url.query_pairs_mut().append_pair("broadcaster_id", &credential.user_id);
+    let response = client.get(url).bearer_auth(&credential.access_token).header("Client-Id", &credential.client_id)
+        .send().map_err(|_| "Unable to retrieve your channel emotes; try again")?;
+    if matches!(response.status().as_u16(), 401 | 403) {
+        return Ok(TwitchEmoteList { login: credential.login, needs_authorization: true, emotes: vec![] });
+    }
+    if !response.status().is_success() { return Err(format!("Twitch emote request failed (HTTP {})", response.status().as_u16())); }
+    let mut bytes = Vec::new();
+    response.take(2 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| "Unable to read Twitch emotes")?;
+    if bytes.len() > 2 * 1024 * 1024 { return Err("Twitch emote response exceeded the size limit".into()); }
+    let page: EmotePage = serde_json::from_slice(&bytes).map_err(|_| "Twitch returned an invalid emote list")?;
+    if page.data.len() > 10_000 { return Err("Twitch emote list exceeded the item limit".into()); }
+    let mut ids = std::collections::HashSet::new();
+    let mut emotes: Vec<_> = page.data.into_iter().filter_map(picker_emote).filter(|emote| ids.insert(emote.id.clone())).collect();
+    emotes.sort_by_cached_key(|emote| emote.name.to_lowercase());
+    Ok(TwitchEmoteList { login: credential.login, needs_authorization: false, emotes })
 }
 
 pub fn send_results(config: &TwitchConfig, game: &GameResult) -> Result<usize, String> {
@@ -188,20 +242,25 @@ pub fn send_results(config: &TwitchConfig, game: &GameResult) -> Result<usize, S
     Ok(messages.len())
 }
 
+pub fn mention(name: &str) -> String {
+    format!("@{}", name.trim().trim_start_matches('@'))
+}
+
 pub fn format_world_record_message(game: &GameResult, template: &str) -> String {
     let player = game.world_record_player.as_deref().and_then(|name| game.results.iter().find(|p|
         p.player_name.eq_ignore_ascii_case(name) || p.username.eq_ignore_ascii_case(name)));
-    let name = player.map(|p| p.player_name.as_str()).or(game.world_record_player.as_deref()).unwrap_or("Unknown player");
+    let name = mention(player.map(|p| if p.username.trim().is_empty() { p.player_name.as_str() } else { p.username.as_str() }).or(game.world_record_player.as_deref()).unwrap_or("Unknown player"));
     let points = player.map(|p| p.season_points_earned.to_string()).unwrap_or_else(|| "unknown".into());
     let time = game.world_record_time.map(|time| format!("{time:.3}")).unwrap_or_else(|| "unknown".into());
     let fallback = crate::models::default_world_record_message();
     let template = if template.trim().is_empty() { &fallback } else { template.trim() };
     // Resolve only original template tokens; player names are never templates.
-    let fields = [("{wrplayer}", name), ("{wrplayerpoints}", points.as_str()), ("{wrrecordtime}", time.as_str()), ("{mapName}", game.map_name.as_deref().unwrap_or("Unknown track"))];
+    let fields = [("{wrplayer}", name.as_str()), ("{wrplayerpoints}", points.as_str()), ("{wrrecordtime}", time.as_str()), ("{mapName}", game.map_name.as_deref().unwrap_or("Unknown track"))];
     let mut message = String::new();
     let mut rest = template;
     while !rest.is_empty() {
         if let Some((token, value)) = fields.iter().find(|(token, _)| rest.starts_with(*token)) {
+            if value.starts_with('@') && message.ends_with('@') { message.pop(); }
             message.push_str(value);
             rest = &rest[token.len()..];
         } else {
@@ -232,7 +291,8 @@ pub fn format_cycle_completion_message(
         message_template.trim()
     };
     let message = template
-        .replace("{player}", player_name.trim())
+        .replace("@{player}", "{player}")
+        .replace("{player}", &mention(player_name))
         .replace("{cycle}", &cycle_number.to_string())
         .replace("{races}", &races.map(|count| count.to_string()).unwrap_or_else(|| "unknown".into()));
     message.chars().take(MAX_CHAT_MESSAGE_CHARS).collect()
@@ -260,6 +320,7 @@ fn resolve_race_fields(template: &str, fields: &[(&str, String)]) -> String {
     let mut rest = template;
     while !rest.is_empty() {
         if let Some((token, value)) = fields.iter().find(|(token, _)| rest.starts_with(*token)) {
+            if value.starts_with('@') && message.ends_with('@') { message.pop(); }
             message.push_str(value);
             rest = &rest[token.len()..];
         } else {
@@ -274,7 +335,8 @@ fn resolve_race_fields(template: &str, fields: &[(&str, String)]) -> String {
 pub fn format_custom_race_result_messages(game: &GameResult, config: &TwitchConfig) -> Vec<String> {
     let match_type = match game.game_type { GameType::BattleRoyale => "Battle Royale", GameType::Tilt => "Tilt", _ => "Race" };
     let common = vec![("{race}", match_type.to_string()), ("{mapName}", game.map_name.clone().unwrap_or_else(|| "Unknown track".into())), ("{playerCount}", game.player_count.to_string())];
-    let intro = resolve_race_fields(config.message_prefix.trim(), &common).chars().take(120).collect::<String>();
+    let prefix = if matches!(config.message_prefix.trim(), "🏁 Race results:" | "🏁 {race} results:") { "🏁 {race} results ({mapName}):" } else { config.message_prefix.trim() };
+    let intro = resolve_race_fields(prefix, &common).chars().take(120).collect::<String>();
     let outer = if config.race_message_template.trim().is_empty() { "{intro} {placements}" } else { config.race_message_template.trim() };
     let message = |placements: &str| {
         let mut fields = common.clone();
@@ -290,10 +352,9 @@ pub fn format_custom_race_result_messages(game: &GameResult, config: &TwitchConf
     let mut current = String::new();
     for result in results {
         let place = match result.placement { 1 => "\u{1f947}".into(), 2 => "\u{1f948}".into(), 3 => "\u{1f949}".into(), placement => format!("#{placement}") };
-        let podium = result.placement.checked_sub(1).and_then(|index| config.race_podium_templates.get(index as usize)).map(|text| text.trim()).filter(|text| !text.is_empty());
-        let template = podium.unwrap_or_else(|| if !config.race_entry_template.trim().is_empty() { config.race_entry_template.trim() } else if scoring { "{place} {player} +{points}pts" } else { "{place} {player}" });
+        let template = if !config.race_entry_template.trim().is_empty() { config.race_entry_template.trim() } else if scoring { "{place} {player} +{points}pts" } else { "{place} {player}" };
         let mut fields = common.clone();
-        fields.extend([("{place}", place), ("{placement}", result.placement.to_string()), ("{player}", result.player_name.clone()), ("{points}", result.season_points_earned.to_string()), ("{time}", result.finish_time.map(|time| format!("{time:.3}")).unwrap_or_else(|| "unknown".into()))]);
+        fields.extend([("{place}", place), ("{placement}", result.placement.to_string()), ("{player}", mention(if result.username.trim().is_empty() { &result.player_name } else { &result.username })), ("{points}", result.season_points_earned.to_string()), ("{time}", result.finish_time.map(|time| format!("{time:.3}")).unwrap_or_else(|| "unknown".into()))]);
         let entry = resolve_race_fields(template, &fields);
         let candidate = if current.is_empty() { entry.clone() } else { format!("{}{}{}", current, config.race_entry_separator, entry) };
         if !current.is_empty() && message(&candidate).chars().count() > MAX_CHAT_MESSAGE_CHARS { messages.push(message(&current)); current.clear(); }
@@ -525,6 +586,42 @@ fn delete_credential() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn emote_picker_uses_only_safe_cdn_images_and_plain_names() {
+        let item = |id: &str, name: &str| EmoteItem { id: id.into(), name: name.into(),
+            format: vec!["animated".into(), "static".into()], scale: vec!["1.0".into(), "2.0".into()], theme_mode: vec!["light".into(), "dark".into()] };
+        let emote = picker_emote(item("emotesv2_abc-123", "rmrfkoHeart")).unwrap();
+        assert_eq!(emote.image_url, "https://static-cdn.jtvnw.net/emoticons/v2/emotesv2_abc-123/static/dark/2.0");
+        assert!(picker_emote(item("../../evil", "bad")).is_none());
+        assert!(picker_emote(item("valid", "two words")).is_none());
+        assert!(picker_emote(item("valid", "bad\nname")).is_none());
+        assert!(picker_emote(item("valid", "<3")).is_some());
+        let list = TwitchEmoteList { login: "account".into(), needs_authorization: false, emotes: vec![emote] };
+        let json = serde_json::to_value(list).unwrap();
+        assert_eq!(json["emotes"][0]["name"], "rmrfkoHeart");
+        assert!(json.get("accessToken").is_none());
+    }
+    #[test]
+    fn promotion_templates_resolve_url_defaults_newlines_and_unicode_limit() {
+        assert_eq!(super::format_promotion_message("Try {url}\nfor free"),
+            format!("Try {} for free", crate::models::MISSION_APP_URL));
+        assert!(super::format_promotion_message("").contains(crate::models::MISSION_APP_URL));
+        assert!(!super::format_promotion_message("").contains("{url}"));
+        assert_eq!(super::format_promotion_message(&"🩷".repeat(600)).chars().count(), 500);
+    }
+
+    #[test]
+    fn default_headers_include_map_for_race_and_br_without_changing_custom_intros() {
+        let mut game = crate::streamer_bot::sample_game();
+        let config = crate::models::TwitchConfig::default();
+        game.map_name = Some("Grasslands".into());
+        assert!(super::format_custom_race_result_messages(&game, &config)[0].contains("Race results (Grasslands):"));
+        game.game_type = crate::models::GameType::BattleRoyale;
+        assert!(super::format_custom_race_result_messages(&game, &config)[0].contains("Battle Royale results (Grasslands):"));
+        assert!(super::format_race_result_messages(&game, "🏁 Race results:")[0].contains("Battle Royale results (Grasslands):"));
+        assert!(super::format_race_result_messages(&game, "🏁 {race} results:")[0].contains("Battle Royale results (Grasslands):"));
+        assert!(super::format_race_result_messages(&game, "My custom intro:")[0].starts_with("My custom intro:"));
+    }
 
     #[test]
     fn login_maintenance_refreshes_before_expiry_and_preserves_temporary_failures() {
@@ -539,7 +636,7 @@ mod tests {
     }
 
     #[test]
-    fn custom_race_templates_format_entries_and_podium_without_replacing_names() {
+    fn custom_race_templates_share_placement_format_and_preserve_names() {
         let mut game = crate::streamer_bot::sample_game();
         game.results = vec![result("{points}", 1, 12), result("Second", 2, 8)];
         let config = TwitchConfig {
@@ -549,7 +646,7 @@ mod tests {
             race_entry_separator: " / ".into(),
             ..TwitchConfig::default()
         };
-        assert_eq!(format_custom_race_result_messages(&game, &config), vec!["Race on Test Map: Champion {points}: +12 points / 2. Second: 8 points — GG!"]);
+        assert_eq!(format_custom_race_result_messages(&game, &config), vec!["Race on Test Map: 1. @{points}: 12 points / 2. @Second: 8 points — GG!"]);
         game.results = (1..=30).map(|place| result(&format!("Player_{place}_{}", "😺".repeat(15)), place, 5)).collect();
         let messages = format_custom_race_result_messages(&game, &config);
         assert!(messages.len() > 1);
@@ -566,9 +663,11 @@ mod tests {
         let mut game = crate::streamer_bot::sample_game();
         game.world_record_player = Some("TEST_PLAYER_2".into());
         game.world_record_time = Some(41.25);
-        assert_eq!(super::format_world_record_message(&game, "{mapName}: {wrplayer} {wrrecordtime}s +{wrplayerpoints} pts"), "Test Map: Test Second 41.250s +8 pts");
+        assert_eq!(super::format_world_record_message(&game, "{mapName}: {wrplayer} {wrrecordtime}s +{wrplayerpoints} pts"), "Test Map: @test_player_2 41.250s +8 pts");
+        game.results[1].username.clear();
         game.results[1].player_name = "{wrplayerpoints}".into();
-        assert_eq!(super::format_world_record_message(&game, "{wrplayer} +{wrplayerpoints}"), "{wrplayerpoints} +8");
+        game.world_record_player = Some("{wrplayerpoints}".into());
+        assert_eq!(super::format_world_record_message(&game, "{wrplayer} +{wrplayerpoints}"), "@{wrplayerpoints} +8");
         game.world_record_player = Some("Missing player".into());
         assert_eq!(super::format_world_record_message(&game, "{wrplayerpoints}"), "unknown");
         assert_eq!(super::format_world_record_message(&game, &"x".repeat(600)).chars().count(), 500);
@@ -624,7 +723,7 @@ mod tests {
         };
         assert_eq!(
             format_race_result_messages(&game, "🏁 Race results:"),
-            vec!["\u{1f3c1} Race results: \u{1f947} rmrfkorea +12344pts | \u{1f948} Second +900pts | \u{1f949} Third +700pts"]
+            vec!["\u{1f3c1} Race results (Unknown track): \u{1f947} @rmrfkorea +12344pts | \u{1f948} @Second +900pts | \u{1f949} @Third +700pts"]
         );
         assert!(format_race_result_messages(&game, "{race} winner:")[0].starts_with("Race winner:"));
         game.game_type = GameType::BattleRoyale;
@@ -687,13 +786,24 @@ mod tests {
     }
 
     #[test]
+    fn mentions_use_usernames_and_do_not_double_existing_at_prefixes() {
+        assert_eq!(mention(" @alice "), "@alice");
+        assert_eq!(format_cycle_completion_message("@alice", 2, None, "Congrats @{player}"), "Congrats @alice");
+        let game = crate::streamer_bot::sample_game();
+        let config = TwitchConfig { race_entry_template: "@{player}".into(), ..TwitchConfig::default() };
+        let messages = format_custom_race_result_messages(&game, &config).join(" ");
+        assert!(messages.contains("@test_player_1"));
+        assert!(!messages.contains("@@") && !messages.contains("Test Winner"));
+    }
+
+    #[test]
     fn formats_custom_cycle_message_placeholders() {
         assert_eq!(format_cycle_completion_message("Player", 2, Some(823), "{player}: cycle {cycle}, {races} races"),
-            "Player: cycle 2, 823 races");
+            "@Player: cycle 2, 823 races");
         assert_eq!(format_cycle_completion_message("Player", 2, None, "Cycle complete!"), "Cycle complete!");
         assert_eq!(format_cycle_completion_message("Player", 2, Some(823), "rmrfkoBurn rmrfkoBurn Congrats {player}! Cycle #{cycle}!"),
-            "rmrfkoBurn rmrfkoBurn Congrats Player! Cycle #2!");
-        assert_eq!(format_cycle_completion_message("Player", 2, None, "{player}: {races} races"), "Player: unknown races");
+            "rmrfkoBurn rmrfkoBurn Congrats @Player! Cycle #2!");
+        assert_eq!(format_cycle_completion_message("Player", 2, None, "{player}: {races} races"), "@Player: unknown races");
         assert_eq!(
             format_cycle_completion_message(
                 "rmrfkorea",
@@ -701,7 +811,7 @@ mod tests {
                 Some(823),
                 "✨ {player} completed cycle #{cycle}! ✨"
             ),
-            "✨ rmrfkorea completed cycle #3! ✨"
+            "✨ @rmrfkorea completed cycle #3! ✨"
         );
     }
 }

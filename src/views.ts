@@ -11,6 +11,10 @@ import { feedbackButton } from "./button-feedback";
 import { overlaysPage } from "./overlay-view";
 import type { Config, GameResult, Snapshot } from "./types";
 
+function emoteControl(id: string, control: string): string {
+  return `<div class="emote-input-row">${control}<button type="button" class="compact-button emote-picker-button" data-emote-target="${id}" aria-label="Choose Twitch emote" aria-haspopup="dialog" title="Choose Twitch emote"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14a4.5 4.5 0 0 0 8 0"/><circle cx="9" cy="9" r=".8"/><circle cx="15" cy="9" r=".8"/></svg></button></div>`;
+}
+
 function cyclePositions(player: Snapshot["raceCycles"][number]): number[] {
   const completed = Math.min(
     ...Array.from(
@@ -161,10 +165,21 @@ function formatLabel(value?: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
+export function twitchMention(name: string): string {
+  return `@${name.trim().replace(/^@+/, "")}`;
+}
+
 export const defaultRaceMessage = "{intro} {placements}";
 export const defaultRaceEntry = "{place} {player} +{points}pts";
+export const defaultPromotionUrl = "https://www.missions.lol";
+export const defaultRaceIntro = "🏁 {race} results ({mapName}):";
 export const defaultPromotionMessage =
-  "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 https://www.missions.lol";
+  "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 {url}";
+
+export function promotionMessagePreview(template: string): string {
+  return Array.from((template.trim() || defaultPromotionMessage).replaceAll("{url}", defaultPromotionUrl).replace(/[\r\n]/g, " ")).slice(0, 500).join("");
+}
+
 
 export function twitchPreviewMessages(
   messagePrefix: string,
@@ -214,8 +229,8 @@ export function twitchPreviewMessages(
   );
   const resolve = (template: string, fields: Record<string, string>) =>
     template.replace(
-      /\{([^{}]+)\}/g,
-      (token, name: string) => fields[name] ?? token,
+      /(@?)\{([^{}]+)\}/g,
+      (token, prefix: string, name: string) => fields[name] == null ? token : (prefix && !fields[name].startsWith("@") ? prefix : "") + fields[name],
     );
   const chars = (text: string) => Array.from(text);
   const common = {
@@ -223,7 +238,7 @@ export function twitchPreviewMessages(
     mapName: game?.mapName ?? (game ? "Unknown track" : "Test Map"),
     playerCount: String(game?.playerCount ?? all.length),
   };
-  const intro = chars(resolve(messagePrefix.trim(), common))
+  const intro = chars(resolve(["🏁 Race results:", "🏁 {race} results:"].includes(messagePrefix.trim()) ? defaultRaceIntro : messagePrefix.trim(), common))
     .slice(0, 120)
     .join("");
   const outer = options.raceMessageTemplate?.trim() || defaultRaceMessage;
@@ -246,14 +261,13 @@ export function twitchPreviewMessages(
         >
       )[result.placement] ?? "#" + result.placement;
     const template =
-      options.racePodiumTemplates?.[result.placement - 1]?.trim() ||
       options.raceEntryTemplate?.trim() ||
       (scoring ? defaultRaceEntry : "{place} {player}");
     const entry = resolve(template, {
       ...common,
       place,
       placement: String(result.placement),
-      player: result.playerName,
+      player: twitchMention("username" in result ? String(result.username || result.playerName) : result.playerName),
       points: String(result.seasonPointsEarned),
       time:
         result.finishTime == null ? "unknown" : result.finishTime.toFixed(3),
@@ -285,7 +299,7 @@ export const defaultWorldRecordMessage =
   "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!";
 
 const twitchMessageDefaults: Record<string, string> = {
-  "twitch-message-prefix": "🏁 Race results:",
+  "twitch-message-prefix": defaultRaceIntro,
   "twitch-cycle-message":
     "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉",
   "twitch-world-record-message": defaultWorldRecordMessage,
@@ -310,11 +324,6 @@ export function raceMessageIsCustomized(config: Config["twitch"]): boolean {
       config.raceMessageTemplate.trim() !== defaultRaceMessage) ||
     (!!config.raceEntryTemplate?.trim() &&
       config.raceEntryTemplate.trim() !== defaultRaceEntry) ||
-    (config.racePodiumTemplates ?? []).some(
-      (text) =>
-        !!text.trim() &&
-        text.trim() !== (config.raceEntryTemplate?.trim() || defaultRaceEntry),
-    ) ||
     (config.raceEntrySeparator ?? " | ") !== " | "
   );
 }
@@ -329,15 +338,15 @@ function twitchCustomizationSummary(
 
 export function worldRecordMessagePreview(template: string): string {
   const fields: Record<string, string> = {
-    wrplayer: "Test Winner",
+    wrplayer: "@test_player_1",
     wrplayerpoints: "10",
     wrrecordtime: "42.123",
     mapName: "Test Map",
   };
   return Array.from(
     (template.trim() || defaultWorldRecordMessage).replace(
-      /\{(wrplayer|wrplayerpoints|wrrecordtime|mapName)\}/g,
-      (_, name: string) => fields[name],
+      /(@?)\{(wrplayer|wrplayerpoints|wrrecordtime|mapName)\}/g,
+      (_, prefix: string, name: string) => (prefix && !fields[name].startsWith("@") ? prefix : "") + fields[name],
     ),
   )
     .slice(0, 500)
@@ -349,7 +358,7 @@ export function cycleMessagePreview(messageTemplate: string): string {
     "🎉 Congrats {player} on a cycle! You are great! That's cycle #{cycle}! 🎉";
   const template = messageTemplate.trim() || fallback;
   const message = template
-    .replaceAll("{player}", "rmrfkorea")
+    .replace(/@?\{player\}/g, "@rmrfkorea")
     .replaceAll("{cycle}", "1")
     .replaceAll("{races}", "823");
   return Array.from(message).slice(0, 500).join("");
@@ -750,16 +759,18 @@ function settingsPage(
 
   const promotionSettings = `
       <div class="mission-promotion-settings">
-        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's Mission App in chat", "Give chat a nudge toward Korea's FREE Mission App. Because it's free. you don't have to buy my love.", state.config.twitch.promoteMissionApp ?? true)}
+        ${startupToggle("promote-mission-app", "webhook", "Promote Korea's Mission App on stream", "Post optional Twitch chat promotions for Korea's FREE Mission App. Requires Twitch sign-in.", state.config.twitch.promoteMissionApp ?? true)}
         <details class="promotion-options twitch-message-customization">
           <summary><span class="customize-button">${icons.caretDown} Options</span></summary>
         <div class="mission-promotion-controls">
-          <div class="twitch-message-preview promotion-preview"><span>Preview</span><p>${escapeHtml(defaultPromotionMessage)}</p></div>
           <div class="promotion-timing">
             <label class="field promotion-interval"><span>Start delay (minutes)</span><input id="promotion-start-delay" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionStartDelayMinutes ?? 30}" /></label>
             <label class="field promotion-interval"><span>Post every (minutes)</span><input id="promotion-interval" type="number" min="1" max="1440" step="1" value="${state.config.twitch.promotionIntervalMinutes ?? 60}" /></label>
           </div>
-          <small>The first post waits Start delay after promotion is enabled and Twitch is connected. Watchers do not affect this timer. Restarting the app, reconnecting, or saving timing changes restarts the delay. Later posts use Post every. Save to apply. Test promotion posts immediately.</small>
+          <div class="promotion-message-columns">
+            <label class="field"><span>Promotion message</span>${emoteControl("promotion-message", `<textarea id="promotion-message" rows="5" maxlength="500">${escapeHtml(state.config.twitch.promotionMessageTemplate ?? defaultPromotionMessage)}</textarea>`)}<small>Use <code>{url}</code> for the Mission App link: ${escapeHtml(defaultPromotionUrl)}. Leave blank to use the default message.</small></label>
+            <div class="twitch-message-preview promotion-preview"><span>Preview</span><p id="promotion-message-preview">${escapeHtml(promotionMessagePreview(state.config.twitch.promotionMessageTemplate ?? defaultPromotionMessage))}</p></div>
+          </div>
           <div class="promotion-actions">${feedbackButton("twitch-promotion", "Test promotion", `data-twitch-test="promotion" ${state.twitchStatus === "Connected" ? "" : "disabled"}`, "test")}${feedbackButton("save-promotion", "Save", "data-twitch-save", "file")}</div>
         </div>
         </details>
@@ -884,21 +895,20 @@ function settingsPage(
       <label class="field">
         <span>Message intro</span>
 
-        <input
+        ${emoteControl("twitch-message-prefix", `<input
           id="twitch-message-prefix"
           type="text"
           maxlength="120"
           value="${escapeHtml(twitch.messagePrefix)}"
           placeholder="🏁 {race} winner:"
-        />
-        <small>Use <code>{race}</code> for the match type: <b>Race</b> or <b>Battle Royale</b>.</small>
+        />`)}
+        <small>Use <code>{race}</code> for <b>Race</b> or <b>Battle Royale</b>, and <code>{mapName}</code> for the map. Example: <code>{race} results ({mapName}):</code></small>
       </label>
 
       <div class="race-message-templates">
-        <label class="field"><span>Overall message</span><textarea id="twitch-race-message" rows="1" maxlength="500" placeholder="{intro} {placements}">${escapeHtml(twitch.raceMessageTemplate?.trim() || defaultRaceMessage)}</textarea><small>Use <code>{intro}</code>, <code>{placements}</code>, <code>{race}</code>, <code>{mapName}</code>, <code>{playerCount}</code>. Long lists split into multiple messages.</small></label>
-        <label class="field"><span>Each placement</span><textarea id="twitch-race-entry" rows="1" maxlength="500" placeholder="{place} {player} +{points}pts">${escapeHtml(twitch.raceEntryTemplate?.trim() || defaultRaceEntry)}</textarea><small>Use <code>{place}</code>, <code>{placement}</code> (number), <code>{player}</code>, <code>{points}</code>, <code>{time}</code>, and the match fields above. Change pts to points, or leave points out entirely.</small></label>
-        <label class="field"><span>Between placements</span><input id="twitch-race-separator" maxlength="40" value="${escapeHtml(twitch.raceEntrySeparator ?? " | ")}" /></label>
-        <details class="race-podium-templates"><summary>Custom wording for 1st, 2nd, and 3rd</summary><p>Leave an override blank to use Each placement.</p>${["1st", "2nd", "3rd"].map((label, index) => `<label class="field"><span>${label} place</span><textarea id="twitch-race-place-${index + 1}" rows="1" maxlength="500">${escapeHtml(twitch.racePodiumTemplates?.[index]?.trim() || twitch.raceEntryTemplate?.trim() || defaultRaceEntry)}</textarea></label>`).join("")}</details>
+        <label class="field"><span>Overall message</span>${emoteControl("twitch-race-message", `<textarea id="twitch-race-message" rows="1" maxlength="500" placeholder="{intro} {placements}">${escapeHtml(twitch.raceMessageTemplate?.trim() || defaultRaceMessage)}</textarea>`)}<small>Use <code>{intro}</code>, <code>{placements}</code>, <code>{race}</code>, <code>{mapName}</code>, <code>{playerCount}</code>. Long lists split into multiple messages.</small></label>
+        <label class="field"><span>Each placement</span>${emoteControl("twitch-race-entry", `<textarea id="twitch-race-entry" rows="1" maxlength="500" placeholder="{place} {player} +{points}pts">${escapeHtml(twitch.raceEntryTemplate?.trim() || defaultRaceEntry)}</textarea>`)}<small>Use <code>{place}</code>, <code>{placement}</code> (number), <code>{player}</code>, <code>{points}</code>, <code>{time}</code>, and the match fields above. Change pts to points, or leave points out entirely.</small></label>
+        <label class="field"><span>Between placements</span>${emoteControl("twitch-race-separator", `<input id="twitch-race-separator" maxlength="40" value="${escapeHtml(twitch.raceEntrySeparator ?? " | ")}" />`)}</label>
       </div>
 
             <div class="twitch-message-preview">
@@ -930,12 +940,12 @@ function settingsPage(
       <label class="field">
         <span>Cycle complete message</span>
 
-        <textarea
+        ${emoteControl("twitch-cycle-message", `<textarea
           id="twitch-cycle-message"
           maxlength="500"
           rows="1"
           placeholder="🎉 Congrats {player} on a cycle! That's cycle #{cycle}! 🎉"
-        >${escapeHtml(twitch.cycleMessageTemplate)}</textarea>
+        >${escapeHtml(twitch.cycleMessageTemplate)}</textarea>`)}
 
         <small>
           Use <code>{player}</code> for the racer and
@@ -964,7 +974,7 @@ function settingsPage(
         ${twitchCustomizationSummary("twitch-world-record-message", twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}
         <div class="feature-content">
         <label class="field"><span>World record message</span>
-          <textarea id="twitch-world-record-message" maxlength="500" rows="1">${escapeHtml(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}</textarea>
+          ${emoteControl("twitch-world-record-message", `<textarea id="twitch-world-record-message" maxlength="500" rows="1">${escapeHtml(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage)}</textarea>`)}
           <small><code>{wrplayerpoints}</code> = points earned in this race &middot; <code>{wrplayer}</code> = record player &middot; <code>{wrrecordtime}</code> = record time in seconds &middot; <code>{mapName}</code> = track name</small>
         </label>
         <div class="twitch-message-preview"><span>Preview</span><p id="twitch-world-record-preview">${escapeHtml(worldRecordMessagePreview(twitch.worldRecordMessageTemplate ?? defaultWorldRecordMessage))}</p></div>
@@ -1189,7 +1199,7 @@ function raceCyclesPage(
   `;
 }
 
-function homePage(state: Snapshot, busy: boolean): string {
+function homePage(state: Snapshot, busy: { stats: boolean; cycles: boolean }): string {
   const game = state.latestResult;
   const battleRoyale = game?.gameType === "battleRoyale";
   const pointsEarned = (games: GameResult[]) =>
@@ -1228,12 +1238,13 @@ function homePage(state: Snapshot, busy: boolean): string {
     icon: string,
     season: string,
   ) => {
+    const pending = busy[kind];
     const active = trackingIsActive(state, kind);
     const running = active && watcherIsActive(state);
     return `<section class="panel home-watcher">
       <header><div class="home-card-heading"><i>${icons[icon]}</i><h2>${title}</h2></div><div class="watch-state ${running ? "good" : "bad"}"><i></i><span>${active ? escapeHtml(state.watcherStatus) : "Stopped"}</span></div></header>
       <div class="panel-body"><p class="home-season">${escapeHtml(season)}</p>
-        <button class="action ${active ? "stop" : "start"} home-watch-button" data-tracking-toggle="${kind}" ${busy ? "disabled" : ""}>${busy || active ? icons.spinner : icons.watcherStart}<span>${active ? "Stop" : "Start"} ${title}</span></button>
+        <button class="action ${active ? "stop" : "start"} home-watch-button" data-tracking-toggle="${kind}" ${pending ? "disabled" : ""}>${pending || active ? icons.spinner : icons.watcherStart}<span>${active ? "Stop" : "Start"} ${title}</span></button>
       </div>
     </section>`;
   };
@@ -1350,8 +1361,8 @@ function sidebar(state: Snapshot, currentPage: string): string {
         </div>`
             : ""
         }
-        ${state.config.lumia?.enabled ? `<div class="sidebar-watcher" data-sidebar-tooltip="Lumia Stream: ${escapeHtml(state.lumiaStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Lumia Stream</small><div class="watch-state ${state.lumiaStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.lumiaStatus ?? "Not checked")}</span></div></div>` : ""}
-        ${state.config.discord?.enabled ? `<div class="sidebar-watcher discord-sidebar-status" data-sidebar-tooltip="Discord: ${escapeHtml(state.discordStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${icons.chain}</i><small>Discord</small><div class="watch-state ${state.discordStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.discordStatus ?? "Not checked")}</span></div></div>` : ""}
+        ${state.config.lumia?.enabled ? `<div class="sidebar-watcher" data-sidebar-tooltip="Lumia Stream: ${escapeHtml(state.lumiaStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${sidebarArtwork("lumia", "status-lumia")}</i><small>Lumia Stream</small><div class="watch-state ${state.lumiaStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.lumiaStatus ?? "Not checked")}</span></div></div>` : ""}
+        ${state.config.discord?.enabled ? `<div class="sidebar-watcher discord-sidebar-status" data-sidebar-tooltip="Discord: ${escapeHtml(state.discordStatus ?? "Not checked")}"><i class="sidebar-status-icon" aria-hidden="true">${sidebarArtwork("discord", "status-discord")}</i><small>Discord</small><div class="watch-state ${state.discordStatus === "Connected" ? "good" : ""}"><i></i><span>${escapeHtml(state.discordStatus ?? "Not checked")}</span></div></div>` : ""}
         </div>
         <div class="watcher-statuses">
           ${(["stats", "cycles"] as const)
@@ -1371,7 +1382,7 @@ function sidebar(state: Snapshot, currentPage: string): string {
 export function renderApplication(
   state: Snapshot,
   currentPage: string,
-  busy: boolean,
+  busy: boolean | { stats: boolean; cycles: boolean },
   selectedLogFilter: string,
   raceCycleSort: RaceCycleSort,
   editingName = false,
@@ -1379,13 +1390,14 @@ export function renderApplication(
   overlayDirectory = "",
   selectedRaceId = "",
 ): string {
+  const pending = typeof busy === "boolean" ? { stats: busy, cycles: busy } : busy;
   const content =
     currentPage === "home"
-      ? homePage(state, busy)
+      ? homePage(state, pending)
       : currentPage === "overview"
-        ? overviewPage(state, busy, editingName, resultsSort, selectedRaceId)
+        ? overviewPage(state, pending.stats, editingName, resultsSort, selectedRaceId)
         : currentPage === "racecycles"
-          ? raceCyclesPage(state, raceCycleSort, editingName, busy)
+          ? raceCyclesPage(state, raceCycleSort, editingName, pending.cycles)
           : currentPage === "history"
             ? historyPage(state)
             : currentPage === "logs"
@@ -1442,7 +1454,7 @@ function logsPage(state: Snapshot, selectedFilter: string): string {
       <div id="log-list" class="log-list">
         ${
           logs.length
-            ? logs
+            ? [...logs].reverse()
                 .map(
                   (entry) => `
                     <div class="log-row ${escapeHtml(entry.level)}">

@@ -99,6 +99,7 @@ export interface Config {
     promoteMissionApp?: boolean;
     promotionIntervalMinutes?: number;
     promotionStartDelayMinutes?: number;
+    promotionMessageTemplate?: string;
     postWorldRecords: boolean;
     worldRecordMessageTemplate: string;
     postResults: boolean;
@@ -131,6 +132,7 @@ export interface Snapshot {
   lastUpdate?: string;
   cycleLastUpdate?: string;
   latestResult?: GameResult;
+  lumiaConfigured?: boolean;
   lumiaStatus: string;
   lumiaMessage?: string;
   streamerBotStatus: string;

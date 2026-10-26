@@ -22,7 +22,7 @@ use models::*;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     path::{Path, PathBuf},
-    sync::{mpsc, Arc, Mutex},
+    sync::{mpsc, Arc, Condvar, Mutex},
     thread,
     time::{Duration, Instant, SystemTime},
 };
@@ -48,6 +48,28 @@ struct Runtime {
 }
 
 type SharedRuntime = Arc<Mutex<Runtime>>;
+
+#[derive(Default)]
+struct Startup {
+    result: Mutex<Option<Result<SharedRuntime, String>>>,
+    ready: Condvar,
+}
+
+impl Startup {
+    fn finish(&self, result: Result<SharedRuntime, String>) {
+        if let Ok(mut saved) = self.result.lock() {
+            *saved = Some(result);
+            self.ready.notify_all();
+        }
+    }
+
+    fn wait(&self) -> Result<SharedRuntime, String> {
+        let saved = self.result.lock().map_err(|_| "Startup state unavailable")?;
+        let saved = self.ready.wait_while(saved, |saved| saved.is_none()).map_err(|_| "Startup state unavailable")?;
+        saved.as_ref().ok_or("Startup state unavailable")?.clone()
+    }
+}
+
 static TRACKING_COMMAND_LOCK: Mutex<()> = Mutex::new(());
 
 fn default_csv_path() -> String {
@@ -63,6 +85,8 @@ fn default_csv_path() -> String {
 }
 
 fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
+    let started = Instant::now();
+    eprintln!("[Startup] Loading saved data");
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let data_dir = app_data_dir.join("data");
     let storage = Storage::new(data_dir)?;
@@ -75,6 +99,8 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
     if config.twitch.message_prefix.is_empty() {
         config.twitch.message_prefix = twitch_defaults.message_prefix;
         config.twitch.post_results = true;
+    } else if matches!(config.twitch.message_prefix.trim(), "🏁 Race results:" | "🏁 {race} results:") {
+        config.twitch.message_prefix = twitch_defaults.message_prefix;
     }
     if config.twitch.cycle_message_template.is_empty() {
         config.twitch.cycle_message_template = twitch_defaults.cycle_message_template;
@@ -82,10 +108,11 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
     let recent_results = if storage.path("history.json").exists() {
         storage.read::<Vec<GameResult>>("history.json")?
     } else { Vec::new() };
-    // Read current data as saved. Do not migrate or reconstruct totals from history.
+    // Restore saved totals directly; ignore obsolete duplicated standings while parsing.
     let race_state = if storage.path("race-state.json").exists() {
         storage.read::<RaceState>("race-state.json")?
     } else { RaceState::default() };
+    eprintln!("[Startup] Saved data loaded in {} ms", started.elapsed().as_millis());
     let race_cycles = cycle_players_for_display(&race_state.race_cycles);
     let streamer_bot_status = if config.streamer_bot.enabled {
         "Not checked"
@@ -122,11 +149,10 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             })
         })
         .collect();
-    Ok(Runtime {
+    let runtime = Runtime {
         discord_tx: None,
         discord_revision: 0,
         overlay_writer: overlays::Writer::new(app_data_dir.join("overlays")),
-        race_state: race_state.clone(),
         snapshot: AppSnapshot {
             event_result_ids: current_event_result_ids(&race_state, &recent_results),
             cycle_history: cycle_history_for_ui(&race_state.cycle_history),
@@ -137,6 +163,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             session_results: vec![],
             discord_status: if config.discord.enabled { "Not checked".into() } else { "Disabled".into() },
             discord_message: None,
+            lumia_configured: lumia::is_configured(),
             lumia_status: if config.lumia.enabled { "Not checked".into() } else { "Disabled".into() },
             config,
             watcher_status: "Stopped".into(),
@@ -159,6 +186,7 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
             race_cycles,
             logs: data_file_logs,
         },
+        race_state,
         storage,
         watcher: None,
         watcher_thread: None,
@@ -168,7 +196,9 @@ fn initial_runtime(app: &tauri::AppHandle) -> Result<Runtime, String> {
         cached_file: None,
         record_tracker,
         announced_records,
-    })
+    };
+    eprintln!("[Startup] Runtime prepared in {} ms", started.elapsed().as_millis());
+    Ok(runtime)
 }
 
 fn log(runtime: &SharedRuntime, app: &tauri::AppHandle, level: &str, message: impl Into<String>) {
@@ -186,7 +216,7 @@ fn log(runtime: &SharedRuntime, app: &tauri::AppHandle, level: &str, message: im
     let _ = app.emit("log-entry", &entry);
 }
 
-// Full historical standings stay in race-state.json, not repeated UI updates.
+// Per-event earnings provide history; full leaderboard snapshots are unused.
 fn cycle_history_for_ui(history: &[CycleHistoryEntry]) -> Vec<CycleHistoryEntry> {
     history.iter().map(|entry| CycleHistoryEntry {
         standings: vec![], game: entry.game.as_ref().map(game_for_ui), earnings: entry.earnings.clone(),
@@ -228,6 +258,7 @@ fn snapshot_for_ui(source: &AppSnapshot) -> AppSnapshot {
         streamer_bot_message: source.streamer_bot_message.clone(),
         discord_status: source.discord_status.clone(),
         discord_message: source.discord_message.clone(),
+        lumia_configured: source.lumia_configured,
         lumia_status: source.lumia_status.clone(),
         lumia_message: source.lumia_message.clone(),
         twitch_status: source.twitch_status.clone(),
@@ -559,6 +590,7 @@ fn send_cycle_completions(
     runtime: &SharedRuntime,
     app: &tauri::AppHandle,
     completions: Vec<CycleCompletion>,
+    players: &[PlayerResult],
 ) {
     if completions.is_empty() || !runtime.lock().map(|rt| rt.snapshot.cycles_tracking_enabled && rt.snapshot.config.twitch.post_cycle_results).unwrap_or(false) {
         return;
@@ -569,12 +601,19 @@ fn send_cycle_completions(
         .map(|rt| rt.snapshot.config.twitch.cycle_message_template.clone())
         .unwrap_or_default();
 
+    // Resolve the Twitch account from normalized results; other integrations keep display names.
+    let completions = completions.into_iter().map(|completion| {
+        let username = players.iter().find(|player| player.player_name.eq_ignore_ascii_case(&completion.player_name))
+            .filter(|player| !player.username.trim().is_empty())
+            .map(|player| player.username.clone()).unwrap_or_else(|| completion.player_name.clone());
+        (completion, username)
+    }).collect::<Vec<_>>();
     let runtime = runtime.clone();
     let app = app.clone();
     thread::spawn(move || {
-        for completion in completions {
+        for (completion, username) in completions {
             match twitch::send_cycle_completion(
-                &completion.player_name,
+                &username,
                 completion.cycle_number,
                 completion.races,
                 &message_template,
@@ -693,6 +732,7 @@ async fn save_lumia_token(app: tauri::AppHandle, runtime: State<'_, SharedRuntim
     tauri::async_runtime::spawn_blocking(move || {
         lumia::validate_token(&config, &token)?;
         lumia::save_credential(&token.trim().to_string())?;
+        if let Ok(mut rt) = runtime.lock() { rt.snapshot.lumia_configured = true; }
         set_lumia_status(&runtime, "Not checked", Some("API token saved securely. Save settings, then test the connection.".into()));
         emit_snapshot(&runtime, &app);
         let snapshot = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
@@ -708,6 +748,7 @@ fn remove_lumia_token(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>) 
         rt.storage.write("config.json", &config)?; rt.snapshot.config = config;
     }
     lumia::delete_credential()?;
+    if let Ok(mut rt) = runtime.lock() { rt.snapshot.lumia_configured = false; }
     set_lumia_status(&runtime, "Disabled", Some("API token removed".into()));
     emit_snapshot(&runtime, &app);
     runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into())
@@ -993,7 +1034,7 @@ fn prepare_race_commit(
                 game_keys(previous).iter().any(|key| game_keys(game).contains(key)))) {
             let winner = game.results.iter().find(|result| result.placement == 1);
             next.cycle_history.push(CycleHistoryEntry {
-                standings: cycle_players_for_display(&next.race_cycles), game: Some(game.clone()), earnings,
+                standings: vec![], game: Some(game.clone()), earnings,
                 timestamp: game.timestamp.clone(), player_name: String::new(), cycle_number: 0,
                 map_name: game.map_name.clone(), game_id: game.id.clone(),
                 winner_name: winner.map(|result| result.player_name.clone()),
@@ -1050,7 +1091,7 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
         emit_snapshot(runtime, app);
         return;
     }
-    log(runtime, app, "info", "[Parser] Reading stable CSV");
+    log(runtime, app, "info", format!("[Parser] Reading stable {}", path.file_name().unwrap_or_default().to_string_lossy()));
     let read_stamp = file_stamp(path);
     let read_companion_stamp = file_stamp(&companion);
     let parsed = {
@@ -1128,15 +1169,18 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                     let retained_history_len = rt.race_state.cycle_history.len();
                     next.cycle_history = std::mem::take(&mut rt.race_state.cycle_history);
                     next.cycle_history.extend(new_history);
-                    let mut history = rt.snapshot.recent_results.clone();
-                    if stats_new {
-                        if history.iter().any(|previous| game_points_key(previous) == game_points_key(&game)) {
-                            refresh_counted_result(&mut history, &game);
-                        } else { history.push(game.clone()); }
-                    } else if stats_enabled && reason == ReadReason::Manual {
-                        refresh_counted_result(&mut history, &game);
+                    let history_changed = stats_new || (stats_enabled && reason == ReadReason::Manual && !is_cycle_test_snapshot(&game));
+                    let mut history = history_changed.then(|| rt.snapshot.recent_results.clone());
+                    if let Some(history) = history.as_mut() {
+                        if stats_new {
+                            if history.iter().any(|previous| game_points_key(previous) == game_points_key(&game)) {
+                                refresh_counted_result(history, &game);
+                            } else { history.push(game.clone()); }
+                        } else if stats_enabled && reason == ReadReason::Manual {
+                            refresh_counted_result(history, &game);
+                        }
                     }
-                    let commit = rt.storage.write("history.json", &history)
+                    let commit = history.as_ref().map_or(Ok(()), |history| rt.storage.write("history.json", history))
                         .and_then(|_| rt.storage.write("race-state.json", &next));
                     if let Err(error) = commit {
                         next.cycle_history.truncate(retained_history_len);
@@ -1186,8 +1230,14 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
             };
             match &saved {
                 None => log(runtime, app, "info", "[Game] Duplicate snapshot ignored; counts unchanged"),
-                Some((_, id, _, _, _)) => {
-                    log(runtime, app, "info", format!("[Game] New result {id}..."));
+                Some((_, id, game, completions, _)) => {
+                    let winner = game.results.iter().find(|player| player.placement == 1)
+                        .map(|player| player.player_name.as_str()).unwrap_or("Unknown");
+                    let kind = if game.game_type == GameType::BattleRoyale { "BR" } else { "Race" };
+                    log(runtime, app, "info", format!("[Game] {kind} result {id}... | Winner: {winner} | {} players", game.player_count));
+                    for completion in completions {
+                        log(runtime, app, "info", format!("[RaceCycles] {} completed cycle #{}", completion.player_name, completion.cycle_number));
+                    }
                     log(runtime, app, "info", "[Stats] Updated active tracking pipelines; state saved");
                 }
             }
@@ -1213,11 +1263,11 @@ fn process_file_inner(runtime: &SharedRuntime, app: &tauri::AppHandle, path: &Pa
                 discord_integration::game_events(runtime, app, &game, &cycle_completions, stats_new);
                 send_streamer_bot_events(runtime, app, &game, &cycle_completions, stats_new);
                 send_lumia_events(runtime, app, &game, &cycle_completions, stats_new);
+                send_cycle_completions(runtime, app, cycle_completions, &game.results);
                 if stats_new {
                     send_twitch_world_record(runtime, app, game.clone());
                     send_twitch_results(runtime, app, game);
                 }
-                send_cycle_completions(runtime, app, cycle_completions);
             }
 
             return;
@@ -1255,9 +1305,10 @@ fn stop_watcher_inner(runtime: &SharedRuntime) {
 }
 
 #[tauri::command]
-async fn get_app_snapshot(runtime: State<'_, SharedRuntime>) -> Result<AppSnapshot, String> {
-    let runtime = runtime.inner().clone();
+async fn get_app_snapshot(startup: State<'_, Arc<Startup>>) -> Result<AppSnapshot, String> {
+    let startup = startup.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let runtime = startup.wait()?;
         let result = runtime.lock().map(|rt| snapshot_for_ui(&rt.snapshot)).map_err(|_| "Application state unavailable".into());
         result
     }).await.map_err(|error| error.to_string())?
@@ -1283,6 +1334,9 @@ fn save_config(
     }
     if !(1..=1440).contains(&config.twitch.promotion_start_delay_minutes) {
         return Err("Promotion start delay must be between 1 and 1440 minutes".into());
+    }
+    if config.twitch.promotion_message_template.chars().count() > 500 {
+        return Err("Promotion message must be 500 characters or fewer".into());
     }
     {
         let mut rt = runtime
@@ -1337,6 +1391,11 @@ fn save_seasons(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, season
     get_app_snapshot_inner(runtime)
 }
 
+fn export_filename(name: &str, kind: &str, extension: &str) -> String {
+    let safe_name: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(80).collect();
+    format!("{kind}-{safe_name}-{}.{extension}", Utc::now().format("%Y%m%d-%H%M%S-%f"))
+}
+
 fn prepare_export(snapshot: &AppSnapshot, kind: &str) -> Result<(String, serde_json::Value), String> {
     let (name, value) = match kind {
         "race" => (&snapshot.config.seasons.race_name, serde_json::json!({
@@ -1361,9 +1420,7 @@ fn prepare_export(snapshot: &AppSnapshot, kind: &str) -> Result<(String, serde_j
         })),
         _ => return Err("Unknown export type".into()),
     };
-    let safe_name: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).take(80).collect();
-    let filename = format!("{kind}-{safe_name}-{}.json", Utc::now().format("%Y%m%d-%H%M%S-%f"));
-    Ok((filename, value))
+    Ok((export_filename(name, kind, "json"), value))
 }
 
 fn csv_text(value: &str) -> String {
@@ -1426,12 +1483,19 @@ async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, k
     let format = format.unwrap_or_else(|| "json".into());
     if !matches!(format.as_str(), "json" | "csv") { return Err("Choose JSON or CSV".into()); }
     // Capture the complete export, then release the state lock before showing a dialog.
-    let (filename, bytes) = {
+    let (filename, value, bytes) = {
         let rt = runtime.lock().map_err(|_| "Application state unavailable")?;
-        let (filename, value) = prepare_export(&rt.snapshot, &kind)?;
         if format == "csv" {
-            (filename.trim_end_matches(".json").to_string() + ".csv", prepare_csv_export(&rt.snapshot, &kind)?)
-        } else { (filename, serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?) }
+            let name = match kind.as_str() {
+                "race" | "session" => &rt.snapshot.config.seasons.race_name,
+                "cycles" => &rt.snapshot.config.seasons.cycle_name,
+                _ => return Err("Unknown export type".into()),
+            };
+            (export_filename(name, &kind, "csv"), None, Some(prepare_csv_export(&rt.snapshot, &kind)?))
+        } else {
+            let (filename, value) = prepare_export(&rt.snapshot, &kind)?;
+            (filename, Some(value), None)
+        }
     };
     tauri::async_runtime::spawn_blocking(move || {
         let mut dialog = app.dialog().file()
@@ -1445,7 +1509,9 @@ async fn export_data(app: tauri::AppHandle, runtime: State<'_, SharedRuntime>, k
         let path = selected.into_path().map_err(|error| error.to_string())?;
         let parent = path.parent().ok_or("Invalid export location")?;
         let filename = path.file_name().and_then(|name| name.to_str()).ok_or("Invalid export file name")?;
-        Storage::new(parent.to_path_buf())?.write_bytes(filename, &bytes)?;
+        let storage = Storage::new(parent.to_path_buf())?;
+        if let Some(value) = value { storage.write(filename, &value)?; }
+        if let Some(bytes) = bytes { storage.write_bytes(filename, &bytes)?; }
         Ok(Some(path.to_string_lossy().into_owned()))
     }).await.map_err(|error| error.to_string())?
 }
@@ -1524,6 +1590,11 @@ async fn connect_twitch(
 }
 
 #[tauri::command]
+async fn list_twitch_emotes() -> Result<twitch::TwitchEmoteList, String> {
+    tauri::async_runtime::spawn_blocking(twitch::list_emotes).await.map_err(|_| "Twitch emote lookup stopped".to_string())?
+}
+
+#[tauri::command]
 async fn validate_twitch_session(
     app: tauri::AppHandle,
     runtime: State<'_, SharedRuntime>,
@@ -1562,7 +1633,7 @@ async fn test_twitch_message(
         "race" if config.post_results => twitch::send_results(&config, &game).and_then(|count| {
             if count > 0 { Ok(()) } else { Err("The last race has no point-scoring racers to post".into()) }
         }),
-        "cycles" if config.post_cycle_results => twitch::send_cycle_completion("Test Player", 1, Some(823), &config.cycle_message_template).map(|_| ()),
+        "cycles" if config.post_cycle_results => twitch::send_cycle_completion("test_player_1", 1, Some(823), &config.cycle_message_template).map(|_| ()),
         "worldRecord" if config.post_world_records => twitch::send_world_record(&config, &game),
         "promotion" => twitch::send_promotion(&config),
         "race" | "cycles" | "worldRecord" => Err("Enable this posting option before testing it".into()),
@@ -2035,13 +2106,23 @@ fn backup_current_results(rt: &Runtime, kind: &str) -> Result<(), String> {
     rt.storage.write(&name, &current_results_backup(rt, kind))
 }
 
-fn current_results_backup(rt: &Runtime, kind: &str) -> serde_json::Value {
-    serde_json::json!({
-        "timestamp": Utc::now().to_rfc3339(), "kind": kind,
-        "state": rt.race_state, "sessionResults": rt.snapshot.session_results,
-        "history": rt.snapshot.recent_results,
-        "latestResult": rt.snapshot.latest_result
-    })
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResultsBackup<'a> {
+    timestamp: String,
+    kind: &'a str,
+    state: &'a RaceState,
+    session_results: &'a [GameResult],
+    history: &'a [GameResult],
+    latest_result: &'a Option<GameResult>,
+}
+
+fn current_results_backup<'a>(rt: &'a Runtime, kind: &'a str) -> ResultsBackup<'a> {
+    ResultsBackup {
+        timestamp: Utc::now().to_rfc3339(), kind, state: &rt.race_state,
+        session_results: &rt.snapshot.session_results, history: &rt.snapshot.recent_results,
+        latest_result: &rt.snapshot.latest_result,
+    }
 }
 
 #[tauri::command]
@@ -2241,29 +2322,45 @@ fn cancel_app_update(window: tauri::WebviewWindow, updates: State<'_, updater::U
 }
 
 pub fn run() {
+    eprintln!("[Startup] Native process started");
     tauri::Builder::default()
         .manage(updater::Updater::default())
+        .manage(Arc::new(Startup::default()))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let runtime = Arc::new(Mutex::new(
-                initial_runtime(app.handle()).map_err(std::io::Error::other)?,
-            ));
-            let start_minimized = runtime.lock().map_err(|_| std::io::Error::other("Runtime lock poisoned"))?.snapshot.config.start_minimized;
-            if start_minimized {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.minimize()?;
+            let app = app.handle().clone();
+            let startup = app.state::<Arc<Startup>>().inner().clone();
+            // Return from setup immediately so the native window can paint.
+            thread::spawn(move || {
+                let started = Instant::now();
+                let runtime = match initial_runtime(&app) {
+                    Ok(runtime) => Arc::new(Mutex::new(runtime)),
+                    Err(error) => {
+                        eprintln!("[Startup] Unable to load saved data: {error}");
+                        startup.finish(Err(error));
+                        return;
+                    }
+                };
+                let start_minimized = runtime.lock().map(|rt| rt.snapshot.config.start_minimized).unwrap_or(false);
+                app.manage(runtime.clone());
+                startup.finish(Ok(runtime.clone()));
+                if start_minimized {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.minimize();
+                    }
                 }
-            }
-            app.manage(runtime.clone());
-            if let Err(error) = streamdeck::start(&runtime, app.handle()) {
-                log(&runtime, app.handle(), "warning", format!("[Stream Deck] Controls unavailable: {error}"));
-            }
-            emit_snapshot(&runtime, app.handle());
-            start_connection_checks(&runtime, app.handle());
-            start_lumia_checks(&runtime, app.handle());
-            discord_integration::start(&runtime, app.handle());
-            promotion::start(&runtime, app.handle());
-            twitch_chat::start(&runtime, app.handle());
+                if let Err(error) = streamdeck::start(&runtime, &app) {
+                    log(&runtime, &app, "warning", format!("[Stream Deck] Controls unavailable: {error}"));
+                }
+                // Initial overlay IO is also off the native window thread.
+                start_connection_checks(&runtime, &app);
+                start_lumia_checks(&runtime, &app);
+                discord_integration::start(&runtime, &app);
+                promotion::start(&runtime, &app);
+                twitch_chat::start(&runtime, &app);
+                emit_snapshot(&runtime, &app);
+                eprintln!("[Startup] Setup complete in {} ms", started.elapsed().as_millis());
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2281,6 +2378,7 @@ pub fn run() {
             save_config,
             save_theme,
             connect_twitch,
+            list_twitch_emotes,
             validate_twitch_session,
             disconnect_twitch,
             test_twitch_message,
@@ -2311,9 +2409,10 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
-                let runtime = window.state::<SharedRuntime>();
-                if let Ok(mut rt) = runtime.lock() { rt.connection_checks_stopped = true; }
-                stop_watcher_inner(&runtime);
+                if let Some(runtime) = window.try_state::<SharedRuntime>() {
+                    if let Ok(mut rt) = runtime.lock() { rt.connection_checks_stopped = true; }
+                    stop_watcher_inner(&runtime);
+                }
                 window.app_handle().exit(0);
             }
         })
@@ -2323,6 +2422,31 @@ pub fn run() {
 
 #[cfg(test)]
 mod pipeline_tests {
+    #[test]
+    fn borrowed_backup_preserves_existing_json_fields_and_values() {
+        let state = RaceState::default();
+        let games = vec![streamer_bot::sample_game()];
+        let latest = games.first().cloned();
+        let backup = ResultsBackup { timestamp: "now".into(), kind: "cycles", state: &state,
+            session_results: &games, history: &games, latest_result: &latest };
+        assert_eq!(serde_json::to_value(backup).unwrap(), serde_json::json!({
+            "timestamp":"now", "kind":"cycles", "state":state,
+            "sessionResults":games, "history":games, "latestResult":latest,
+        }));
+    }
+
+    #[test]
+    fn startup_wait_reports_load_errors_before_or_after_waiting() {
+        let ready = Startup::default();
+        ready.finish(Err("invalid saved state".into()));
+        assert_eq!(ready.wait().err().as_deref(), Some("invalid saved state"));
+        let pending = Arc::new(Startup::default());
+        let worker_startup = pending.clone();
+        let worker = thread::spawn(move || worker_startup.wait().err());
+        pending.finish(Err("unable to read saved state".into()));
+        assert_eq!(worker.join().unwrap().as_deref(), Some("unable to read saved state"));
+    }
+
     #[test]
     fn exported_text_cannot_start_spreadsheet_formulas() {
         for text in ["=1+1", "+SUM(1,2)", "-SUM(1,2)", "@SUM(1,2)", "  =1", "\u{feff}=1", "\u{ff1d}1+1", "\tvalue", "\rvalue", "\nvalue"] {
@@ -2424,6 +2548,7 @@ mod pipeline_tests {
             streamer_bot_message: None,
             discord_status: "Disabled".into(),
             discord_message: None,
+            lumia_configured: false,
             lumia_status: "Disabled".into(),
             lumia_message: None,
             twitch_status: "Disconnected".into(),
@@ -2517,6 +2642,8 @@ mod pipeline_tests {
         let game = streamer_bot::sample_game();
         let (state, _, _) = prepare_race_commit(&RaceState::default(), &game, true, true, "", ReadReason::Manual).unwrap();
         source.cycle_history = state.cycle_history.clone();
+        // A manually supplied legacy snapshot is still stripped from UI packets.
+        source.cycle_history[0].standings = state.race_cycles.clone();
         source.recent_results = vec![game.clone()];
         let ui = snapshot_for_ui(&source);
         assert!(!source.cycle_history[0].standings.is_empty());
@@ -2849,6 +2976,25 @@ mod pipeline_tests {
     }
 
     #[test]
+    fn legacy_history_skips_leaderboard_copies_and_preserves_results_and_earnings() {
+        let game = streamer_bot::sample_game();
+        let (state, _, _) = prepare_race_commit(&RaceState::default(), &game, true, true, "now", ReadReason::Manual).unwrap();
+        let compact = serde_json::to_value(&state).unwrap();
+        assert!(compact["cycleHistory"][0].get("standings").is_none());
+        let mut legacy = compact.clone();
+        legacy["cycleHistory"][0]["standings"] = serde_json::json!([{
+            "playerKey": "unused", "placementCounts": vec![100; 10]
+        }]);
+        // This deliberately incomplete old standings row must not be decoded.
+        let restored: RaceState = serde_json::from_value(legacy).unwrap();
+        assert!(restored.cycle_history[0].standings.is_empty());
+        assert_eq!(serde_json::to_value(&restored).unwrap(), compact);
+        assert!(prepare_race_commit(&restored, &game, true, true, "later", ReadReason::Manual).is_none());
+        assert_eq!(restored.cycle_history[0].game.as_ref().unwrap().results.len(), game.results.len());
+        assert!(!restored.cycle_history[0].earnings.is_empty());
+    }
+
+    #[test]
     fn histories_keep_full_results_and_survive_independent_resets_without_a_limit() {
         let mut game = streamer_bot::sample_game();
         game.results = vec![result("Player", 1, 0)];
@@ -2861,7 +3007,8 @@ mod pipeline_tests {
         assert_eq!(state.cycle_history.len(), 260);
         assert_eq!(state.cycle_history[0].earnings[0].points_earned, 1);
         assert_eq!(state.cycle_history[0].game.as_ref().unwrap().results.len(), 1);
-        assert_eq!(state.cycle_history[259].standings[0].placement_counts[0], 260);
+        assert!(state.cycle_history.iter().all(|entry| entry.standings.is_empty()));
+        assert_eq!(state.cycle_history[259].earnings[0].placement_counts[0], 260);
         reset_stats_totals(&mut state);
         reset_cycle_totals(&mut state);
         let restored: RaceState = serde_json::from_str(&serde_json::to_string(&state).unwrap()).unwrap();

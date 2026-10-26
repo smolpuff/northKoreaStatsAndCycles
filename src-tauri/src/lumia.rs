@@ -10,6 +10,10 @@ fn client() -> Result<reqwest::blocking::Client, String> {
         .connect_timeout(Duration::from_millis(1500)).timeout(Duration::from_secs(3))
         .build().map_err(|_| "Unable to create Lumia client".into())
 }
+pub fn is_configured() -> bool {
+    load_credential().ok().flatten().is_some_and(|value| !value.trim().is_empty())
+}
+
 fn token() -> Result<String, String> {
     load_credential()?.filter(|value| !value.is_empty()).ok_or("Save a Lumia API token first".into())
 }

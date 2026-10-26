@@ -171,6 +171,8 @@ pub struct TwitchConfig {
     pub promotion_interval_minutes: u64,
     #[serde(default = "default_promotion_start_delay")]
     pub promotion_start_delay_minutes: u64,
+    #[serde(default = "default_promotion_message")]
+    pub promotion_message_template: String,
     #[serde(default)]
     pub post_world_records: bool,
     #[serde(default = "default_world_record_message")]
@@ -201,9 +203,10 @@ pub fn default_race_separator() -> String { " | ".into() }
 pub fn default_promotion_interval() -> u64 { 60 }
 pub fn default_promotion_start_delay() -> u64 { 30 }
 pub fn default_promotion_enabled() -> bool { true }
+pub const MISSION_APP_URL: &str = "https://www.missions.lol";
 
 pub fn default_promotion_message() -> String {
-    "🚀 Korea's MoS Missions App - *Full Missions Automation. 100% free. Resets, rentals, cooldowns, mission mode, auto mode, built-in burner wallet for txs. Win, Mac, Linux 🔗 https://www.missions.lol".into()
+    "🚀 Korea's Mission Manager - Automate your entire MoS flow with 1 click. Never pay gross upcharges.  🔐 Full self-custody with built-in burner wallet. You dont need to buy my love.   🔗 {url}".into()
 }
 
 impl Default for TwitchConfig {
@@ -214,11 +217,12 @@ impl Default for TwitchConfig {
             promote_mission_app: default_promotion_enabled(),
             promotion_interval_minutes: default_promotion_interval(),
             promotion_start_delay_minutes: default_promotion_start_delay(),
+            promotion_message_template: default_promotion_message(),
             post_world_records: false,
             world_record_message_template: default_world_record_message(),
             post_results: true,
             post_cycle_results: false,
-            message_prefix: "🏁 Race results:".into(),
+            message_prefix: "🏁 {race} results ({mapName}):".into(),
             race_message_template: String::new(),
             race_entry_template: String::new(),
             race_podium_templates: Vec::new(),
@@ -392,6 +396,8 @@ pub struct AppSnapshot {
     pub latest_result: Option<GameResult>,
     pub streamer_bot_status: String,
     pub streamer_bot_message: Option<String>,
+    #[serde(default)]
+    pub lumia_configured: bool,
     pub lumia_status: String,
     pub lumia_message: Option<String>,
     pub discord_status: String,
@@ -444,7 +450,9 @@ pub struct RaceState {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CycleHistoryEntry {
-    #[serde(default)]
+    // Legacy saves repeated the entire leaderboard for every event. Per-player
+    // earnings retain the historical counts; never allocate those unused copies.
+    #[serde(skip)]
     pub standings: Vec<RaceCyclePlayer>,
     #[serde(default)]
     pub game: Option<GameResult>,

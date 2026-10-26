@@ -25,7 +25,8 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 24
+          node-version-file: .node-version
+          check-latest: true
           cache: npm
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
@@ -40,6 +41,10 @@ jobs:
         run: npm run streamdeck:pack
       - name: Check security boundaries
         run: npm run security:check
+      - name: Check dev and packaged style rendering
+        run: node scripts/verify-packaged-styles.mjs
+      - name: Check Twitch emote picker behavior
+        run: node scripts/verify-emote-picker.mjs
 
       - name: Check Stream Deck plugin behavior
         run: npm run streamdeck:check

@@ -59,7 +59,14 @@ fs.writeFileSync(`${directory}/controls-sample.svg`, `<svg xmlns="http://www.w3.
 fs.writeFileSync(`${plugin}/images/category.svg`, menuIcon(sidebar.stats));
 png(menuIcon(sidebar.stats).replace('width="40" height="40"', 'width="256" height="256"'), `${plugin}/images/plugin.png`);
 png(menuIcon(sidebar.stats).replace('width="40" height="40"', 'width="512" height="512"'), `${plugin}/images/plugin@2x.png`);
-fs.writeFileSync(`${directory}/mosdropgate-default.svg`, keySvg(glyphs.twitch, { ...palettes.running, label: 'LIVE' }));
+// The requested real Twitch rmrfkoHeart asset is bundled for offline previews.
+const heart = fs.readFileSync(`${directory}/rmrfkoHeart.png`).toString("base64");
+const dropGate = keySvg(glyphs.twitch, { ...palettes.running, label: 'LIVE' });
+const artworkStart = dropGate.indexOf('<g transform="translate(0 2)"');
+const artworkEnd = dropGate.indexOf('<circle cx="120"', artworkStart);
+assert(artworkStart > 0 && artworkEnd > artworkStart, "DropGate preview must retain its key background and status light");
+const heartImage = `<image x="40" y="40" width="64" height="64" href="data:image/png;base64,${heart}"/>`;
+fs.writeFileSync(`${directory}/mosdropgate-default.svg`, dropGate.slice(0, artworkStart) + heartImage + dropGate.slice(artworkEnd));
 // These exact SVGs are also embedded by the sibling Drop Gate plugin source.
 for (const state of ["running", "stopped", "disconnected"]) {
   const label = { running: 'LIVE', stopped: 'OFFLINE', disconnected: 'UNKNOWN' }[state];

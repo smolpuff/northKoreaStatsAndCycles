@@ -19,7 +19,7 @@ export function streamDeckPage(): string {
         <div class="streamdeck-plugin-install"><div class="integration-connection-controls">${feedbackButton("streamdeck-dropgate-install", "Install MoS Drop plugin", 'data-install-dropgate-plugin data-streamdeck-plugin="dropgate" data-plugin-version="0.4.4.6" data-plugin-name="MoS Drop plugin"', "file")}</div>
         <span class="streamdeck-plugin-meta">v0.4.4.6 &middot; Stream Deck 7.0+ &middot; Windows</span></div>
         </div>
-        <div class="streamdeck-plugin-preview"><img class="streamdeck-plugin-sample" src="/streamdeck/previews/mosdropgate-default.svg" width="96" height="96" alt="Sample of the MoS Drop Gate key"></div>
+        <div class="streamdeck-plugin-preview"><img class="streamdeck-plugin-sample" src="/streamdeck/previews/mosdropgate-default.svg" width="96" height="96" alt="MoS DropGate key featuring the rmrfkoHeart Twitch emote"></div>
       </div></section>
     </div>`;
 }
