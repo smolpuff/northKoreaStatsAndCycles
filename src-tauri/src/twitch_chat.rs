@@ -74,7 +74,7 @@ fn format_stats_reply(login: &str, session: &[GameResult], history: &[GameResult
     format!("@{login} | This session: {races} of {stream_races} stream races, {points} points | All-time tracked: {total_races} races, {total_points} points")
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ViewerCommand {
     Cycles,
     Stats,
@@ -98,12 +98,11 @@ impl ViewerCommand {
 #[derive(Default)]
 struct Commands {
     seen: VecDeque<String>,
-    users: HashMap<String, Instant>,
-    sent: VecDeque<Instant>,
+    users: HashMap<(String, ViewerCommand), Instant>,
 }
 
 impl Commands {
-    fn accept(&mut self, id: &str, user: &str, now: Instant) -> bool {
+    fn accept(&mut self, id: &str, user: &str, kind: ViewerCommand, now: Instant) -> bool {
         if id.is_empty() || self.seen.iter().any(|seen| seen == id) {
             return false;
         }
@@ -113,19 +112,12 @@ impl Commands {
         }
         self.users
             .retain(|_, at| now.duration_since(*at) < Duration::from_secs(30));
-        while self
-            .sent
-            .front()
-            .is_some_and(|at| now.duration_since(*at) >= Duration::from_secs(30))
-        {
-            self.sent.pop_front();
-        }
-        // Leave room for automatic result messages on the same account.
-        if self.users.contains_key(user) || self.sent.len() >= 5 {
+        // A viewer only consumes their own cooldown for this command.
+        let key = (user.to_owned(), kind);
+        if self.users.contains_key(&key) {
             return false;
         }
-        self.users.insert(user.into(), now);
-        self.sent.push_back(now);
+        self.users.insert(key, now);
         true
     }
 }
@@ -359,7 +351,7 @@ fn listen(
                             .lock()
                             .map_err(|_| "Application state unavailable")?;
                         if !kind.enabled(&rt.snapshot.config.twitch)
-                            || !commands.accept(id, user, Instant::now())
+                            || !commands.accept(id, user, kind, Instant::now())
                         {
                             continue;
                         }
@@ -497,17 +489,17 @@ mod tests {
         ));
     }
     #[test]
-    fn cooldown_dedup_and_global_limit_are_bounded() {
+    fn cooldown_and_dedup_do_not_block_other_viewers() {
         let mut commands = Commands::default();
         let now = Instant::now();
-        assert!(commands.accept("1", "a", now));
-        assert!(!commands.accept("1", "b", now));
-        assert!(!commands.accept("2", "a", now));
-        for index in 3..7 {
-            assert!(commands.accept(&index.to_string(), &index.to_string(), now));
+        assert!(commands.accept("1", "a", ViewerCommand::Cycles, now));
+        assert!(!commands.accept("1", "b", ViewerCommand::Cycles, now));
+        assert!(!commands.accept("2", "a", ViewerCommand::Cycles, now));
+        for index in 3..103 {
+            assert!(commands.accept(&index.to_string(), &index.to_string(), ViewerCommand::Cycles, now));
         }
-        assert!(!commands.accept("7", "7", now));
-        assert!(commands.accept("8", "a", now + Duration::from_secs(31)));
+        assert!(!commands.accept("103", "7", ViewerCommand::Cycles, now));
+        assert!(commands.accept("104", "a", ViewerCommand::Cycles, now + Duration::from_secs(31)));
     }
     fn event() -> Value {
         serde_json::json!({"metadata":{"subscription_type":"channel.chat.message","message_timestamp":chrono::Utc::now().to_rfc3339()},"payload":{"event":{
@@ -529,7 +521,7 @@ mod tests {
         assert!(command(&value, "123").is_none());
     }
     #[test]
-    fn both_commands_and_alias_share_cooldown_and_dedup() {
+    fn command_cooldowns_are_independent_and_cycle_aliases_share_a_limit() {
         let mut commands = Commands::default();
         let now = Instant::now();
         let mut value = event();
@@ -542,7 +534,7 @@ mod tests {
             value["payload"]["event"]["message_id"] = format!("message-{index}").into();
             let (id, user, _, kind) = command(&value, "123").unwrap();
             assert_eq!(kind, expected);
-            assert_eq!(commands.accept(id, user, now), index == 0);
+            assert_eq!(commands.accept(id, user, kind, now), index < 2);
         }
         value["payload"]["event"]["message"]["text"] = "!mystats someone_else".into();
         assert!(command(&value, "123").is_none());
@@ -550,6 +542,18 @@ mod tests {
         config.my_stats_command = true;
         assert!(ViewerCommand::Stats.enabled(&config));
         assert!(!ViewerCommand::Cycles.enabled(&config));
+    }
+
+    #[test]
+    fn stats_reply_does_not_suppress_the_same_viewers_cycle_reply() {
+        let mut commands = Commands::default();
+        let now = Instant::now();
+        assert!(commands.accept("stats", "viewer", ViewerCommand::Stats, now));
+        assert!(commands.accept("cycles", "viewer", ViewerCommand::Cycles, now));
+        assert!(!commands.accept("cycles-alias", "viewer", ViewerCommand::Cycles, now));
+        assert!(!commands.accept("stats-again", "viewer", ViewerCommand::Stats, now));
+        assert!(!commands.accept("cycles", "other-viewer", ViewerCommand::Stats, now));
+        assert!(commands.accept("cycles-later", "viewer", ViewerCommand::Cycles, now + Duration::from_secs(31)));
     }
 
     fn stats_game(id: &str, kind: &str, login: &str, platform: &str, points: i64) -> GameResult {

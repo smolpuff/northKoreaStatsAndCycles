@@ -2,16 +2,8 @@
   "version": "0.2.12",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Faster startup and smaller JSON saves: remove unused historical leaderboard copies, stream atomic writes, preserve an original backup, and skip unchanged overlay data.",
-    "Fix packaged icon, gradient and player-color rendering so release builds match the development UI.",
-    "Add compact Twitch emote icon pickers with search and cursor insertion for your own channel emotes, available only in Twitch chat editors.",
-    "Automatically tag player usernames with @ in Twitch results, world records and cycle messages. Use the same Each placement template for every finishing position.",
-    "Include match type and map in default Twitch results, and support editable Twitch-only mission promotions labeled on stream with a live preview.",
-    "Add a seamless custom title bar with minimize, maximize/restore and close controls, matching the Missions app style.",
-    "Improve Lumia setup and connection notices, show Configure Lumia before a token is saved, and hide Remove when no token exists. Use branded Discord and Lumia sidebar status icons.",
-    "Keep RaceStats and RaceCycles controls independent and make Settings event rows more compact.",
-    "Show newest Live Log entries first with compact timestamps, scanned filenames, Race/BR winners and cycle completions.",
-    "Use the real rmrfkoHeart Twitch emote in the bundled offline MoS DropGate preview.",
-    "Update development and CI to Node.js 26.12.1 with the October 2026 Brotli security fix."
+    "Give !mycycles and !mystats independent 30-second cooldowns for each viewer.",
+    "Remove the app-wide reply cap so one viewer cannot block another.",
+    "Keep duplicate protection and a shared cooldown for the !mycycle/!mycycles aliases."
   ]
 }
