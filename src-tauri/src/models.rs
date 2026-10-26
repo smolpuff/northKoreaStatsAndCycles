@@ -165,6 +165,10 @@ pub struct TwitchConfig {
     pub my_cycle_command: bool,
     #[serde(default)]
     pub my_stats_command: bool,
+    #[serde(default = "default_cycle_command_alias")]
+    pub my_cycle_command_alias: String,
+    #[serde(default = "default_stats_command_alias")]
+    pub my_stats_command_alias: String,
     #[serde(default = "default_promotion_enabled")]
     pub promote_mission_app: bool,
     #[serde(default = "default_promotion_interval")]
@@ -194,6 +198,9 @@ pub struct TwitchConfig {
     pub cycle_message_template: String,
 }
 
+pub fn default_cycle_command_alias() -> String { "!mycycle".into() }
+pub fn default_stats_command_alias() -> String { "!mystat".into() }
+
 pub fn default_world_record_message() -> String {
     "World Record! {wrplayer} earned +{wrplayerpoints} points on {mapName} in {wrrecordtime}s!".into()
 }
@@ -214,6 +221,8 @@ impl Default for TwitchConfig {
         Self {
             my_cycle_command: false,
             my_stats_command: false,
+            my_cycle_command_alias: default_cycle_command_alias(),
+            my_stats_command_alias: default_stats_command_alias(),
             promote_mission_app: default_promotion_enabled(),
             promotion_interval_minutes: default_promotion_interval(),
             promotion_start_delay_minutes: default_promotion_start_delay(),

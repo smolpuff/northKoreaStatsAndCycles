@@ -81,6 +81,8 @@ let state: Snapshot = {
     twitch: {
       myCycleCommand: false,
       myStatsCommand: false,
+      myCycleCommandAlias: "!mycycle",
+      myStatsCommandAlias: "!mystat",
       promoteMissionApp: true,
       promotionIntervalMinutes: 60,
       promotionStartDelayMinutes: 30,
@@ -196,7 +198,9 @@ function syncFeatureSections(): void {
     const master = section.dataset.masterToggle ? document.getElementById(section.dataset.masterToggle) as HTMLInputElement : undefined;
     const disabled = !toggle.checked || toggle.disabled || (master != null && !master.checked);
     section.classList.toggle("feature-disabled", disabled);
-    const content = section.querySelector<HTMLElement>(".feature-content")!;
+    // Viewer-command toggles have no customization body.
+    const content = section.querySelector<HTMLElement>(".feature-content");
+    if (!content) return;
     content.inert = disabled && !content.querySelector("[data-twitch-save]");
     content.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement>("input, textarea, button").forEach(control => {
       control.dataset.originalDisabled ??= String(control.disabled);
@@ -557,6 +561,7 @@ function renderMainWindow(): void {
 }
 
 function render(): void {
+  if (pendingSettingsConfig) state.config = pendingSettingsConfig;
   if (selectedRaceId && (selectedRaceId === state.latestResult?.id || !state.recentResults.some(game => game.id === selectedRaceId))) selectedRaceId = "";
   const samePage = renderedPage === currentPage;
   const switchFrames = samePage ? captureSwitchFrames(root) : new Map();
@@ -618,6 +623,7 @@ async function toggleWatcher(kind: "stats" | "cycles" = currentPage === "racecyc
 }
 
 function readSettingsForm(): Config {
+  if (pendingSettingsConfig) state.config = pendingSettingsConfig;
   const autoStart = document.querySelector<HTMLInputElement>("#auto-start");
   const streamerHost =
     document.querySelector<HTMLInputElement>("#streamer-host");
@@ -674,6 +680,8 @@ function readSettingsForm(): Config {
       },
     },
     twitch: {
+      myCycleCommandAlias: document.querySelector<HTMLInputElement>("#twitch-my-cycle-alias")?.value.trim() ?? state.config.twitch.myCycleCommandAlias ?? "!mycycle",
+      myStatsCommandAlias: document.querySelector<HTMLInputElement>("#twitch-my-stats-alias")?.value.trim() ?? state.config.twitch.myStatsCommandAlias ?? "!mystat",
       myStatsCommand: document.querySelector<HTMLInputElement>("#twitch-my-stats-command")?.checked ?? state.config.twitch.myStatsCommand ?? false,
       myCycleCommand: document.querySelector<HTMLInputElement>("#twitch-my-cycle-command")?.checked ?? state.config.twitch.myCycleCommand ?? false,
       postWorldRecords: document.querySelector<HTMLInputElement>("#twitch-post-world-records")?.checked ?? state.config.twitch.postWorldRecords ?? false,
@@ -700,29 +708,48 @@ function readSettingsForm(): Config {
 
 let settingsToggleSaveQueue: Promise<void> = Promise.resolve();
 let settingsToggleSavesPending = 0;
+let pendingSettingsConfig: Config | null = null;
 let settingsToggleSaveError = "";
+let settingsToggleSaved = false;
 
 function refreshToggleSaveStatus(): void {
   const status = document.querySelector<HTMLElement>("#settings-autosave-status");
-  if (status) status.textContent = settingsToggleSaveError;
+  if (status) {
+    status.textContent = settingsToggleSaveError || (settingsToggleSavesPending ? "Saving changes..." : settingsToggleSaved ? "Changes saved." : "Toggles save automatically.");
+    status.dataset.error = String(Boolean(settingsToggleSaveError));
+  }
 }
 
-function saveSettingsToggle(): void {
-  const config = readSettingsForm();
+function saveSettingsConfig(config: Config): Promise<Snapshot> {
+  pendingSettingsConfig = config;
+  state.config = config;
   settingsToggleSavesPending++;
   settingsToggleSaveError = "";
   refreshToggleSaveStatus();
-  // Keep rapid changes in order so an older save cannot overwrite a later toggle.
-  settingsToggleSaveQueue = settingsToggleSaveQueue.then(async () => {
+  // Serialize every settings save, including buttons, so nothing can overtake a toggle.
+  const save = settingsToggleSaveQueue.then(async () => {
     try {
-      state = await invoke<Snapshot>("save_config", { config });
+      const snapshot = await invoke<Snapshot>("save_config", { config });
+      state = snapshot;
+      settingsToggleSaved = true;
+      settingsToggleSaveError = "";
+      return snapshot;
     } catch (error) {
       settingsToggleSaveError = `Unable to save changes: ${String(error)}`;
+      throw error;
     } finally {
       settingsToggleSavesPending--;
+      if (!settingsToggleSavesPending) pendingSettingsConfig = null;
       render();
     }
   });
+  // A failed write must not stop later changes from being saved.
+  settingsToggleSaveQueue = save.then(() => {}, () => {});
+  return save;
+}
+
+function saveSettingsToggle(): void {
+  void saveSettingsConfig(readSettingsForm()).catch(() => {});
 }
 
 function bindSettingsForm(): void {
@@ -739,7 +766,7 @@ function bindSettingsForm(): void {
     themeSelect.disabled = true;
     applyTheme(theme);
     try {
-      await invoke("save_theme", { theme });
+      await saveSettingsConfig({ ...readSettingsForm(), theme });
       state.config.theme = theme;
     } catch (error) {
       themeSaveError = `Unable to save theme: ${String(error)}`;
@@ -809,9 +836,7 @@ function bindSettingsForm(): void {
       button.disabled = true;
       button.textContent = "Opening Twitch…";
       try {
-        await invoke<Snapshot>("save_config", {
-          config: readSettingsForm(),
-        });
+        await saveSettingsConfig(readSettingsForm());
         state = await invoke<Snapshot>("connect_twitch");
       } catch (error) {
         alert(String(error));
@@ -836,7 +861,7 @@ function bindSettingsForm(): void {
     button.addEventListener("click", async () => {
       const config = readSettingsForm();
       await runButtonAction(button.dataset.feedbackKey!, async () => {
-        state = await invoke<Snapshot>("save_config", { config });
+        state = await saveSettingsConfig(config);
       }, "Saving...", "Saved");
     });
   });
@@ -857,7 +882,7 @@ function bindSettingsForm(): void {
   }));
   document.querySelectorAll<HTMLButtonElement>("[data-discord-save]").forEach(button => button.addEventListener("click", async () => {
     const config = readSettingsForm();
-    await runButtonAction(button.dataset.feedbackKey!, async () => { state = await invoke<Snapshot>("save_config", {config}); }, "Saving...", "Saved");
+    await runButtonAction(button.dataset.feedbackKey!, async () => { state = await saveSettingsConfig(config); }, "Saving...", "Saved");
   }));
   document.querySelectorAll<HTMLButtonElement>("[data-discord-webhook]").forEach(button => button.addEventListener("click", () => openDiscordWebhookDialog(readSettingsForm().discord,button.dataset.discordWebhook,snapshot => {state=snapshot;render();})));
   document.querySelector<HTMLButtonElement>("[data-discord-add-channel]")?.addEventListener("click", () => openDiscordWebhookDialog(readSettingsForm().discord,undefined,snapshot => {state=snapshot;render();}));
@@ -908,7 +933,7 @@ function bindSettingsForm(): void {
     event.preventDefault();
     const config = readSettingsForm();
     await runButtonAction("save-" + currentPage, async () => {
-      state = await invoke<Snapshot>("save_config", { config });
+      state = await saveSettingsConfig(config);
     }, "Saving...", "Saved");
   });
 }

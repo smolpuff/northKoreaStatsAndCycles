@@ -5760,3 +5760,5 @@ body { position: relative; }
 body:has(.window-chrome) .app-shell { background: transparent; }
 body:has(.window-chrome) { background: url("./assets/window-texture.svg") 0 0 / 180px 180px repeat, radial-gradient(ellipse 1100px 850px at 220px 0, rgba(102, 36, 137, .38), transparent 80%), linear-gradient(125deg, #11182d 0%, #081b30 55%, #071326 100%); }
 :root.theme-plain body:has(.window-chrome) { background: var(--reference-page); }
+
+.settings-autosave-status[data-error="true"] { color: var(--reference-error, #ef4444); }

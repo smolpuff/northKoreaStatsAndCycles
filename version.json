@@ -2,8 +2,8 @@
   "version": "0.2.13",
   "downloadUrl": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/latest",
   "notes": [
-    "Give !mycycles and !mystats independent 30-second cooldowns for each viewer.",
-    "Remove the app-wide reply cap so one viewer cannot block another.",
-    "Keep duplicate protection and a shared cooldown for the !mycycle/!mycycles aliases."
+    "Fix settings Save buttons and immediate toggle saving across Settings and integrations.",
+    "Preserve rapid changes across pages and show saving, saved and error feedback without reloading the window.",
+    "Add editable secondary Twitch commands, defaulting to !mycycle and !mystat; aliases share their primary command's per-viewer cooldown."
   ]
 }

@@ -989,6 +989,7 @@ function settingsPage(
         <span><b>Viewer command: !mycycles</b><small>Show your cycle progress in chat.</small></span>
         <input id="twitch-my-cycle-command" type="checkbox" role="switch" aria-label="Enable !mycycles" ${twitch.myCycleCommand ? "checked" : ""} />
       </div>
+      <div class="feature-content"><label class="field"><span>Secondary command</span><input id="twitch-my-cycle-alias" maxlength="33" value="${escapeHtml(twitch.myCycleCommandAlias ?? "!mycycle")}" placeholder="!mycycle" spellcheck="false" /><small>Optional: use ! followed by letters, numbers or underscores. Leave blank to disable the secondary command. Save settings to apply.</small></label></div>
     </section>
     <section class="twitch-settings-section" data-feature-section="twitch-my-stats-command">
       <div class="toggle-row twitch-feature-heading">
@@ -996,6 +997,7 @@ function settingsPage(
         <span><b>Viewer command: !mystats</b><small>Show your session and total race stats in chat.</small></span>
         <input id="twitch-my-stats-command" type="checkbox" role="switch" aria-label="Enable !mystats" ${twitch.myStatsCommand ? "checked" : ""} />
       </div>
+      <div class="feature-content"><label class="field"><span>Secondary command</span><input id="twitch-my-stats-alias" maxlength="33" value="${escapeHtml(twitch.myStatsCommandAlias ?? "!mystat")}" placeholder="!mystat" spellcheck="false" /><small>Optional: use ! followed by letters, numbers or underscores. Leave blank to disable the secondary command. Save settings to apply.</small></label></div>
     </section>
   </div>
 

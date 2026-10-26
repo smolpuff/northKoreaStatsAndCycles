@@ -122,9 +122,27 @@ impl Commands {
     }
 }
 
+pub fn validate_command_aliases(config: &TwitchConfig) -> Result<(), String> {
+    let cycles = config.my_cycle_command_alias.trim();
+    let stats = config.my_stats_command_alias.trim();
+    for alias in [cycles, stats] {
+        if alias.is_empty() { continue; }
+        if !alias.starts_with('!') || !(2..=33).contains(&alias.len())
+            || !alias[1..].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err("Secondary commands must start with ! followed by 1-32 letters, numbers or underscores".into());
+        }
+    }
+    if cycles.eq_ignore_ascii_case("!mystats") || stats.eq_ignore_ascii_case("!mycycles")
+        || (!cycles.is_empty() && cycles.eq_ignore_ascii_case(stats)) {
+        return Err("Choose different secondary commands for cycles and stats".into());
+    }
+    Ok(())
+}
+
 fn command<'a>(
     value: &'a Value,
     channel: &str,
+    config: &TwitchConfig,
 ) -> Option<(&'a str, &'a str, &'a str, ViewerCommand)> {
     if value["metadata"]["subscription_type"] != "channel.chat.message" {
         return None;
@@ -150,11 +168,13 @@ fn command<'a>(
         return None;
     }
     let text = event["message"]["text"].as_str()?.trim();
-    let kind = match text.to_ascii_lowercase().as_str() {
-        "!mycycle" | "!mycycles" => ViewerCommand::Cycles,
-        "!mystats" => ViewerCommand::Stats,
-        _ => return None,
-    };
+    let kind = if text.eq_ignore_ascii_case("!mycycles")
+        || (!config.my_cycle_command_alias.trim().is_empty() && text.eq_ignore_ascii_case(config.my_cycle_command_alias.trim())) {
+        ViewerCommand::Cycles
+    } else if text.eq_ignore_ascii_case("!mystats")
+        || (!config.my_stats_command_alias.trim().is_empty() && text.eq_ignore_ascii_case(config.my_stats_command_alias.trim())) {
+        ViewerCommand::Stats
+    } else { return None; };
     let login = event["chatter_user_login"].as_str()?;
     if login.is_empty()
         || login.len() > 25
@@ -345,7 +365,8 @@ fn listen(
                 )
             }
             "notification" if subscribed => {
-                if let Some((id, user, login, kind)) = command(&value, &credential.user_id) {
+                let config = runtime.lock().map_err(|_| "Application state unavailable")?.snapshot.config.twitch.clone();
+                if let Some((id, user, login, kind)) = command(&value, &credential.user_id, &config) {
                     let reply = {
                         let rt = runtime
                             .lock()
@@ -510,15 +531,15 @@ mod tests {
     fn accepts_only_exact_command_from_connected_channel() {
         let mut value = event();
         assert_eq!(
-            command(&value, "123"),
+            command(&value, "123", &TwitchConfig::default()),
             Some(("message-1", "456", "alice", ViewerCommand::Cycles))
         );
-        assert!(command(&value, "789").is_none());
+        assert!(command(&value, "789", &TwitchConfig::default()).is_none());
         value["payload"]["event"]["message"]["text"] = "!mycycle someone_else".into();
-        assert!(command(&value, "123").is_none());
+        assert!(command(&value, "123", &TwitchConfig::default()).is_none());
         value["payload"]["event"]["message"]["text"] = "!mycycle".into();
         value["payload"]["event"]["source_broadcaster_user_id"] = "789".into();
-        assert!(command(&value, "123").is_none());
+        assert!(command(&value, "123", &TwitchConfig::default()).is_none());
     }
     #[test]
     fn command_cooldowns_are_independent_and_cycle_aliases_share_a_limit() {
@@ -529,15 +550,16 @@ mod tests {
             (0, "!mycycles", ViewerCommand::Cycles),
             (1, " !MYSTATS ", ViewerCommand::Stats),
             (2, "!mycycle", ViewerCommand::Cycles),
+            (3, "!mystat", ViewerCommand::Stats),
         ] {
             value["payload"]["event"]["message"]["text"] = text.into();
             value["payload"]["event"]["message_id"] = format!("message-{index}").into();
-            let (id, user, _, kind) = command(&value, "123").unwrap();
+            let (id, user, _, kind) = command(&value, "123", &TwitchConfig::default()).unwrap();
             assert_eq!(kind, expected);
             assert_eq!(commands.accept(id, user, kind, now), index < 2);
         }
         value["payload"]["event"]["message"]["text"] = "!mystats someone_else".into();
-        assert!(command(&value, "123").is_none());
+        assert!(command(&value, "123", &TwitchConfig::default()).is_none());
         let mut config = TwitchConfig::default();
         config.my_stats_command = true;
         assert!(ViewerCommand::Stats.enabled(&config));
@@ -554,6 +576,38 @@ mod tests {
         assert!(!commands.accept("stats-again", "viewer", ViewerCommand::Stats, now));
         assert!(!commands.accept("cycles", "other-viewer", ViewerCommand::Stats, now));
         assert!(commands.accept("cycles-later", "viewer", ViewerCommand::Cycles, now + Duration::from_secs(31)));
+    }
+
+    #[test]
+    fn configurable_aliases_keep_primary_commands_and_reject_collisions() {
+        let mut config = TwitchConfig::default();
+        config.my_cycle_command_alias = "!progress".into();
+        config.my_stats_command_alias = "!points".into();
+        validate_command_aliases(&config).unwrap();
+        let mut value = event();
+        for (text, expected) in [("!PROGRESS", ViewerCommand::Cycles), ("!points", ViewerCommand::Stats),
+            ("!mycycles", ViewerCommand::Cycles), ("!mystats", ViewerCommand::Stats)] {
+            value["payload"]["event"]["message"]["text"] = text.into();
+            assert_eq!(command(&value, "123", &config).unwrap().3, expected);
+        }
+        for text in ["!mycycle", "!mystat", "!points alice", "hello !points"] {
+            value["payload"]["event"]["message"]["text"] = text.into();
+            assert!(command(&value, "123", &config).is_none());
+        }
+        config.my_cycle_command_alias.clear();
+        config.my_stats_command_alias.clear();
+        validate_command_aliases(&config).unwrap();
+        for text in ["!mycycle", "!mystat"] {
+            value["payload"]["event"]["message"]["text"] = text.into();
+            assert!(command(&value, "123", &config).is_none());
+        }
+        for invalid in ["oops", "!", "!two words", "!?", "!mystats"] {
+            config.my_cycle_command_alias = invalid.into();
+            assert!(validate_command_aliases(&config).is_err());
+        }
+        config.my_cycle_command_alias = "!same".into();
+        config.my_stats_command_alias = "!SAME".into();
+        assert!(validate_command_aliases(&config).is_err());
     }
 
     fn stats_game(id: &str, kind: &str, login: &str, platform: &str, points: i64) -> GameResult {
@@ -605,9 +659,11 @@ mod tests {
     fn stale_notifications_and_legacy_config_do_not_enable_replies() {
         let mut value = event();
         value["metadata"]["message_timestamp"] = "2000-01-01T00:00:00Z".into();
-        assert!(command(&value, "123").is_none());
+        assert!(command(&value, "123", &TwitchConfig::default()).is_none());
         let config: crate::models::TwitchConfig =
             serde_json::from_str(r#"{"postResults":true}"#).unwrap();
+        assert_eq!(config.my_cycle_command_alias, "!mycycle");
+        assert_eq!(config.my_stats_command_alias, "!mystat");
         assert!(!config.my_cycle_command);
         assert!(!config.my_stats_command);
         let enabled: crate::models::TwitchConfig =

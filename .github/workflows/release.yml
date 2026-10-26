@@ -91,6 +91,8 @@ jobs:
         run: node scripts/verify-packaged-styles.mjs
       - name: Check Twitch emote picker behavior
         run: node scripts/verify-emote-picker.mjs
+      - name: Check settings saving and toggle persistence
+        run: node scripts/verify-settings-save.mjs
 
       - name: Check Stream Deck plugin behavior
         run: npm run streamdeck:check

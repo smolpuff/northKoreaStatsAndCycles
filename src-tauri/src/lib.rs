@@ -1328,6 +1328,7 @@ fn save_config(
     config: AppConfig,
 ) -> Result<AppSnapshot, String> {
     discord::validate_config(&config.discord)?;
+    twitch_chat::validate_command_aliases(&config.twitch)?;
     if config.lumia.port == 0 { return Err("Choose a Lumia port from 1 to 65535".into()); }
     if !(1..=1440).contains(&config.twitch.promotion_interval_minutes) {
         return Err("Promotion interval must be between 1 and 1440 minutes".into());
