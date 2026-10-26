@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "0.2.13",
+  "artifacts": {
+    "win32-x64": {
+      "url": "https://github.com/smolpuff/northKoreaStatsAndCycles/releases/download/v0.2.13/marbles-stats.exe",
+      "size": 21261824,
+      "sha256": "3e0654fcc5b9c55604eca649e2fbf43ab0f39d12897cf057af98c4433dd4db33"
+    }
+  }
+}
