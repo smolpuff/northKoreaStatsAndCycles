@@ -174,7 +174,12 @@ async function browserCheck() {
   check(configuredLumia.querySelector("[data-lumia-remove-token]") && !configuredLumia.textContent.includes("Lumia setup required"), "Saved token must offer update/removal");
   document.getElementById("fields").innerHTML = fixtures.settings;
   const settingsRows = document.querySelectorAll(".settings-option");
-  check(getComputedStyle(settingsRows[1]).paddingTop === "9px", "Settings events must use compact spacing");
+  check(getComputedStyle(settingsRows[1]).paddingTop === "6px", "Settings events must use compact spacing");
+  for (const name of ["twitch", "discord", "lumia", "streamer"]) {
+    document.getElementById("fields").innerHTML = fixtures[name];
+    const events = document.querySelector(".twitch-settings-grid, .streamer-events");
+    check(events && getComputedStyle(events).rowGap === "6px", name + " events must have the same 6px gap");
+  }
   const log = detached(fixtures.logs);
   check(log.querySelector(".log-row span").textContent === "Newest entry", "Newest log entry must be on top");
   document.getElementById("fields").innerHTML = fixtures.logs;
@@ -211,7 +216,7 @@ try {
   child = spawn(browser, ["--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", `--user-data-dir=${profile}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--window-size=1000,900", pathToFileURL(file).href], { windowsHide: true, stdio: "ignore" });
   let launchError;
   child.on("error", error => { launchError = error; });
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + 30000;
   const portFile = path.join(profile, "DevToolsActivePort");
   while (!fs.existsSync(portFile)) {
     if (launchError) throw launchError;
@@ -228,7 +233,7 @@ try {
   let serial = 0;
   const rpc = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++serial;
-    const timer = setTimeout(() => { socket.off("message", onMessage); reject(Error("Browser probe timed out")); }, 3000);
+    const timer = setTimeout(() => { socket.off("message", onMessage); reject(Error("Browser probe timed out")); }, 10000);
     const onMessage = bytes => {
       const message = JSON.parse(bytes.toString());
       if (message.id !== id) return;

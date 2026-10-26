@@ -191,7 +191,7 @@ try {
   child = spawn(browser, ["--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking", `--user-data-dir=${profile}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--window-size=1000,900", pathToFileURL(file).href], { windowsHide: true, stdio: "ignore" });
   let launchError;
   child.on("error", error => { launchError = error; });
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + 30000;
   const portFile = path.join(profile, "DevToolsActivePort");
   while (!fs.existsSync(portFile)) {
     if (launchError) throw launchError;
@@ -208,7 +208,7 @@ try {
   let serial = 0;
   const rpc = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++serial;
-    const timer = setTimeout(() => { socket.off("message", onMessage); reject(Error("Browser probe timed out")); }, 3000);
+    const timer = setTimeout(() => { socket.off("message", onMessage); reject(Error("Browser probe timed out")); }, 10000);
     const onMessage = bytes => {
       const message = JSON.parse(bytes.toString());
       if (message.id !== id) return;

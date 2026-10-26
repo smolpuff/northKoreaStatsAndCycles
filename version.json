@@ -4,6 +4,7 @@
   "notes": [
     "Fix settings Save buttons and immediate toggle saving across Settings and integrations.",
     "Preserve rapid changes across pages and show saving, saved and error feedback without reloading the window.",
-    "Add editable secondary Twitch commands, defaulting to !mycycle and !mystat; aliases share their primary command's per-viewer cooldown."
+    "Use consistent smaller 6px gaps between events across all integration settings pages, with tighter Settings rows.",
+    "Add editable secondary Twitch commands in Customize, defaulting to !mycycle and !mystat, with a shared per-viewer cooldown for each primary command and its alias."
   ]
 }

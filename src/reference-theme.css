@@ -1344,8 +1344,8 @@ tbody tr.p1 td.points {
 
 .streamer-events {
   display: grid;
-  gap: 12px;
-  margin-top: 14px;
+  gap: var(--settings-event-gap, 6px);
+  margin-top: var(--settings-event-gap, 6px);
 }
 
 .streamer-event {
@@ -2047,10 +2047,11 @@ tbody tr.p1 td.points {
 }
 
 form.integration-page-layout {
+  --settings-event-gap: 6px;
   max-width: none;
   width: 100%;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--settings-event-gap);
 }
 
 .integration-page-layout .twitch-connection-heading {
@@ -2122,8 +2123,8 @@ form.integration-page-layout {
 
 .integration-page-layout .twitch-settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--settings-event-gap);
+  margin-top: var(--settings-event-gap);
 }
 
 .integration-page-layout .twitch-feature-heading {
@@ -2391,8 +2392,8 @@ form.integration-page-layout {
 }
 
 .integration-page-layout .twitch-settings-grid {
-  gap: 18px;
-  margin-top: 18px;
+  gap: var(--settings-event-gap);
+  margin-top: var(--settings-event-gap);
 }
 
 .integration-page-layout .integration-connection-controls {
@@ -2647,7 +2648,7 @@ form.integration-page-layout {
   align-items: center;
   gap: 12px;
   margin: 0;
-  padding: 9px 0;
+  padding: 6px 0;
 }
 
 /* Match other panels: the panel body supplies the outer spacing. */
@@ -3166,8 +3167,8 @@ dialog[open].dialog-closing::backdrop {
 .streamer-events {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 16px;
+  gap: var(--settings-event-gap, 6px);
+  margin-top: var(--settings-event-gap, 6px);
 }
 
 .integration-page-layout .streamer-event-card {
