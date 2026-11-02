@@ -63,11 +63,15 @@ struct Artifact {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Transaction {
+    #[serde(default)]
+    schema_version: u32,
     target: PathBuf,
     directory: PathBuf,
     token: String,
     version: String,
     owner_pid: u32,
+    #[serde(default)]
+    receipt_path: Option<PathBuf>,
 }
 
 fn version_parts(value: &str) -> Result<[u64; 3], String> {
@@ -391,6 +395,61 @@ fn unlock(record: &Transaction) {
         let _ = fs::remove_dir(lock);
     }
 }
+fn backup_path(record: &Transaction) -> PathBuf {
+    if record.schema_version == 2 {
+        record.target.parent().unwrap().join(format!(
+            ".{}.update-{}.backup.exe",
+            record.target.file_name().unwrap().to_string_lossy(), record.token
+        ))
+    } else {
+        record.directory.join("backup.exe")
+    }
+}
+
+// Never recursively remove a transaction. Unknown files or locked diagnostics
+// leave the complete receipt in place so cleanup can be retried next startup.
+fn cleanup_complete(record: &Transaction) {
+    if record.schema_version != 2 || lock_path(record).exists() {
+        return;
+    }
+    let Some(receipt) = &record.receipt_path else { return; };
+    let Ok(bytes) = fs::read(record.directory.join("transaction.json")) else { return; };
+    if fs::read(receipt).ok().as_deref() != Some(bytes.as_slice()) {
+        return;
+    }
+    if backup_path(record).exists() && fs::remove_file(backup_path(record)).is_err() {
+        return;
+    }
+    if fs::remove_file(receipt).is_err() {
+        return;
+    }
+    let files = ["download.exe", "helper.ps1", "helper.log", "RECOVERY.txt", "ready", "commit",
+        "healthy", "healthy.next", "cancel", "state.next", "state", "transaction.json"];
+    for name in files {
+        match fs::remove_file(record.directory.join(name)) {
+            Ok(()) => {},
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(_) => {
+                let _ = fs::write(record.directory.join("transaction.json"), &bytes);
+                let _ = fs::write(record.directory.join("state"), "complete");
+                let _ = fs::write(record.directory.join("healthy"), format!("{} {}", record.token, record.version));
+                if let Ok(mut file) = OpenOptions::new().write(true).create_new(true).open(receipt) {
+                    let _ = file.write_all(&bytes);
+                }
+                return;
+            }
+        }
+    }
+    if fs::remove_dir(&record.directory).is_err() {
+        let _ = fs::write(record.directory.join("transaction.json"), &bytes);
+        let _ = fs::write(record.directory.join("state"), "complete");
+        let _ = fs::write(record.directory.join("healthy"), format!("{} {}", record.token, record.version));
+        if let Ok(mut file) = OpenOptions::new().write(true).create_new(true).open(receipt) {
+            let _ = file.write_all(&bytes);
+        }
+        return;
+    }
+}
 pub fn prepare(
     app: &tauri::AppHandle,
     version: &str,
@@ -403,31 +462,35 @@ pub fn prepare(
     version_parts(version)?;
     let target = canonical_path(&std::env::current_exe().map_err(|e| e.to_string())?)?;
     let data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&data).map_err(|e| e.to_string())?;
+    let data = canonical_path(&data)?;
     if let Some(previous) = read_transaction(&data, &target) {
-        if previous.directory.join("backup.exe").exists() {
+        if backup_path(&previous).exists() {
             return Err(recovery_message(&previous));
         }
     }
     let token = crate::secure_token::generate()?[..32].to_owned();
-    let directory = target
-        .parent()
-        .ok_or("Missing application folder")?
-        .join(format!(
-            ".{}.update-{token}",
-            target
-                .file_name()
-                .ok_or("Missing executable name")?
-                .to_string_lossy()
-        ));
+    let staging_root = std::env::temp_dir().join("MarblesStatsUpdates");
+    fs::create_dir_all(&staging_root)
+        .map_err(|e| format!("Unable to create temporary update folder: {e}"))?;
+    let directory = canonical_path(&staging_root)?.join(&token);
     let record = Transaction {
+        schema_version: 2,
         target,
         directory,
         token,
         version: version.to_owned(),
         owner_pid: std::process::id(),
+        receipt_path: Some(data.join("desktop-update-transaction.json")),
     };
     let lock = lock_path(&record);
-    fs::create_dir(&lock).map_err(|_| "Another update is active, or the app folder is not writable. Close other copies and check folder permissions.".to_string())?;
+    fs::create_dir(&lock).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("An update lock already exists for {}. Close other app copies and check the previous update before retrying.", record.target.display())
+        } else {
+            format!("The app folder is not writable: {}. Copy the EXE from read-only media to a writable folder such as Downloads or Desktop, then run it there. {error}", record.target.parent().unwrap().display())
+        }
+    })?;
     if let Err(e) = fs::write(lock.join("token"), &record.token) {
         let _ = fs::remove_dir(&lock);
         return Err(e.to_string());
@@ -495,10 +558,12 @@ pub fn prepare(
             .arg(artifact.size.to_string())
             .current_dir(&record.directory)
             .stdin(Stdio::null());
-        let log = File::create(record.directory.join("helper.log")).map_err(|e| e.to_string())?;
+        fs::write(record.directory.join("helper.log"), "").map_err(|e| e.to_string())?;
+        // The helper writes diagnostics with short-lived handles so its Temp
+        // folder can be removed after success, while the helper is still alive.
         command
-            .stdout(log.try_clone().map_err(|e| e.to_string())?)
-            .stderr(log);
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -516,10 +581,8 @@ pub fn prepare(
             {
                 let _ = helper.kill();
                 let _ = helper.wait();
-                return Err(
-                    "The update helper could not start. See helper.log in the update folder."
-                        .into(),
-                );
+                return Err(format!("The update helper could not start. See {}.",
+                    record.directory.join("helper.log").display()));
             }
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -540,14 +603,18 @@ pub fn prepare(
 fn read_transaction(data: &Path, target: &Path) -> Option<Transaction> {
     let bytes = fs::read(data.join("desktop-update-transaction.json")).ok()?;
     let record: Transaction = serde_json::from_slice(&bytes).ok()?;
-    let prefix = format!(".{}.update-", target.file_name()?.to_string_lossy());
+    let directory_valid = match record.schema_version {
+        0 => record.directory.parent() == target.parent()
+            && record.directory.file_name()?.to_string_lossy()
+                == format!(".{}.update-{}", target.file_name()?.to_string_lossy(), record.token),
+        2 => record.directory.parent()
+                == Some(canonical_path(&std::env::temp_dir().join("MarblesStatsUpdates")).ok()?.as_path())
+            && record.directory.file_name()?.to_string_lossy() == record.token
+            && record.receipt_path.as_deref() == Some(data.join("desktop-update-transaction.json").as_path()),
+        _ => false,
+    };
     if record.target != target
-        || record.directory.parent() != target.parent()
-        || !record
-            .directory
-            .file_name()?
-            .to_string_lossy()
-            .starts_with(&prefix)
+        || !directory_valid
         || record.token.len() != 32
         || !record.token.bytes().all(|c| c.is_ascii_hexdigit())
         || version_parts(&record.version).is_err()
@@ -560,12 +627,14 @@ fn read_transaction(data: &Path, target: &Path) -> Option<Transaction> {
 }
 fn recovery_message(record: &Transaction) -> String {
     format!("The previous update needs checking. Close all app copies before restoring {} to {}. Keep the backup until the app works. See {}.",
-        record.directory.join("backup.exe").display(), record.target.display(), record.directory.join("helper.log").display())
+        backup_path(record).display(), record.target.display(), record.directory.join("helper.log").display())
 }
 pub fn ready(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     let version = app.package_info().version.to_string();
     let target = canonical_path(&std::env::current_exe().map_err(|e| e.to_string())?)?;
     let data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&data).map_err(|e| e.to_string())?;
+    let data = canonical_path(&data)?;
     let mut recovery = None;
     if let Some(record) = read_transaction(&data, &target) {
         let state = fs::read_to_string(record.directory.join("state")).unwrap_or_default();
@@ -586,12 +655,15 @@ pub fn ready(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
             )
             .map_err(|e| e.to_string())?;
         } else if state.trim() != "complete" && !healthy {
-            recovery = Some(if record.directory.join("backup.exe").exists() {
+            recovery = Some(if backup_path(&record).exists() {
                 recovery_message(&record)
             } else {
                 "The previous update did not complete. Your original app was kept; you can retry."
                     .into()
             });
+        }
+        if state.trim() == "complete" && record.version == version && healthy {
+            cleanup_complete(&record);
         }
     }
     Ok(serde_json::json!({"currentVersion":version,"recovery":recovery}))

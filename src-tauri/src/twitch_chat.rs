@@ -46,32 +46,48 @@ pub fn format_reply(login: &str, players: &[RaceCyclePlayer]) -> String {
 }
 
 // Use committed RaceStats results, never cumulative CSV season totals or cycle imports.
-fn stats_totals(login: &str, games: &[GameResult]) -> (u64, u64, i64) {
-    let mut stream_races = 0;
+fn stats_totals<'a>(login: &str, games: impl IntoIterator<Item = &'a GameResult>) -> (u64, u64, i64) {
+    let mut matches = 0;
     let mut races = 0;
     let mut points = 0i64;
     for game in games {
         let race = game.game_type == GameType::Race;
-        if race {
-            stream_races += 1;
-        }
         if let Some(player) = game.results.iter().find(|player| {
             player.platform.eq_ignore_ascii_case("twitch")
                 && player.username.eq_ignore_ascii_case(login)
         }) {
+            matches += 1;
             if race {
                 races += 1;
             }
             points = points.saturating_add(player.season_points_earned);
         }
     }
-    (races, stream_races, points)
+    (races, matches, points)
 }
 
-fn format_stats_reply(login: &str, session: &[GameResult], history: &[GameResult]) -> String {
-    let (races, stream_races, points) = stats_totals(login, session);
-    let (total_races, _, total_points) = stats_totals(login, history);
-    format!("@{login} | This session: {races} of {stream_races} stream races, {points} points | All-time tracked: {total_races} races, {total_points} points")
+fn format_stats_reply(
+    login: &str,
+    history: &[GameResult],
+    cycles: &[RaceCyclePlayer],
+    today: chrono::NaiveDate,
+) -> String {
+    let (total_races, matches, total_points) = stats_totals(login, history);
+    let (races_today, _, points_today) = stats_totals(login, history.iter().filter(|game| {
+        chrono::DateTime::parse_from_rfc3339(&game.timestamp).is_ok_and(|timestamp| {
+            timestamp.with_timezone(&chrono::Local).date_naive() == today
+        })
+    }));
+    let average = if matches == 0 { 0.0 } else { total_points as f64 / matches as f64 };
+    let key = format!("twitch:{}", login.to_ascii_lowercase());
+    let cycle_rank = cycles.iter().find(|player| player.player_key.eq_ignore_ascii_case(&key))
+        .map(|player| {
+            let rank = 1 + cycles.iter().filter(|other| {
+                crate::models::compare_cycle_players(other, player).is_lt()
+            }).count();
+            format!(" | Cycle rank: #{rank}")
+        }).unwrap_or_default();
+    format!("@{login} | Points today: {points_today} | Total points: {total_points}{cycle_rank} | Avg points/game: {average:.1} | Races today: {races_today} | Total races: {total_races}")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -382,8 +398,9 @@ fn listen(
                             }
                             ViewerCommand::Stats => format_stats_reply(
                                 login,
-                                &rt.snapshot.session_results,
                                 &rt.snapshot.recent_results,
+                                &rt.race_state.race_cycles,
+                                chrono::Local::now().date_naive(),
                             ),
                         }
                     };
@@ -623,21 +640,44 @@ mod tests {
     }
 
     #[test]
-    fn stats_use_session_participation_and_saved_earnings_by_twitch_login() {
+    fn stats_use_saved_earnings_and_local_calendar_day_by_twitch_login() {
+        use chrono::TimeZone;
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
         let race = stats_game("race", "race", "ALICE", "Twitch", 10);
         let other = stats_game("other", "race", "alice", "YouTube", 90);
         let br = stats_game("br", "battleRoyale", "alice", "Twitch", 7);
         let zero = stats_game("zero", "race", "alice", "Twitch", 0);
-        let older = stats_game("older", "race", "alice", "Twitch", 5);
-        let session = vec![race, other, br, zero];
-        let mut history = session.clone();
+        let mut older = stats_game("older", "race", "alice", "Twitch", 5);
+        older.timestamp = chrono::Local.with_ymd_and_hms(2026, 10, 18, 23, 59, 59)
+            .single().unwrap().with_timezone(&chrono::Utc).to_rfc3339();
+        let mut history = vec![race, other, br, zero];
+        for game in &mut history {
+            game.timestamp = chrono::Local.with_ymd_and_hms(2026, 10, 19, 0, 0, 0)
+                .single().unwrap().with_timezone(&chrono::Utc).to_rfc3339();
+        }
         history.push(older);
-        assert_eq!(format_stats_reply("alice", &session, &history),
-            "@alice | This session: 2 of 3 stream races, 17 points | All-time tracked: 3 races, 22 points");
-        assert_eq!(format_stats_reply("newviewer", &session, &history),
-            "@newviewer | This session: 0 of 3 stream races, 0 points | All-time tracked: 0 races, 0 points");
-        assert_eq!(format_stats_reply("alice", &[], &history),
-            "@alice | This session: 0 of 0 stream races, 0 points | All-time tracked: 3 races, 22 points");
+        let mut invalid_date = stats_game("invalid", "race", "alice", "Twitch", 2);
+        invalid_date.timestamp = "unknown".into();
+        history.push(invalid_date);
+        assert_eq!(format_stats_reply("alice", &history, &[], today),
+            "@alice | Points today: 17 | Total points: 24 | Avg points/game: 4.8 | Races today: 2 | Total races: 4");
+        assert_eq!(format_stats_reply("newviewer", &history, &[], today),
+            "@newviewer | Points today: 0 | Total points: 0 | Avg points/game: 0.0 | Races today: 0 | Total races: 0");
+        assert_eq!(format_stats_reply("alice", &[], &[], today),
+            "@alice | Points today: 0 | Total points: 0 | Avg points/game: 0.0 | Races today: 0 | Total races: 0");
+    }
+
+    #[test]
+    fn stats_cycle_rank_uses_the_cycle_leaderboard_order() {
+        let player = |key: &str, name: &str, count| RaceCyclePlayer {
+            player_key: key.into(), player_name: name.into(), placement_counts: vec![count; 10],
+            total_races: 0, total_races_complete: true, cycles: count,
+            current_cycle_positions: None, cycle_race_counts: vec![],
+        };
+        let cycles = vec![player("twitch:ALICE", "Alice", 1), player("twitch:bob", "Bob", 2)];
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 19).unwrap();
+        assert_eq!(format_stats_reply("alice", &[], &cycles, today),
+            "@alice | Points today: 0 | Total points: 0 | Cycle rank: #2 | Avg points/game: 0.0 | Races today: 0 | Total races: 0");
     }
 
     #[test]

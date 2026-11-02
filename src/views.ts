@@ -1003,7 +1003,7 @@ function settingsPage(
     <section class="twitch-settings-section" data-feature-section="twitch-my-stats-command">
       <div class="toggle-row twitch-feature-heading">
         <i>${icons.trophy}</i>
-        <span><b>Viewer command: !mystats</b><small>Show your session and total race stats in chat.</small></span>
+        <span><b>Viewer command: !mystats</b><small>Show your total points, today's stats, average points and cycle rank in chat.</small></span>
         <input id="twitch-my-stats-command" type="checkbox" role="switch" aria-label="Enable !mystats" ${twitch.myStatsCommand ? "checked" : ""} />
       </div>
       <details class="twitch-message-customization">

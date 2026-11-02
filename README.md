@@ -15,7 +15,7 @@ Track **Marbles on Stream** race stats and cycles automatically from your game r
 - **Session tools** — Import and Export at the top right of RaceStats, followed by the Latest Results event picker, with player search in its results header. Cycles Import and Export stay together at the right of its watcher row. RaceStats Import is a disabled placeholder. Cycles supports Marble Cycle session downloads up to 100 MB and always imports BR wins as cycle 1st places.
 - **RaceCycles** — track placements 1–10, cycle progress, and completion history.
 - **Overlays** — customizable results, podiums, cycle progress, and celebrations.
-- **Viewer commands** - optional Twitch `!mycycles` for cycle progress and `!mystats` for session participation/points and saved all-time totals; independent cooldowns per viewer and per command.
+- **Viewer commands** - optional Twitch `!mycycles` for cycle progress and `!mystats` for total points, points today, cycle rank, average points per game, races today and total races; independent cooldowns per viewer and per command.
 - **Integrations** — Twitch chat, Discord, Streamer.bot, and Lumia Stream.
 - **Stream Deck** — tracker controls and bundled MoS DropGate v0.4.4.6 with custom icons, colors, and the separate mosCompGate action.
 
@@ -30,6 +30,8 @@ Track **Marbles on Stream** race stats and cycles automatically from your game r
 3. Set up overlays and any integrations you want in the app.
 
 The default game-results folder is `%LOCALAPPDATA%\MarblesOnStream\Saved\SaveGames`. Twitch and other integrations are optional.
+
+Run the EXE from a writable folder, such as Downloads or Desktop, so it can install updates. Update downloads and helper files use `%TEMP%\MarblesStatsUpdates`; successful updates remove their temporary files after the restarted app reports ready. Failed updates retain recovery files and diagnostics. Updates preserve saved stats, settings, and overlays.
 
 See the [overlay guide](public/overlays/README.md), [Stream Deck guide](streamdeck/README.md), or in-app help for setup details.
 
